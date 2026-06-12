@@ -482,6 +482,20 @@ const DEFAULT_FUNDS=[
 const CHART_COLORS=["#f59e0b","#d97706","#fbbf24","#b45309","#0ea5e9","#8b5cf6","#22c55e","#ef4444"];
 const CHART_COLORS_BG=["rgba(245,158,11,0.75)","rgba(217,119,6,0.75)","rgba(251,191,36,0.75)","rgba(180,83,9,0.75)","rgba(14,165,233,0.75)","rgba(139,92,246,0.75)","rgba(34,197,94,0.75)","rgba(239,68,68,0.75)"];
 const PRODUCTS=["Invest Flex","Invest Flex Vantage","Invest Flex TriVantage"];
+const STARTUP_BONUS={
+  "Invest Flex":{
+    5:[{min:9600,pct:6.0,tier:"Entry"}],
+    10:[{min:6000,pct:10.0,tier:"Tier 1"},{min:9600,pct:25.0,tier:"Tier 2"}],
+    15:[{min:3600,pct:15.0,tier:"Tier 1"},{min:9600,pct:45.0,tier:"Tier 2"}],
+    20:[{min:2400,pct:30.0,tier:"Tier 1"},{min:9600,pct:60.0,tier:"Tier 2"}],
+  },
+  "Invest Flex Vantage":{
+    5:[{min:9600,pct:4.0,tier:"Entry"}],
+    10:[{min:6000,pct:5.0,tier:"Tier 1"},{min:9600,pct:20.0,tier:"Tier 2"}],
+    15:[{min:3600,pct:10.0,tier:"Tier 1"},{min:9600,pct:40.0,tier:"Tier 2"}],
+    20:[{min:2400,pct:25.0,tier:"Tier 1"},{min:9600,pct:55.0,tier:"Tier 2"}],
+  },
+};
 
 // ── State ──
 let clients=[],fundPrices={},clientTxs={};
@@ -588,6 +602,16 @@ function portfolioTotals(fundData){
   }
   const trueGainPct=totalInvested>0?(trueGain/totalInvested)*100:0;
   return{totalInvested,totalValue,bonusValue,trueGain,trueGainPct,dividendPaid};
+}
+
+function getStartupBonus(product,term,ap){
+  const tbl=STARTUP_BONUS[product];
+  if(!tbl)return null;
+  const tiers=tbl[parseInt(term)];
+  if(!tiers)return null;
+  let matched=null;
+  for(const t of tiers){if(ap>=t.min)matched=t;}
+  return matched;
 }
 
 // ── Strategy / product helpers ──
@@ -822,14 +846,14 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div>
         <label class="lbl">Product *</label>
-        <select class="sel" id="cProduct">
+        <select class="sel" id="cProduct" onchange="updateBonusDisplay()">
           <option value="">-- Select Product --</option>
           ${PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join("")}
         </select>
       </div>
       <div>
         <label class="lbl">Policy Term *</label>
-        <select class="sel" id="cTerm">
+        <select class="sel" id="cTerm" onchange="updateBonusDisplay()">
           <option value="">-- Select Term --</option>
           <option value="5">5 years</option>
           <option value="10">10 years</option>
@@ -839,9 +863,10 @@ function renderAddClientForm(){
       </div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
-      <div><label class="lbl">Policy Start Date *</label><input class="inp" id="cStart" type="date"/></div>
-      <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="Annual Premium"/></div>
+      <div><label class="lbl">Policy Start Date *</label><input class="inp" id="cStart" type="text" placeholder="DD-MM-YYYY" maxlength="10"/></div>
+      <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="Annual Premium" oninput="updateBonusDisplay()"/></div>
     </div>
+    <div id="bonusIndicator" style="margin-bottom:12px;"></div>
     <div style="margin-bottom:16px;">
       <label class="lbl">Notes (optional)</label>
       <input class="inp" id="cNotes" placeholder="Risk profile, goals, remarks..."/>
@@ -927,11 +952,50 @@ async function processAddClientExcel(file){
   }
 }
 
+window.updateBonusDisplay=()=>{
+  const product=document.getElementById("cProduct")?.value||"";
+  const term=document.getElementById("cTerm")?.value||"";
+  const ap=parseFloat(document.getElementById("cAP")?.value||"0")||0;
+  const el=document.getElementById("bonusIndicator");
+  if(!el)return;
+  if(!product||!term||!ap){el.innerHTML="";return;}
+  const tbl=STARTUP_BONUS[product];
+  if(!tbl){el.innerHTML="";return;}
+  const tiers=tbl[parseInt(term)];
+  if(!tiers){el.innerHTML="";return;}
+  let matched=null;
+  for(const t of tiers){if(ap>=t.min)matched=t;}
+  const tiersHtml=tiers.map(t=>{
+    const active=matched&&matched.tier===t.tier;
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-radius:8px;margin-bottom:4px;
+      background:${active?"rgba(245,158,11,0.15)":"rgba(12,24,40,0.6)"};
+      border:1px solid ${active?"var(--gold-border)":"rgba(30,41,59,0.4)"};
+      opacity:${ap>=t.min?"1":"0.45"};">
+      <div style="font-size:12px;">
+        <span style="font-weight:700;color:${active?"var(--gold-l)":"var(--muted)"};">${t.tier}</span>
+        <span style="color:var(--dim);margin-left:8px;">≥ ${$f(t.min)}/yr</span>
+      </div>
+      <div style="font-size:14px;font-weight:800;color:${active?"var(--gold-l)":"var(--dim)"};">${t.pct}%${active?" ✓":""}</div>
+    </div>`;
+  }).join("");
+  el.innerHTML=`<div style="background:var(--bg3);border-radius:10px;padding:12px 14px;border:1px solid var(--gold-border);">
+    <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">🎁 Startup Bonus</div>
+    ${tiersHtml}
+    ${matched
+      ?`<div style="margin-top:8px;padding:8px 12px;background:rgba(245,158,11,0.1);border-radius:7px;font-size:13px;font-weight:800;color:var(--gold-l);text-align:center;">
+          ${matched.pct}% on ${$f(ap)} = <span style="color:var(--green);">${$f(ap*matched.pct/100)}</span>
+        </div>`
+      :`<div style="margin-top:6px;font-size:12px;color:var(--red);text-align:center;">⚠️ Premium below minimum for this term — no startup bonus</div>`
+    }
+  </div>`;
+};
+
 window.doAddClient=async()=>{
   const name=document.getElementById("cName")?.value.trim()||"";
   const policyNo=document.getElementById("cPolicy")?.value.trim()||"";
   const product=document.getElementById("cProduct")?.value||"";
-  const startDate=document.getElementById("cStart")?.value||"";
+  const rawStartDate=document.getElementById("cStart")?.value.trim()||"";
+  const startDate=parseDate(rawStartDate);
   const term=document.getElementById("cTerm")?.value||"";
   const ap=document.getElementById("cAP")?.value||"";
   const notes=document.getElementById("cNotes")?.value.trim()||"";
@@ -939,7 +1003,7 @@ window.doAddClient=async()=>{
   const errs=[];
   if(!name)errs.push("Name required.");
   if(!product)errs.push("Product required.");
-  if(!startDate)errs.push("Start date required.");
+  if(!rawStartDate||!startDate.match(/^\d{4}-\d{2}-\d{2}$/))errs.push("Start date required (format: DD-MM-YYYY).");
   if(!term)errs.push("Policy term required.");
   if(!ap||parseFloat(ap)<=0)errs.push("Annual premium required.");
   if(errEl){if(errs.length){errEl.textContent=errs.join(" ");errEl.style.display="block";return;}errEl.style.display="none";}
@@ -992,6 +1056,7 @@ function renderClientDetail(clientId){
       <div><div class="stat-lbl">Term</div><div style="font-weight:700;">${c.term} years</div></div>
       <div><div class="stat-lbl">Annual Premium</div><div style="font-weight:700;color:var(--gold);">${$f(c.annualPremium)}</div></div>
       <div><div class="stat-lbl">Monthly Premium</div><div style="font-weight:700;">${$f(c.annualPremium/12)}</div></div>
+      ${(()=>{const b=getStartupBonus(c.product,c.term,c.annualPremium);return b?`<div><div class="stat-lbl">Startup Bonus</div><div style="font-weight:700;color:var(--gold);">${b.pct}% <span style="font-size:11px;color:var(--dim);">(${b.tier} · ${$f(c.annualPremium*b.pct/100)})</span></div></div>`:"";})()}
       ${c.notes?`<div><div class="stat-lbl">Notes</div><div style="font-size:12px;color:var(--muted);">${esc(c.notes)}</div></div>`:""}
     </div>
   </div>`;
