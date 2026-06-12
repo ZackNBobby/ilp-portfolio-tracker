@@ -1305,22 +1305,23 @@ function parsePriceFromFundPage(html){
 
 async function fetchOneFundPrice(fundName,slug){
   const url=`https://www.income.com.sg/funds/${slug}`;
+  // Race all proxies simultaneously — fastest valid response wins
   const proxies=[
-    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    {url:`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,json:true},
+    {url:`https://corsproxy.io/?${encodeURIComponent(url)}`,json:false},
+    {url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,json:false},
   ];
-  for(const proxy of proxies){
-    try{
-      const resp=await fetch(proxy,{signal:AbortSignal.timeout(20000)});
-      if(!resp.ok)continue;
-      const body=await resp.json();
-      const html=body.contents||body.data||"";
-      if(!html)continue;
-      const price=parsePriceFromFundPage(html);
-      if(price)return price;
-    }catch(e){}
+  async function tryProxy(p){
+    const resp=await fetch(p.url,{signal:AbortSignal.timeout(10000)});
+    if(!resp.ok)throw new Error("bad status");
+    const html=p.json?(await resp.json()).contents||"":(await resp.text());
+    if(!html)throw new Error("empty");
+    const price=parsePriceFromFundPage(html);
+    if(!price)throw new Error("no price");
+    return price;
   }
-  return null;
+  // Promise.any returns first resolved value; rejects only if ALL fail
+  try{return await Promise.any(proxies.map(p=>tryProxy(p)));}catch(e){return null;}
 }
 
 window.doFetchPrices=async()=>{
@@ -1337,24 +1338,15 @@ window.doFetchPrices=async()=>{
   let done=0,found=0;
   const errors=[];
 
-  // Fetch all funds in parallel (batched 4 at a time to avoid rate limiting)
-  const BATCH=4;
-  for(let i=0;i<funds.length;i+=BATCH){
-    const batch=funds.slice(i,i+BATCH);
-    setStatus(`Fetching prices... ${done}/${funds.length} done`);
-    const results=await Promise.all(batch.map(([name,slug])=>
-      fetchOneFundPrice(name,slug).then(price=>({name,price}))
-    ));
-    for(const{name,price}of results){
-      done++;
-      if(price){
-        await saveFundPriceDB(name,price);
-        found++;
-      }else{
-        errors.push(name);
-      }
-    }
-    setStatus(`Fetching prices... ${done}/${funds.length} done (${found} found)`);
+  // Fetch all 14 funds in parallel — fastest possible
+  setStatus(`⏳ Fetching all ${funds.length} fund prices in parallel...`);
+  const results=await Promise.all(funds.map(([name,slug])=>
+    fetchOneFundPrice(name,slug).then(price=>({name,price}))
+  ));
+  for(const{name,price}of results){
+    done++;
+    if(price){await saveFundPriceDB(name,price);found++;}
+    else{errors.push(name);}
   }
 
   if(btn){btn.disabled=false;btn.textContent="⟳ Fetch Latest Prices";}
