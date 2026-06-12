@@ -1015,7 +1015,7 @@ function renderClientDetail(clientId){
           <div>
             <div class="fund-row"><span class="lk">Units (Premium)</span><span class="lv">${$u(fd.netUnits)}</span></div>
             <div class="fund-row"><span class="lk">Units (Bonus)</span><span class="lv" style="color:var(--gold);">${$u(fd.bonusUnits)}</span></div>
-            ${fd.reinvestUnits>0?`<div class="fund-row"><span class="lk">Units (Reinvested Div.)</span><span class="lv" style="color:#d8b4fe;">${$u(fd.reinvestUnits)}</span></div>`:""}`
+            ${fd.reinvestUnits>0?`<div class="fund-row"><span class="lk">Units (Reinvested Div.)</span><span class="lv" style="color:#d8b4fe;">${$u(fd.reinvestUnits)}</span></div>`:""}
             <div class="fund-row"><span class="lk">Total Units</span><span class="lv">${$u(fd.totalUnits)}</span></div>
             <div class="fund-row"><span class="lk">Current Price</span><span class="lv">$${fd.currentPrice.toFixed(6)}</span></div>
           </div>
