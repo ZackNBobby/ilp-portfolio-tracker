@@ -456,7 +456,7 @@ body{
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getAuth,GoogleAuthProvider,signInWithRedirect,getRedirectResult,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 // ══════════════════════════════════════
 // 🔧 FIREBASE CONFIG — Replace with your project config from console.firebase.google.com
@@ -1376,9 +1376,13 @@ function attachPageHandlers(){
 }
 
 // ── Auth ──
-window.doSignIn=async()=>{
-  try{await signInWithPopup(auth,gProv);}
-  catch(e){if(e.code!=="auth/cancelled-by-user"&&e.code!=="auth/popup-closed-by-user")alert("Sign-in failed: "+e.message);}
+// Handle redirect result on page load (after Google redirects back)
+getRedirectResult(auth).then(result=>{
+  if(result?.user)console.log("Signed in via redirect:",result.user.email);
+}).catch(e=>alert("Sign-in failed: "+e.message));
+
+window.doSignIn=()=>{
+  signInWithRedirect(auth,gProv);
 };
 window.doSignOut=async()=>{
   if(confirm("Sign out?"))await signOut(auth);
