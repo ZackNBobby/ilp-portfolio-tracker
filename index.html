@@ -723,16 +723,17 @@ async function saveFundPriceDB(name,price){
 
 function startListeners(){
   unsubs.forEach(u=>u());unsubs=[];
+  renderAll(); // render immediately so tabs/UI show at once
   const q1=query(collection(db,"clients"),where("uid","==",OWNER));
   unsubs.push(onSnapshot(q1,snap=>{
     clients=[];snap.forEach(d=>clients.push({...d.data(),fid:d.id}));
     clients.sort((a,b)=>a.name.localeCompare(b.name));
     renderAll();
-  }));
+  },err=>console.error("clients listener error:",err)));
   unsubs.push(onSnapshot(collection(db,"fundPrices"),snap=>{
     fundPrices={};snap.forEach(d=>{const fd=d.data();fundPrices[fd.name]=fd.price;});
     renderAll();
-  }));
+  },err=>console.error("fundPrices listener error:",err)));
 }
 
 // ── Rendering ──
