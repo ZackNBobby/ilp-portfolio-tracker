@@ -420,25 +420,11 @@ body{
 <div class="orb orb1"></div>
 <div class="orb orb2"></div>
 
-<!-- Login -->
-<div id="loginScreen" class="login-wrap">
-  <div class="login-card">
-    <span class="login-icon">💰</span>
-    <h2>ILP Portfolio Tracker</h2>
-    <p class="login-sub">Track your clients' InvestFlex portfolios.<br>Separate real gains from startup bonuses.</p>
-    <button class="btn-google" onclick="doSignIn()">
-      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-      Continue with Google
-    </button>
-  </div>
-</div>
-
 <!-- App -->
-<div id="appShell" style="display:none;">
+<div id="appShell">
   <div class="header">
     <h1>💼 ILP Portfolio Tracker</h1>
     <p class="header-sub">Income Insurance · Investment-Linked Plans</p>
-    <button class="signout" onclick="doSignOut()">Sign Out</button>
   </div>
   <div class="tabs" id="tabBar"></div>
   <div class="content" id="app"></div>
@@ -456,7 +442,6 @@ body{
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import{getAuth,GoogleAuthProvider,signInWithRedirect,getRedirectResult,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 // ══════════════════════════════════════
 // 🔧 FIREBASE CONFIG — Replace with your project config from console.firebase.google.com
@@ -473,9 +458,7 @@ const FB={
 
 const fbApp=initializeApp(FB);
 const db=getFirestore(fbApp);
-const auth=getAuth(fbApp);
-const gProv=new GoogleAuthProvider();
-setPersistence(auth,browserLocalPersistence);
+const OWNER="ilp_owner";
 
 // ── Constants ──
 const DEFAULT_FUNDS=[
@@ -500,7 +483,7 @@ const PRODUCTS=["Invest Flex","Invest Flex Vantage","Invest Flex TriVantage"];
 
 // ── State ──
 let clients=[],fundPrices={},clientTxs={};
-let tab="dashboard",currentClientId=null,user=null;
+let tab="dashboard",currentClientId=null;
 let unsubs=[],charts={};
 
 function getAllFundNames(){
@@ -722,13 +705,13 @@ async function removeClient(fid){
 async function saveTransactions(clientId,txs){
   const batch=writeBatch(db);
   // delete existing first
-  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",user.uid));
+  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",OWNER));
   const snap=await getDocs(q);
   snap.forEach(d=>batch.delete(d.ref));
   // add new
   for(const tx of txs){
     const ref=doc(collection(db,"transactions"));
-    batch.set(ref,{...tx,clientId,uid:user.uid});
+    batch.set(ref,{...tx,clientId,uid:OWNER});
   }
   await batch.commit();
 }
@@ -740,7 +723,7 @@ async function saveFundPriceDB(name,price){
 
 function startListeners(){
   unsubs.forEach(u=>u());unsubs=[];
-  const q1=query(collection(db,"clients"),where("uid","==",user.uid));
+  const q1=query(collection(db,"clients"),where("uid","==",OWNER));
   unsubs.push(onSnapshot(q1,snap=>{
     clients=[];snap.forEach(d=>clients.push({...d.data(),fid:d.id}));
     clients.sort((a,b)=>a.name.localeCompare(b.name));
@@ -910,7 +893,7 @@ window.doAddClient=async()=>{
   if(errEl){if(errs.length){errEl.textContent=errs.join(" ");errEl.style.display="block";return;}errEl.style.display="none";}
   const funds=allocRows.filter(r=>r.fund).map(r=>({name:r.fund,allocation:parseFloat(r.pct)||0}));
   const obj={
-    uid:user.uid,name,policyNo,product,strategy:getStrategy(product),
+    uid:OWNER,name,policyNo,product,strategy:getStrategy(product),
     startDate,term:parseInt(term),annualPremium:parseFloat(ap),
     funds,notes,createdAt:new Date().toISOString()
   };
@@ -1166,7 +1149,7 @@ async function processUpload(file,clientId){
   }
 }
 async function loadClientTxs(clientId){
-  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",user.uid));
+  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",OWNER));
   const snap=await getDocs(q);
   clientTxs[clientId]=[];
   snap.forEach(d=>clientTxs[clientId].push(d.data()));
@@ -1375,31 +1358,8 @@ function attachPageHandlers(){
   if(tab==="addclient")renderAllocRows();
 }
 
-// ── Auth ──
-// Handle redirect result on page load (after Google redirects back)
-getRedirectResult(auth).then(result=>{
-  if(result?.user)console.log("Signed in via redirect:",result.user.email);
-}).catch(e=>alert("Sign-in failed: "+e.message));
-
-window.doSignIn=()=>{
-  signInWithRedirect(auth,gProv);
-};
-window.doSignOut=async()=>{
-  if(confirm("Sign out?"))await signOut(auth);
-};
-onAuthStateChanged(auth,u=>{
-  user=u;
-  if(u){
-    document.getElementById("loginScreen").style.display="none";
-    document.getElementById("appShell").style.display="";
-    startListeners();
-  }else{
-    document.getElementById("loginScreen").style.display="";
-    document.getElementById("appShell").style.display="none";
-    unsubs.forEach(x=>x());unsubs=[];
-    clients=[];fundPrices={};clientTxs={};
-  }
-});
+// Start app directly — no login required
+startListeners();
 </script>
 </body>
 </html>
