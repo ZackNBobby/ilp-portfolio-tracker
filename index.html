@@ -592,9 +592,17 @@ function calcPortfolio(txs){
     // Portfolio-level gain uses premium cost only (avoids double-counting switches)
     fd.trueGain=fd.currentPrice>0?fd.netPremiumValue-fd.totalInvested:0;
     fd.trueGainPct=fd.totalInvested>0&&fd.currentPrice>0?(fd.trueGain/fd.totalInvested)*100:0;
-    // Fund-level display: when no premiums, use switch-in value as cost basis
+    // Fund-level display cost: when units were switched out, reduce cost basis proportionally
+    // so the gain/loss only reflects price movement, not units that moved to another fund
     fd.isSwitch=fd.totalInvested===0&&fd.switchInValue>0;
-    fd.displayCost=fd.totalInvested>0?fd.totalInvested:fd.switchInValue;
+    if(fd.totalInvested>0&&fd.switchOutUnits<0){
+      const grossPremNet=fd.premiumUnits+fd.feeUnits; // net units from premiums before any switch
+      const remainFrac=grossPremNet>0?(grossPremNet+fd.switchOutUnits)/grossPremNet:1;
+      fd.adjustedInvested=fd.totalInvested*Math.max(0,remainFrac);
+    }else{
+      fd.adjustedInvested=fd.totalInvested;
+    }
+    fd.displayCost=fd.adjustedInvested>0?fd.adjustedInvested:(fd.isSwitch?fd.switchInValue:0);
     fd.displayGain=fd.currentPrice>0&&fd.displayCost>0?fd.netPremiumValue-fd.displayCost:fd.trueGain;
     fd.displayGainPct=fd.displayCost>0&&fd.currentPrice>0?(fd.displayGain/fd.displayCost)*100:0;
   }
@@ -1171,7 +1179,7 @@ function renderClientDetail(clientId){
           <div>
             <div class="fund-row">
               <span class="lk">${fd.isSwitch?"Switched In":"Invested"}</span>
-              <span class="lv">${$f(fd.displayCost)}${fd.isSwitch?` <span style="font-size:10px;color:var(--dim);">(switch)</span>`:""}</span>
+              <span class="lv">${$f(fd.displayCost)}${fd.isSwitch?` <span style="font-size:10px;color:var(--dim);">(switch)</span>`:fd.switchOutUnits<0?` <span style="font-size:10px;color:var(--dim);" title="Adjusted: $${fd.totalInvested.toFixed(2)} total paid, portion switched to another fund">(adj.)</span>`:""}</span>
             </div>
             <div class="fund-row"><span class="lk">Current Value</span><span class="lv">${$f(fd.netPremiumValue)}</span></div>
             <div class="fund-row"><span class="lk">Gain / Loss</span>
