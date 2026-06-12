@@ -583,8 +583,8 @@ function calcPortfolio(txs){
     fd.netPremiumValue=fd.netUnits*price;
     fd.bonusValue=fd.bonusUnits*price;
     fd.totalValue=fd.totalUnits*price;
-    fd.trueGain=fd.netPremiumValue-fd.totalInvested;
-    fd.trueGainPct=fd.totalInvested>0?(fd.trueGain/fd.totalInvested)*100:0;
+    fd.trueGain=fd.currentPrice>0?fd.netPremiumValue-fd.totalInvested:0;
+    fd.trueGainPct=fd.totalInvested>0&&fd.currentPrice>0?(fd.trueGain/fd.totalInvested)*100:0;
   }
   return funds;
 }
@@ -1045,7 +1045,9 @@ function renderClientDetail(clientId){
   const fundData=hasTxs?calcPortfolio(txs):{};
   const totals=hasTxs?portfolioTotals(fundData):{};
   const strategy=getStrategy(c.product);
-  const hasPrices=Object.keys(fundPrices).length>0;
+  const hasPrices=hasTxs&&Object.keys(fundData).some(n=>(fundPrices[n]||0)>0);
+  const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>(fundPrices[n]||0)>0).length:0;
+  const allFundsPriced=hasTxs&&pricedFundCount>0&&pricedFundCount===Object.keys(fundData).length;
 
   // Back + actions
   let html=`<button class="btn-back" onclick="goBack()">← Back to Clients</button>`;
@@ -1075,11 +1077,15 @@ function renderClientDetail(clientId){
     </div>
   </div>`;
 
-  if(!hasPrices){
+  if(!hasPrices&&hasTxs){
     html+=`<div class="card" style="border-color:rgba(245,158,11,0.3);text-align:center;padding:24px;">
       <div style="font-size:24px;margin-bottom:8px;">💹</div>
-      <div style="font-weight:700;color:var(--gold);">Set fund prices to see portfolio values</div>
-      <div style="font-size:12px;color:var(--dim);margin-top:4px;">Go to <strong>Fund Prices</strong> tab and enter the latest prices from Income's website.</div>
+      <div style="font-weight:700;color:var(--gold);">Fund prices not yet loaded</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:6px;">Go to the <strong style="color:var(--gold-l);">💹 Fund Prices</strong> tab → click <strong>⟳ Auto-Fetch Prices</strong>, or use ✏️ to enter prices manually from Income's website.</div>
+    </div>`;
+  }else if(hasTxs&&hasPrices&&!allFundsPriced){
+    html+=`<div style="background:rgba(245,158,11,0.06);border:1px solid var(--gold-border);border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--gold-l);">
+      ⚠️ ${pricedFundCount} of ${Object.keys(fundData).length} fund prices loaded — True Gain will show as N/A until all funds are priced. Go to <strong>💹 Fund Prices</strong> to fetch or set the rest.
     </div>`;
   }
 
@@ -1097,8 +1103,12 @@ function renderClientDetail(clientId){
       </div>
       <div class="stat-card">
         <div class="stat-lbl">True Gain (Excl. Bonus)</div>
-        <div class="stat-val ${totals.trueGain>=0?"green":"red"}">${$f(totals.trueGain)}</div>
-        <div style="font-size:11px;margin-top:2px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)}</div>
+        ${allFundsPriced
+          ?`<div class="stat-val ${totals.trueGain>=0?"green":"red"}">${$f(totals.trueGain)}</div>
+             <div style="font-size:11px;margin-top:2px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)}</div>`
+          :`<div class="stat-val muted">N/A</div>
+             <div style="font-size:11px;margin-top:2px;color:var(--dim);">${pricedFundCount}/${Object.keys(fundData).length} funds priced</div>`
+        }
       </div>
       <div class="stat-card">
         <div class="stat-lbl">Startup Bonus Value</div>
@@ -1238,7 +1248,7 @@ function renderPrices(){
       <div style="font-size:12px;font-weight:600;color:var(--muted);flex:1;">${esc(short)}</div>
       <div style="display:flex;align-items:center;gap:6px;">
         <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
-        <button onclick="editPrice(${JSON.stringify(f)})" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
+        <button onclick="editPrice(this.dataset.fund)" data-fund="${esc(f)}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
       </div>
     </div>`;
   }).join("");
@@ -1293,133 +1303,98 @@ const INCOME_SLUGS={
 };
 
 // ── Price fetch engine ──
-// Income's site is Next.js. We first grab the buildId from the homepage,
-// then fetch /_next/data/{buildId}/funds/{slug}.json for each fund —
-// this gives us clean structured JSON instead of having to parse raw HTML.
+// Primary: scrape the historical-prices page (one HTTP request, static HTML tables).
+// Fallback: try individual fund pages via CORS proxies.
 
-let _nextBuildId=null;
+// Normalise a fund name for fuzzy matching (strip "Income " prefix, " Fund" suffix, non-alphanum)
+const normalizeFN=s=>s.trim().toLowerCase().replace(/^income\s+/i,'').replace(/\s+fund$/i,'').replace(/[^a-z0-9]/g,'');
 
-async function getNextBuildId(){
-  if(_nextBuildId)return _nextBuildId;
-  const mainUrl="https://www.income.com.sg/";
-  const proxies=[
-    {url:`https://api.allorigins.win/get?url=${encodeURIComponent(mainUrl)}`,json:true},
-    {url:`https://corsproxy.io/?${encodeURIComponent(mainUrl)}`,json:false},
-    {url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(mainUrl)}`,json:false},
-  ];
-  async function tryBuildId(p){
-    const resp=await fetch(p.url,{signal:AbortSignal.timeout(10000)});
-    if(!resp.ok)throw new Error("bad");
-    const html=p.json?(await resp.json()).contents||"":(await resp.text());
-    const m=html.match(/"buildId"\s*:\s*"([^"]+)"/);
-    if(!m)throw new Error("no buildId");
-    return m[1];
-  }
-  try{_nextBuildId=await Promise.any(proxies.map(p=>tryBuildId(p)));return _nextBuildId;}catch(e){return null;}
-}
+// CORS proxy list — tried in order, first successful response wins
+const CORS_PX=[
+  u=>({url:`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,json:true}),
+  u=>({url:`https://corsproxy.io/?${encodeURIComponent(u)}`,json:false}),
+  u=>({url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,json:false}),
+  u=>({url:`https://thingproxy.freeboard.io/fetch/${u}`,json:false}),
+];
 
-function walkForPrice(obj,depth){
-  depth=(depth||0)+1;
-  if(depth>35||!obj||typeof obj!=="object")return null;
-  if(Array.isArray(obj)){
-    for(const v of obj){const r=walkForPrice(v,depth);if(r!==null)return r;}
-    return null;
+async function proxyFetch(targetUrl,timeout=15000){
+  for(const pf of CORS_PX){
+    try{
+      const p=pf(targetUrl);
+      const resp=await fetch(p.url,{signal:AbortSignal.timeout(timeout)});
+      if(!resp.ok)continue;
+      const html=p.json?(await resp.json()).contents||'':await resp.text();
+      if(html&&html.length>500)return html;
+    }catch(e){continue;}
   }
-  // Bid/NAV-specific keys checked first
-  const PRICE_KEYS=["bidNav","bid_nav","bidNavPrice","bid_nav_price","navPrice","nav_price",
-    "bidPrice","bid_price","latestBidNav","latest_bid_nav","currentNav","current_nav",
-    "latestNav","latest_nav","unitPrice","unit_price","currentPrice","current_price",
-    "latestPrice","latest_price","price","value","nav"];
-  for(const k of PRICE_KEYS){
-    if(!(k in obj))continue;
-    const v=obj[k];
-    if(typeof v==="number"&&v>0.05&&v<100)return v;
-    if(typeof v==="string"){const p=parseFloat(v);if(!isNaN(p)&&p>0.05&&p<100)return p;}
-  }
-  for(const v of Object.values(obj)){const r=walkForPrice(v,depth);if(r!==null)return r;}
   return null;
 }
 
+// Parse the HTML table on Income's historical-prices page.
+// The table looks like: Fund Name | May 2026 | Apr 2026 | ...
+// We take the first numeric cell per row as the most recent price.
+function parseHistoricalPricesPage(html){
+  const map={};
+  try{
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    doc.querySelectorAll('table').forEach(table=>{
+      [...table.querySelectorAll('tr')].forEach(row=>{
+        const cells=[...row.querySelectorAll('td,th')];
+        if(cells.length<2)return;
+        const name=cells[0].textContent.trim();
+        if(!name||name.length<4)return;
+        for(let ci=1;ci<cells.length;ci++){
+          const txt=cells[ci].textContent.trim().replace(/[,$\s]/g,'');
+          const price=parseFloat(txt);
+          if(!isNaN(price)&&price>0.001&&price<500){
+            map[normalizeFN(name)]=price;
+            break;
+          }
+        }
+      });
+    });
+  }catch(e){}
+  return map;
+}
+
+// Fetch all fund prices at once from the historical-prices page.
+// Returns { "Income Global Dynamic Bond Fund": 1.259, ... } or null on failure.
+async function fetchHistoricalPrices(){
+  const url='https://www.income.com.sg/funds/historical-prices';
+  const html=await proxyFetch(url,20000);
+  if(!html)return null;
+  const parsed=parseHistoricalPricesPage(html);
+  if(Object.keys(parsed).length<3)return null;
+  const result={};
+  for(const ourName of Object.keys(INCOME_SLUGS)){
+    const key=normalizeFN(ourName);
+    if(parsed[key]!==undefined)result[ourName]=parsed[key];
+  }
+  return Object.keys(result).length>0?result:null;
+}
+
+// Fallback: parse price from an individual fund page HTML
 function parsePriceFromFundPage(html){
-  // Strategy 1: Regex on raw __NEXT_DATA__ JSON string — most reliable, avoids wrong key ordering
   try{
     const m=html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
     if(m){
-      const jsonStr=m[1];
-      // Direct regex for bid/nav price keys in the JSON string
-      const re=/"(?:bidNav|bid_nav|bidNavPrice|bid_nav_price|navPrice|nav_price|bidPrice|bid_price|latestBidNav|latest_bid_nav|currentNav|current_nav|latestNav|latest_nav|unitPrice|unit_price)"\s*:\s*"?([0-9]+\.[0-9]{2,8})"?/gi;
-      let match;
-      while((match=re.exec(jsonStr))!==null){
-        const p=parseFloat(match[1]);
-        if(p>0.05&&p<100)return p;
-      }
-      // Fall back to walking the parsed JSON
-      try{const price=walkForPrice(JSON.parse(jsonStr));if(price)return price;}catch(e){}
+      const js=m[1];
+      const re=/"(?:bidNav|bid_nav|bidNavPrice|nav_price|navPrice|bidPrice|bid_price|latestBidNav|currentNav|latestNav|unitPrice|price|nav)"\s*:\s*"?([0-9]+\.[0-9]{2,8})"?/gi;
+      let match;while((match=re.exec(js))!==null){const p=parseFloat(match[1]);if(p>0.05&&p<500)return p;}
     }
   }catch(e){}
-
-  // Strategy 2: "Bid/NAV" label in stripped visible text
   try{
-    const clean=html.replace(/<script[\s\S]*?<\/script>/gi,"").replace(/<style[\s\S]*?<\/style>/gi,"").replace(/<[^>]+>/g," ");
-    const re=/bid[\s\/\-]?nav\s*(?:price)?\s*[:\s]+([0-9]+\.[0-9]{4,})/gi;
-    const match=re.exec(clean);
-    if(match){const p=parseFloat(match[1]);if(p>0.05&&p<100)return p;}
+    const clean=html.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ');
+    const m=clean.match(/bid[\s\/\-]?nav\s*(?:price)?\s*[:\s]+([0-9]+\.[0-9]{4,})/i);
+    if(m){const p=parseFloat(m[1]);if(p>0.05&&p<500)return p;}
   }catch(e){}
-
-  // Strategy 3: Price series arrays — take the LAST value (most recent)
-  try{
-    const scripts=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]);
-    for(const s of scripts){
-      const arrays=[...s.matchAll(/\[([0-9.,\s]+)\]/g)];
-      for(const a of arrays){
-        const nums=a[1].split(",").map(n=>parseFloat(n.trim())).filter(n=>!isNaN(n)&&n>0.05&&n<100);
-        if(nums.length>=10)return nums[nums.length-1];
-      }
-    }
-  }catch(e){}
-
   return null;
 }
 
 async function fetchOneFundPrice(fundName,slug){
-  const buildId=_nextBuildId; // already fetched before parallel calls
-  const PROXIES_JSON=[
-    (u)=>({url:`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,json:true}),
-    (u)=>({url:`https://corsproxy.io/?${encodeURIComponent(u)}`,json:false}),
-    (u)=>({url:`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,json:false}),
-  ];
-
-  // Strategy 1: Next.js data API endpoint — returns clean JSON
-  if(buildId){
-    const dataUrl=`https://www.income.com.sg/_next/data/${buildId}/funds/${slug}.json`;
-    async function tryDataProxy(pf){
-      const p=pf(dataUrl);
-      const resp=await fetch(p.url,{signal:AbortSignal.timeout(10000)});
-      if(!resp.ok)throw new Error("bad");
-      const body=await resp.json();
-      // allorigins wraps in {contents:"...json string..."}; others return JSON directly
-      let data=body;
-      if(typeof body.contents==="string"){try{data=JSON.parse(body.contents);}catch(e){throw new Error("parse fail");}}
-      const price=walkForPrice(data);
-      if(!price)throw new Error("no price");
-      return price;
-    }
-    try{return await Promise.any(PROXIES_JSON.map(pf=>tryDataProxy(pf)));}catch(e){}
-  }
-
-  // Strategy 2: Full HTML page + parsePriceFromFundPage
-  const pageUrl=`https://www.income.com.sg/funds/${slug}`;
-  async function tryPageProxy(pf){
-    const p=pf(pageUrl);
-    const resp=await fetch(p.url,{signal:AbortSignal.timeout(10000)});
-    if(!resp.ok)throw new Error("bad");
-    const html=p.json?(await resp.json()).contents||"":(await resp.text());
-    if(!html)throw new Error("empty");
-    const price=parsePriceFromFundPage(html);
-    if(!price)throw new Error("no price");
-    return price;
-  }
-  try{return await Promise.any(PROXIES_JSON.map(pf=>tryPageProxy(pf)));}catch(e){return null;}
+  const html=await proxyFetch(`https://www.income.com.sg/funds/${slug}`,12000);
+  if(!html)return null;
+  return parsePriceFromFundPage(html);
 }
 
 window.doFetchPrices=async()=>{
@@ -1430,43 +1405,49 @@ window.doFetchPrices=async()=>{
     if(!statusEl)return;
     statusEl.style.display="block";statusEl.style.background=bg;statusEl.style.border=`1px solid ${border}`;statusEl.style.color=color;statusEl.innerHTML=msg;
   }
+  function reset(){if(btn){btn.disabled=false;btn.textContent="⟳ Auto-Fetch Prices";}}
 
-  setStatus("🔍 Detecting Income's website version...");
-  const buildId=await getNextBuildId();
-  if(buildId){
-    setStatus(`✅ Connected · Using data API (build: ${buildId.slice(0,10)}...) · Fetching ${Object.keys(INCOME_SLUGS).length} prices...`);
-  }else{
-    setStatus(`⚠️ Could not detect build ID — falling back to HTML parsing...`);
+  // ── Strategy 1: Historical prices page (one request, all funds) ──
+  setStatus("📊 Fetching from Income's historical prices page...");
+  const historical=await fetchHistoricalPrices();
+  if(historical&&Object.keys(historical).length>=3){
+    let found=0;
+    for(const[name,price]of Object.entries(historical)){await saveFundPriceDB(name,price);found++;}
+    const missing=Object.keys(INCOME_SLUGS).filter(n=>!historical[n]);
+    reset();
+    if(missing.length===0){
+      setStatus(`✅ All ${found} fund prices updated!`,"var(--green)","rgba(34,197,94,0.1)","rgba(34,197,94,0.3)");
+      showToast(`✅ All ${found} fund prices updated!`);
+    }else{
+      setStatus(`✅ ${found} prices updated. Not found: ${missing.map(n=>n.replace('Income ','').replace(' Fund','')).join(', ')} — use ✏️ to enter manually.`,"var(--gold-l)","rgba(245,158,11,0.08)","var(--gold-border)");
+      showToast(`✅ ${found} fund prices updated!`);
+    }
+    renderPage();return;
   }
 
-  const funds=Object.entries(INCOME_SLUGS);
-  const errors=[];
-  let found=0;
-
-  const results=await Promise.all(funds.map(([name,slug])=>
-    fetchOneFundPrice(name,slug).then(price=>({name,price}))
-  ));
+  // ── Strategy 2: Individual fund pages (parallel) ──
+  setStatus("⚠️ Historical page unreachable — trying individual fund pages...");
+  const results=await Promise.all(
+    Object.entries(INCOME_SLUGS).map(([name,slug])=>fetchOneFundPrice(name,slug).then(price=>({name,price})))
+  );
+  let found=0;const errors=[];
   for(const{name,price}of results){
     if(price){await saveFundPriceDB(name,price);found++;}
     else errors.push(name);
   }
-
-  if(btn){btn.disabled=false;btn.textContent="⟳ Auto-Fetch Prices";}
-
+  reset();
   if(found===0){
     setStatus(
-      `❌ Could not fetch any prices. Use the ✏️ buttons to enter prices manually from <a href="https://www.income.com.sg/funds/historical-prices" target="_blank" style="color:var(--gold);">Income's website</a>.`,
+      `❌ Auto-fetch failed. Please use the ✏️ buttons to enter prices manually from <a href="https://www.income.com.sg/funds/historical-prices" target="_blank" style="color:var(--gold);">Income's historical prices page</a>.`,
       "#fca5a5","rgba(239,68,68,0.1)","rgba(239,68,68,0.3)"
     );
   }else if(errors.length>0){
-    setStatus(`⚠️ ${found} prices updated. Missing: ${errors.map(e=>e.replace("Income ","").replace(" Fund","")).join(", ")}`,
+    setStatus(`⚠️ ${found} prices updated. Missing: ${errors.map(e=>e.replace('Income ','').replace(' Fund','')).join(', ')}`,
       "var(--gold-l)","rgba(245,158,11,0.08)","var(--gold-border)");
-    showToast(`✅ ${found} fund prices updated!`);
-    renderPage();
+    showToast(`✅ ${found} fund prices updated!`);renderPage();
   }else{
     setStatus(`✅ All ${found} fund prices updated!`,"var(--green)","rgba(34,197,94,0.1)","rgba(34,197,94,0.3)");
-    showToast(`✅ All ${found} fund prices updated from Income!`);
-    renderPage();
+    showToast(`✅ All ${found} fund prices updated!`);renderPage();
   }
 };
 
