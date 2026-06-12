@@ -809,7 +809,6 @@ window.filterClients=q=>{
 
 // ── Add Client Form ──
 function renderAddClientForm(){
-  const fundOpts=FUNDS.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join("");
   return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
     <div class="sec-title">👤 New Client Profile</div>
     <div class="g2" style="margin-bottom:12px;">
@@ -863,7 +862,7 @@ let allocRows=[{id:uid(),fund:"",pct:""}];
 window.addAllocRow=()=>{allocRows.push({id:uid(),fund:"",pct:""});renderAllocRows();};
 window.removeAllocRow=id=>{if(allocRows.length<=1)return;allocRows=allocRows.filter(r=>r.id!==id);renderAllocRows();};
 function renderAllocRows(){
-  const fundOpts=FUNDS.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join("");
+  const fundOpts=getAllFundNames().map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join("");
   const el=document.getElementById("allocRows");
   if(!el)return;
   el.innerHTML=allocRows.map(r=>`
@@ -1092,32 +1091,165 @@ window.filterTx=(clientId,filter)=>{
 // ── Fund Prices ──
 function renderPrices(){
   const allFunds=getAllFundNames();
+  const anySet=allFunds.some(f=>fundPrices[f]>0);
   let html=`<div class="sec-title">💹 Current Fund Prices</div>
-  <div style="font-size:12px;color:var(--dim);margin-bottom:16px;">
-    Update prices from <a href="https://www.income.com.sg/funds/historical-prices" target="_blank" style="color:var(--gold);">Income's historical prices page</a> (monthly end-of-month prices, publicly available).
-  </div>`;
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+    <div style="font-size:12px;color:var(--dim);">Prices auto-fetched from <a href="https://www.income.com.sg/funds/historical-prices" target="_blank" style="color:var(--gold);">Income's website</a> (monthly end-of-month).</div>
+    <button class="btn-pri" id="fetchBtn" onclick="doFetchPrices()" style="padding:10px 20px;font-size:13px;">⟳ Fetch Latest Prices</button>
+  </div>
+  <div id="fetchStatus" style="margin-bottom:14px;font-size:13px;display:none;padding:10px 14px;border-radius:10px;"></div>`;
   html+=allFunds.map(f=>{
     const p=fundPrices[f]||0;
     const key=f.replace(/[\s()\/]/g,"_");
     return`<div class="price-card">
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">${esc(f)}</div>
-        <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:14px;">Not set</span>`}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input class="inp" id="pi-${key}" type="number" step="0.000001" placeholder="0.000000" value="${p||""}" style="width:140px;font-family:monospace;"/>
-        <button class="btn-sec" onclick="saveFundPrice('${esc(f)}','${key}')">Save</button>
+        <div class="price-val" id="pv-${key}">${p?`<span style="color:var(--green);font-weight:700;">$${p.toFixed(6)}</span>`:`<span style="color:var(--dim);font-size:14px;">Not set</span>`}</div>
       </div>
     </div>`;
   }).join("");
   return html;
 }
-window.saveFundPrice=async(name,key)=>{
-  const val=document.getElementById(`pi-${key}`)?.value;
-  if(!val||parseFloat(val)<=0){showToast("⚠️ Enter a valid price.");return;}
-  await saveFundPriceDB(name,val);
-  showToast(`✅ Price saved for ${name}`);
+
+// ── Income fund slug map ──
+// Each fund has its own page: income.com.sg/funds/<slug>
+const INCOME_SLUGS={
+  "Income Global Absolute Alpha Fund":"income-global-absolute-alpha-fund",
+  "Income Global Artificial Intelligence":"income-global-artificial-intelligence",
+  "Income Global Dynamic Bond Fund":"income-global-dynamic-bond-fund",
+  "Income Global Emerging Markets Equity Fund":"income-global-emerging-markets-equity-fund",
+  "Income Global Gold Equity Fund":"income-global-gold-equity-fund",
+  "Income Global Growth Equity Fund":"income-global-growth-equity-fund",
+  "Income Global Sustainable Fund":"income-global-sustainable-fund",
+  "Income Global Technology Fund":"income-global-technology-fund",
+  "Income India Equity Fund":"income-india-equity-fund",
+  "Income Regional China Fund":"income-regional-china-fund",
+  "Income US Large Cap Equity Fund":"income-us-large-cap-equity-fund",
+  "Income World Healthscience Fund":"income-world-healthscience-fund",
+  "Money Market Fund":"money-market-fund",
+  "Takaful Fund":"takaful-fund",
 };
+
+function parsePriceFromFundPage(html){
+  // Strategy 1: Next.js __NEXT_DATA__ JSON
+  try{
+    const m=html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+    if(m){
+      function walk(o){
+        if(!o||typeof o!=="object")return null;
+        if(Array.isArray(o)){for(const v of o){const r=walk(v);if(r)return r;}return null;}
+        // Look for a key that is a price value (e.g. price, nav, unitPrice, latestPrice)
+        for(const k of["price","nav","unitPrice","latestPrice","currentPrice","fundPrice","pricePerUnit"]){
+          if(typeof o[k]==="number"&&o[k]>0&&o[k]<500)return o[k];
+          if(typeof o[k]==="string"&&parseFloat(o[k])>0)return parseFloat(o[k]);
+        }
+        for(const v of Object.values(o)){const r=walk(v);if(r)return r;}
+        return null;
+      }
+      const price=walk(JSON.parse(m[1]));
+      if(price)return price;
+    }
+  }catch(e){}
+
+  // Strategy 2: Find price patterns in page text
+  // Typical ILP prices are between 0.10 and 10.00
+  // Look for patterns like "$1.234567" or "1.234567" near price/nav labels
+  try{
+    // Remove script/style blocks to reduce noise
+    const clean=html.replace(/<script[\s\S]*?<\/script>/gi,"").replace(/<style[\s\S]*?<\/style>/gi,"");
+    // Look for price context: "Price" or "NAV" near a decimal number
+    const priceCtx=clean.match(/(?:price|nav|unit price|latest price)[^0-9$]{0,60}(\$?\s*([0-9]+\.[0-9]{4,8}))/i);
+    if(priceCtx){const p=parseFloat(priceCtx[2]);if(p>0&&p<500)return p;}
+    // Broader: any 6-8 decimal number that looks like a fund price
+    const allNums=[...clean.matchAll(/\b([0-9]+\.[0-9]{5,8})\b/g)].map(m=>parseFloat(m[1])).filter(n=>n>0.05&&n<50);
+    if(allNums.length>0)return allNums[0];
+  }catch(e){}
+
+  return null;
+}
+
+async function fetchOneFundPrice(fundName,slug){
+  const url=`https://www.income.com.sg/funds/${slug}`;
+  const proxies=[
+    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  ];
+  for(const proxy of proxies){
+    try{
+      const resp=await fetch(proxy,{signal:AbortSignal.timeout(20000)});
+      if(!resp.ok)continue;
+      const body=await resp.json();
+      const html=body.contents||body.data||"";
+      if(!html)continue;
+      const price=parsePriceFromFundPage(html);
+      if(price)return price;
+    }catch(e){}
+  }
+  return null;
+}
+
+window.doFetchPrices=async()=>{
+  const btn=document.getElementById("fetchBtn");
+  const statusEl=document.getElementById("fetchStatus");
+  if(btn){btn.disabled=true;btn.textContent="⏳ Fetching...";}
+  function setStatus(msg,color="var(--gold)",bg="rgba(245,158,11,0.1)",border="var(--gold-border)"){
+    if(!statusEl)return;
+    statusEl.style.display="block";statusEl.style.background=bg;statusEl.style.border=`1px solid ${border}`;statusEl.style.color=color;statusEl.innerHTML=msg;
+  }
+  setStatus("Connecting to Income Insurance website...");
+
+  const funds=Object.entries(INCOME_SLUGS);
+  let done=0,found=0;
+  const errors=[];
+
+  // Fetch all funds in parallel (batched 4 at a time to avoid rate limiting)
+  const BATCH=4;
+  for(let i=0;i<funds.length;i+=BATCH){
+    const batch=funds.slice(i,i+BATCH);
+    setStatus(`Fetching prices... ${done}/${funds.length} done`);
+    const results=await Promise.all(batch.map(([name,slug])=>
+      fetchOneFundPrice(name,slug).then(price=>({name,price}))
+    ));
+    for(const{name,price}of results){
+      done++;
+      if(price){
+        await saveFundPriceDB(name,price);
+        found++;
+      }else{
+        errors.push(name);
+      }
+    }
+    setStatus(`Fetching prices... ${done}/${funds.length} done (${found} found)`);
+  }
+
+  if(btn){btn.disabled=false;btn.textContent="⟳ Fetch Latest Prices";}
+
+  if(found===0){
+    setStatus(
+      `❌ Could not fetch any prices. Income's website structure may have changed.<br><span style="font-size:11px;">Please try again later or contact support.</span>`,
+      "#fca5a5","rgba(239,68,68,0.1)","rgba(239,68,68,0.3)"
+    );
+  }else if(errors.length>0){
+    setStatus(
+      `⚠️ ${found} prices updated. Could not fetch: ${errors.map(esc).join(", ")}`,
+      "var(--gold-l)","rgba(245,158,11,0.08)","var(--gold-border)"
+    );
+    showToast(`✅ ${found} fund prices updated!`);
+    renderPage();
+  }else{
+    setStatus(`✅ All ${found} fund prices updated successfully!`,"var(--green)","rgba(34,197,94,0.1)","rgba(34,197,94,0.3)");
+    showToast(`✅ All ${found} fund prices updated from Income!`);
+    renderPage();
+  }
+};
+
+// Auto-fetch prices silently on startup if none are set yet
+async function autoFetchPricesOnStartup(){
+  // Wait a moment for Firestore listeners to hydrate
+  await new Promise(r=>setTimeout(r,3000));
+  const anySet=DEFAULT_FUNDS.some(f=>fundPrices[f]>0);
+  if(!anySet)window.doFetchPrices().catch(()=>{});
+}
 
 // ── File upload handlers ──
 window.handleDrop=async(e,clientId)=>{
@@ -1361,6 +1493,7 @@ function attachPageHandlers(){
 
 // Start app directly — no login required
 startListeners();
+autoFetchPricesOnStartup();
 </script>
 </body>
 </html>
