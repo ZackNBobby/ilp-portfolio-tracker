@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ILP Portfolio Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+button,input,select,textarea{font-family:inherit;}
+
+/* ── Midnight Gold palette ── */
+:root{
+  --bg:#04080f;--bg2:#07101e;--bg3:#0c1828;--bg4:#111f30;
+  --gold:#f59e0b;--gold-l:#fbbf24;--gold-d:#d97706;--gold-dim:#92400e;
+  --gold-glow:rgba(245,158,11,0.15);--gold-border:rgba(245,158,11,0.22);
+  --text:#f1f5f9;--muted:#94a3b8;--dim:#475569;--faint:#1e293b;
+  --green:#22c55e;--green-d:#15803d;--red:#ef4444;--blue:#60a5fa;
+  --radius:14px;
+}
+
+/* ── Animations ── */
+@property --ba{syntax:'<angle>';initial-value:0deg;inherits:false;}
+@keyframes borderSpin{to{--ba:360deg;}}
+@keyframes goldShimmer{
+  0%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+  100%{background-position:0% 50%;}
+}
+@keyframes goldSweep{0%,15%{left:-70%;}80%,100%{left:120%;}}
+@keyframes orbFloat{
+  0%,100%{transform:translate(0,0) scale(1);}
+  33%{transform:translate(30px,-20px) scale(1.05);}
+  66%{transform:translate(-20px,15px) scale(0.97);}
+}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
+@keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
+@keyframes countUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes shimmerBar{0%{background-position:-200% center;}100%{background-position:200% center;}}
+@keyframes glow{0%,100%{box-shadow:0 0 12px var(--gold-glow);}50%{box-shadow:0 0 28px rgba(245,158,11,0.35);}}
+@keyframes breathe{0%,100%{filter:brightness(0.7);}50%{filter:brightness(1.3);}}
+
+/* ── Base ── */
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;
+  background-image:
+    radial-gradient(ellipse at 10% 20%,rgba(245,158,11,0.06) 0%,transparent 55%),
+    radial-gradient(ellipse at 90% 80%,rgba(251,191,36,0.04) 0%,transparent 50%),
+    radial-gradient(ellipse at 50% 50%,rgba(217,119,6,0.03) 0%,transparent 60%);
+}
+
+/* ── Floating orbs (background) ── */
+.orb{position:fixed;border-radius:50%;pointer-events:none;z-index:0;filter:blur(80px);animation:orbFloat ease-in-out infinite;}
+.orb1{width:400px;height:400px;top:-100px;left:-100px;background:rgba(245,158,11,0.05);animation-duration:18s;}
+.orb2{width:300px;height:300px;bottom:-80px;right:-80px;background:rgba(251,191,36,0.04);animation-duration:22s;animation-delay:-8s;}
+
+/* ── Login ── */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;z-index:1;}
+.login-card{
+  background:rgba(7,16,30,0.96);backdrop-filter:blur(20px);
+  border-radius:24px;padding:48px 32px 40px;
+  border:1px solid var(--gold-border);
+  max-width:380px;width:100%;text-align:center;
+  box-shadow:0 8px 60px rgba(0,0,0,0.8),0 0 40px var(--gold-glow),inset 0 1px 0 rgba(245,158,11,0.08);
+  animation:fadeInUp 0.5s ease;
+}
+.login-icon{font-size:52px;margin-bottom:16px;display:inline-block;animation:coinFlip 4s ease-in-out infinite;}
+.login-card h2{
+  font-size:24px;font-weight:900;margin-bottom:8px;
+  background:linear-gradient(135deg,var(--gold-l) 0%,var(--gold) 50%,#fde68a 100%);
+  background-size:200% 200%;animation:goldShimmer 4s ease infinite;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.login-sub{font-size:13px;color:var(--dim);margin-bottom:36px;line-height:1.7;}
+.btn-google{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  width:100%;padding:14px 20px;border-radius:12px;
+  border:1px solid rgba(255,255,255,0.15);background:#fff;
+  color:#3c4043;font-size:15px;font-weight:600;cursor:pointer;
+  transition:box-shadow 0.2s,transform 0.2s;
+}
+.btn-google:hover{box-shadow:0 4px 20px rgba(0,0,0,0.5);transform:translateY(-1px);}
+
+/* ── Header ── */
+.header{
+  background:linear-gradient(135deg,#04080f,#060e1a,#080f1e,#05090e);
+  background-size:400% 400%;animation:goldShimmer 12s ease infinite;
+  padding:28px 24px 24px;border-bottom:1px solid var(--gold-border);
+  position:relative;overflow:hidden;text-align:center;z-index:1;
+}
+.header::before{
+  content:'';position:absolute;top:0;left:-70%;width:50%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(245,158,11,0.06),rgba(251,191,36,0.04),transparent);
+  animation:goldSweep 8s ease-in-out infinite;
+}
+.header::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(245,158,11,0.6),rgba(251,191,36,0.8),rgba(245,158,11,0.6),transparent);
+}
+.header h1{
+  font-size:26px;font-weight:900;letter-spacing:-0.3px;margin-bottom:6px;
+  background:linear-gradient(135deg,var(--gold-l) 0%,var(--gold) 40%,#fde68a 70%,var(--gold-l) 100%);
+  background-size:300% 300%;animation:goldShimmer 5s ease infinite;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  position:relative;
+}
+.header-sub{font-size:12px;color:#a16207;font-weight:600;font-style:italic;position:relative;}
+.signout{
+  position:absolute;top:14px;right:14px;
+  background:rgba(30,41,59,0.7);border:1px solid var(--faint);
+  border-radius:8px;padding:6px 12px;color:var(--dim);
+  font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;z-index:10;
+}
+.signout:hover{background:rgba(127,29,29,0.5);border-color:rgba(239,68,68,0.3);color:#fca5a5;}
+
+/* ── Tabs ── */
+.tabs{
+  display:flex;background:rgba(4,8,15,0.95);
+  border-bottom:1px solid rgba(30,41,59,0.5);
+  overflow-x:auto;backdrop-filter:blur(8px);position:relative;z-index:1;
+}
+.tab-btn{
+  padding:13px 18px;border:none;cursor:pointer;
+  font-size:12px;font-weight:600;white-space:nowrap;
+  background:transparent;color:var(--dim);
+  border-bottom:2px solid transparent;transition:color 0.2s,border-color 0.2s;
+  position:relative;
+}
+.tab-btn.active{color:var(--gold-l);}
+.tab-btn.active::before{
+  content:'';position:absolute;inset:-1px;padding:1.5px;
+  background:conic-gradient(from var(--ba),var(--gold) 0deg,transparent 60deg,transparent 150deg,var(--gold-l) 180deg,transparent 240deg,transparent 330deg,var(--gold) 360deg);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;
+}
+.tab-btn:hover:not(.active){color:var(--muted);border-bottom-color:var(--gold-glow);}
+
+/* ── Content ── */
+.content{padding:20px 24px;max-width:980px;margin:0 auto;position:relative;z-index:1;}
+
+/* ── Cards ── */
+.card{
+  background:var(--bg2);backdrop-filter:blur(12px);
+  border-radius:var(--radius);padding:20px;
+  border:1px solid rgba(30,41,59,0.6);margin-bottom:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.4),inset 0 1px 0 rgba(245,158,11,0.03);
+  transition:border-color 0.22s,box-shadow 0.22s;
+}
+.card:hover{border-color:var(--gold-border);box-shadow:0 4px 24px rgba(0,0,0,0.4),0 0 20px var(--gold-glow);}
+.card-gold{
+  background:linear-gradient(135deg,#080e1a,#0a1220,#0d1628);
+  border:1px solid var(--gold-border);
+  box-shadow:0 0 30px var(--gold-glow),inset 0 1px 0 rgba(245,158,11,0.06);
+}
+.card-dark{background:var(--bg3);border-radius:var(--radius);padding:16px;border:1px solid rgba(30,41,59,0.4);margin-bottom:12px;}
+
+/* ── Client card ── */
+.client-card{
+  background:var(--bg2);border-radius:var(--radius);padding:18px;
+  border:1px solid rgba(30,41,59,0.5);margin-bottom:12px;
+  cursor:pointer;transition:all 0.22s;position:relative;overflow:hidden;
+  animation:fadeInUp 0.4s ease both;
+}
+.client-card::before{
+  content:'';position:absolute;top:0;left:-70%;width:50%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(245,158,11,0.04),transparent);
+  transition:left 0.5s ease;
+}
+.client-card:hover{border-color:var(--gold-border);box-shadow:0 0 24px var(--gold-glow);transform:translateY(-2px);}
+.client-card:hover::before{left:120%;}
+
+/* ── Stat cards ── */
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+.stat-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+@media(max-width:600px){.stat-grid-4{grid-template-columns:repeat(2,1fr);}}
+.stat-card{
+  background:var(--bg3);border-radius:12px;padding:14px;
+  border:1px solid rgba(30,41,59,0.5);text-align:center;
+  transition:border-color 0.2s;
+}
+.stat-card:hover{border-color:var(--gold-border);}
+.stat-lbl{font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+.stat-val{font-size:20px;font-weight:900;}
+.stat-val.gold{color:var(--gold-l);}
+.stat-val.green{color:var(--green);}
+.stat-val.red{color:var(--red);}
+.stat-val.blue{color:var(--blue);}
+.stat-val.muted{color:var(--muted);}
+
+/* ── Fund card ── */
+.fund-card{
+  background:var(--bg3);border-radius:var(--radius);padding:16px;
+  border:1px solid rgba(30,41,59,0.5);margin-bottom:10px;
+  animation:fadeInUp 0.4s ease both;
+}
+.fund-name{font-size:14px;font-weight:700;color:var(--gold-l);margin-bottom:10px;}
+.fund-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(30,41,59,0.4);font-size:12px;}
+.fund-row:last-child{border-bottom:none;}
+.fund-row .lk{color:var(--dim);}
+.fund-row .lv{font-weight:700;}
+
+/* ── Progress bar ── */
+.prog-wrap{background:rgba(0,0,0,0.3);border-radius:8px;height:8px;overflow:hidden;margin:4px 0;}
+.prog-bar{
+  height:100%;border-radius:8px;
+  background:linear-gradient(90deg,var(--gold-dim),var(--gold),var(--gold-l));
+  background-size:200% auto;animation:shimmerBar 2.5s linear infinite;
+  transition:width 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+.prog-bar.green{background:linear-gradient(90deg,var(--green-d),var(--green),#86efac);background-size:200% auto;animation:shimmerBar 2.5s linear infinite;}
+.prog-bar.red{background:var(--red);}
+
+/* ── Buttons ── */
+.btn-pri{
+  padding:12px 20px;border-radius:10px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--gold-dim),var(--gold));
+  color:#0a0500;font-size:14px;font-weight:800;
+  transition:all 0.22s;box-shadow:0 2px 16px rgba(245,158,11,0.3);
+}
+.btn-pri:hover{background:linear-gradient(135deg,var(--gold),var(--gold-l));box-shadow:0 0 28px rgba(245,158,11,0.5);transform:translateY(-2px);}
+.btn-pri:active{transform:translateY(0);}
+.btn-pri.full{width:100%;}
+.btn-sec{
+  padding:10px 16px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
+  background:transparent;border:1px solid var(--gold-border);color:var(--gold);
+  transition:all 0.2s;
+}
+.btn-sec:hover{background:var(--gold-glow);box-shadow:0 0 12px var(--gold-glow);}
+.btn-sm{
+  padding:5px 14px;border-radius:7px;border:1px solid var(--gold-border);
+  background:rgba(245,158,11,0.08);color:var(--gold);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.2s;
+}
+.btn-sm:hover{background:var(--gold-glow);box-shadow:0 0 10px var(--gold-glow);}
+.btn-del{
+  background:rgba(127,29,29,0.6);border:1px solid rgba(239,68,68,0.2);
+  border-radius:7px;padding:5px 12px;color:#fca5a5;font-size:12px;cursor:pointer;transition:all 0.2s;
+}
+.btn-del:hover{background:rgba(153,27,27,0.9);box-shadow:0 0 10px rgba(239,68,68,0.2);}
+.btn-back{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;
+  background:rgba(245,158,11,0.08);border:1px solid var(--gold-border);color:var(--gold);
+  transition:all 0.2s;margin-bottom:16px;
+}
+.btn-back:hover{background:var(--gold-glow);}
+.btn-present{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:700;
+  background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(251,191,36,0.1));
+  border:1px solid var(--gold-border);color:var(--gold-l);transition:all 0.22s;
+}
+.btn-present:hover{box-shadow:0 0 20px var(--gold-glow);transform:translateY(-1px);}
+
+/* ── Inputs ── */
+.lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:5px;font-weight:600;}
+.inp{
+  width:100%;padding:10px 13px;border-radius:10px;
+  border:1px solid rgba(30,41,59,0.6);background:rgba(12,24,40,0.9);
+  color:var(--text);font-size:14px;transition:all 0.2s;outline:none;
+}
+.inp:hover{border-color:var(--gold-border);}
+.inp:focus{border-color:rgba(245,158,11,0.6);box-shadow:0 0 0 3px rgba(245,158,11,0.08);}
+.sel{
+  width:100%;padding:10px 13px;border-radius:10px;
+  border:1px solid rgba(30,41,59,0.6);background:rgba(12,24,40,0.9);
+  color:var(--text);font-size:14px;transition:all 0.2s;outline:none;cursor:pointer;
+}
+.sel:hover{border-color:var(--gold-border);}
+.sel:focus{border-color:rgba(245,158,11,0.6);box-shadow:0 0 0 3px rgba(245,158,11,0.08);}
+.sel option{background:#0c1828;}
+.inp.err{border-color:var(--red)!important;background:rgba(45,10,10,0.9)!important;}
+
+/* ── Badges ── */
+.badge{display:inline-block;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;}
+.badge-growth{background:rgba(21,128,61,0.25);color:#86efac;border:1px solid rgba(34,197,94,0.3);}
+.badge-dividend{background:rgba(120,53,15,0.35);color:var(--gold-l);border:1px solid var(--gold-border);}
+.badge-flex{background:rgba(30,58,138,0.35);color:#93c5fd;border:1px solid rgba(59,130,246,0.2);}
+.badge-vantage{background:rgba(109,40,217,0.25);color:#d8b4fe;border:1px solid rgba(139,92,246,0.25);}
+.badge-trivantage{background:rgba(80,7,36,0.4);color:#fda4af;border:1px solid rgba(244,63,94,0.25);}
+
+/* ── Grid helpers ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+@media(max-width:600px){.g2{grid-template-columns:1fr;}.g3{grid-template-columns:1fr 1fr;}}
+
+/* ── Upload / drag-drop ── */
+.drop-zone{
+  border:2px dashed var(--gold-border);border-radius:var(--radius);
+  padding:32px;text-align:center;cursor:pointer;transition:all 0.22s;
+  background:rgba(245,158,11,0.03);position:relative;overflow:hidden;
+}
+.drop-zone:hover,.drop-zone.drag-over{
+  border-color:var(--gold);background:rgba(245,158,11,0.08);
+  box-shadow:0 0 24px var(--gold-glow);
+}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.drop-icon{font-size:36px;margin-bottom:10px;display:block;}
+.drop-text{font-size:14px;color:var(--muted);}
+.drop-hint{font-size:11px;color:var(--dim);margin-top:4px;}
+
+/* ── Transaction table ── */
+.tx-table{width:100%;border-collapse:collapse;font-size:12px;}
+.tx-table th{padding:8px 10px;text-align:left;color:var(--dim);border-bottom:1px solid var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-size:10px;}
+.tx-table td{padding:9px 10px;border-bottom:1px solid rgba(15,25,40,0.8);color:var(--muted);}
+.tx-table tr:hover td{background:rgba(245,158,11,0.03);}
+.tx-table tr:last-child td{border-bottom:none;}
+.tx-cat{display:inline-block;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700;}
+.tx-premium{background:rgba(21,128,61,0.2);color:#86efac;}
+.tx-bonus{background:rgba(120,53,15,0.3);color:var(--gold-l);}
+.tx-fee{background:rgba(127,29,29,0.3);color:#fca5a5;}
+.tx-dividend{background:rgba(109,40,217,0.25);color:#d8b4fe;}
+.tx-reinvestment{background:rgba(109,40,217,0.2);color:#c4b5fd;}
+.tx-switch_in{background:rgba(14,165,233,0.2);color:#7dd3fc;}
+.tx-switch_out{background:rgba(234,88,12,0.2);color:#fdba74;}
+.tx-other{background:rgba(30,41,59,0.5);color:var(--muted);}
+
+/* ── Fund price editor ── */
+.price-card{
+  background:var(--bg3);border-radius:var(--radius);padding:16px;
+  border:1px solid rgba(30,41,59,0.5);margin-bottom:10px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.price-val{font-size:22px;font-weight:900;color:var(--gold-l);animation:countUp 0.4s ease;}
+
+/* ── Presentation overlay ── */
+.present-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(135deg,#020508,#04080f,#060b14);
+  overflow-y:auto;padding:40px 24px;display:none;
+}
+.present-overlay.show{display:block;}
+.present-close{
+  position:fixed;top:16px;right:16px;
+  background:rgba(245,158,11,0.15);border:1px solid var(--gold-border);
+  border-radius:8px;padding:8px 16px;color:var(--gold);font-size:13px;font-weight:700;cursor:pointer;
+  z-index:10000;transition:all 0.2s;
+}
+.present-close:hover{background:var(--gold-glow);}
+.present-name{
+  font-size:32px;font-weight:900;text-align:center;margin-bottom:6px;
+  background:linear-gradient(135deg,var(--gold-l),var(--gold),#fde68a,var(--gold-l));
+  background-size:300% 300%;animation:goldShimmer 4s ease infinite;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.present-date{text-align:center;font-size:13px;color:var(--dim);margin-bottom:32px;}
+.present-big{font-size:48px;font-weight:900;color:var(--gold-l);text-align:center;animation:countUp 0.5s ease;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:40px;color:var(--dim);font-size:14px;}
+.empty-icon{font-size:40px;margin-bottom:12px;display:block;opacity:0.5;}
+
+/* ── Section title ── */
+.sec-title{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.sec-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--gold-glow),transparent);}
+
+/* ── Search ── */
+.search-wrap{position:relative;margin-bottom:16px;}
+.search-inp{
+  width:100%;padding:11px 16px 11px 40px;border-radius:12px;
+  border:1px solid rgba(30,41,59,0.6);background:var(--bg2);
+  color:var(--text);font-size:14px;outline:none;transition:all 0.2s;
+}
+.search-inp:focus{border-color:var(--gold-border);box-shadow:0 0 0 3px rgba(245,158,11,0.06);}
+.search-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none;}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:linear-gradient(135deg,#1a1000,#2d1a00);
+  border:1px solid var(--gold-border);border-radius:12px;
+  padding:12px 24px;font-size:13px;font-weight:600;color:var(--gold-l);
+  box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 20px var(--gold-glow);
+  z-index:99999;transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+/* ── Upload status ── */
+.upload-status{
+  border-radius:10px;padding:12px 16px;margin-top:10px;font-size:13px;font-weight:600;display:none;
+}
+.upload-status.ok{background:rgba(21,128,61,0.2);border:1px solid rgba(34,197,94,0.3);color:#86efac;display:block;}
+.upload-status.err{background:rgba(127,29,29,0.3);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;display:block;}
+
+/* ── Fund allocation row ── */
+.alloc-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.alloc-row .fund-sel{flex:1;}
+.alloc-pct{width:80px;}
+
+/* ── Charts ── */
+.chart-card{background:var(--bg2);border-radius:var(--radius);padding:18px;border:1px solid rgba(30,41,59,0.6);margin-bottom:14px;transition:border-color 0.22s;}
+.chart-card:hover{border-color:var(--gold-border);}
+.chart-title{font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px;}
+.chart-wrap{position:relative;width:100%;}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+@media(max-width:660px){.charts-row{grid-template-columns:1fr;}}
+
+/* ── Gain pill ── */
+.gain-pill{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:800;}
+.gain-pos{background:rgba(21,128,61,0.2);color:var(--green);border:1px solid rgba(34,197,94,0.25);}
+.gain-neg{background:rgba(127,29,29,0.2);color:var(--red);border:1px solid rgba(239,68,68,0.25);}
+
+/* ── Responsive ── */
+@media(max-width:600px){
+  .content{padding:14px 12px;}
+  .header{padding:20px 14px 18px;}
+  .header h1{font-size:20px;}
+  .present-big{font-size:32px;}
+  .present-name{font-size:24px;}
+  .stat-val{font-size:16px;}
+  .inp,.sel,.search-inp{font-size:16px!important;}
+}
+</style>
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<!-- Login -->
+<div id="loginScreen" class="login-wrap" style="display:none;">
+  <div class="login-card">
+    <span class="login-icon">💰</span>
+    <h2>ILP Portfolio Tracker</h2>
+    <p class="login-sub">Track your clients' InvestFlex portfolios.<br>Separate real gains from startup bonuses.</p>
+    <button class="btn-google" onclick="doSignIn()">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Continue with Google
+    </button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appShell" style="display:none;">
+  <div class="header">
+    <h1>💼 ILP Portfolio Tracker</h1>
+    <p class="header-sub">Income Insurance · Investment-Linked Plans</p>
+    <button class="signout" onclick="doSignOut()">Sign Out</button>
+  </div>
+  <div class="tabs" id="tabBar"></div>
+  <div class="content" id="app"></div>
+</div>
+
+<!-- Presentation overlay -->
+<div class="present-overlay" id="presentOverlay">
+  <button class="present-close" onclick="closePresent()">✕ Exit Presentation</button>
+  <div id="presentContent"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+
+// ══════════════════════════════════════
+// 🔧 FIREBASE CONFIG — Replace with your project config from console.firebase.google.com
+// ══════════════════════════════════════
+const FB={
+  apiKey:"AIzaSyDHNHkMmw9b3zY8oE92-EKQcSLBbUh5A8A",
+  authDomain:"ilp-portfolio-tracker.firebaseapp.com",
+  projectId:"ilp-portfolio-tracker",
+  storageBucket:"ilp-portfolio-tracker.firebasestorage.app",
+  messagingSenderId:"229769820838",
+  appId:"1:229769820838:web:964ce7fc3176fb55f6d267"
+};
+// ══════════════════════════════════════
+
+const fbApp=initializeApp(FB);
+const db=getFirestore(fbApp);
+const auth=getAuth(fbApp);
+const gProv=new GoogleAuthProvider();
+setPersistence(auth,browserLocalPersistence);
+
+// ── Constants ──
+const DEFAULT_FUNDS=[
+  "Income Global Absolute Alpha Fund",
+  "Income Global Artificial Intelligence",
+  "Income Global Dynamic Bond Fund",
+  "Income Global Emerging Markets Equity Fund",
+  "Income Global Gold Equity Fund",
+  "Income Global Growth Equity Fund",
+  "Income Global Sustainable Fund",
+  "Income Global Technology Fund",
+  "Income India Equity Fund",
+  "Income Regional China Fund",
+  "Income US Large Cap Equity Fund",
+  "Income World Healthscience Fund",
+  "Money Market Fund",
+  "Takaful Fund"
+];
+const CHART_COLORS=["#f59e0b","#d97706","#fbbf24","#b45309","#0ea5e9","#8b5cf6","#22c55e","#ef4444"];
+const CHART_COLORS_BG=["rgba(245,158,11,0.75)","rgba(217,119,6,0.75)","rgba(251,191,36,0.75)","rgba(180,83,9,0.75)","rgba(14,165,233,0.75)","rgba(139,92,246,0.75)","rgba(34,197,94,0.75)","rgba(239,68,68,0.75)"];
+const PRODUCTS=["Invest Flex","Invest Flex Vantage","Invest Flex TriVantage"];
+
+// ── State ──
+let clients=[],fundPrices={},clientTxs={};
+let tab="dashboard",currentClientId=null,user=null;
+let unsubs=[],charts={};
+
+function getAllFundNames(){
+  const s=new Set(DEFAULT_FUNDS);
+  Object.values(clientTxs).forEach(txs=>txs.forEach(tx=>{if(tx.fundName)s.add(tx.fundName);}));
+  Object.keys(fundPrices).forEach(n=>s.add(n));
+  return[...s].sort();
+}
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+// ── Utils ──
+const $f=n=>"$"+Number(n||0).toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2});
+const $u=n=>Number(n||0).toLocaleString("en-SG",{minimumFractionDigits:4,maximumFractionDigits:6});
+const $pct=n=>(n>=0?"+":"")+Number(n||0).toFixed(2)+"%";
+const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
+const todayStr=()=>{const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");};
+const fmtDate=s=>{if(!s)return"";const[y,m,d]=s.split("-");return`${d}/${m}/${y}`;};
+
+function showToast(msg,dur=3000){
+  const t=document.getElementById("toast");
+  t.textContent=msg;t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),dur);
+}
+
+// ── Transaction categorisation ──
+function categorize(txType,txDetails){
+  const t=(txType||"").toLowerCase(),d=(txDetails||"").toLowerCase();
+  if(d.includes("investment bonus")||d.includes("bonus unit"))return"bonus";
+  if(t.includes("free fund"))return"bonus";
+  if(d.includes("distribution reinvestment")||d.includes("reinvestment"))return"reinvestment";
+  if(d.includes("fund switch out")||d.includes("switch out"))return"switch_out";
+  if(d.includes("fund switch in")||d.includes("switch in"))return"switch_in";
+  if(d.includes("regular premium")||d.includes("top-up")||d.includes("top up"))return"premium";
+  if(d.includes("policy fee")||d.includes("admin fee")||d.includes("mortality"))return"fee";
+  if(t.includes("dividend")||d.includes("dividend"))return"dividend";
+  if(t.includes("buy"))return"premium";
+  if(t.includes("sell"))return"fee";
+  return"other";
+}
+
+// ── Portfolio calculation ──
+function calcPortfolio(txs){
+  const funds={};
+  for(const tx of txs){
+    const f=tx.fundName;
+    if(!funds[f])funds[f]={
+      premiumUnits:0,feeUnits:0,bonusUnits:0,
+      reinvestUnits:0,switchInUnits:0,switchOutUnits:0,
+      totalInvested:0,dividendReinvested:0,dividendPaid:0,txCount:0
+    };
+    const fd=funds[f];fd.txCount++;
+    if(tx.category==="premium"){fd.premiumUnits+=tx.units;fd.totalInvested+=Math.abs(tx.amount);}
+    else if(tx.category==="bonus"){fd.bonusUnits+=tx.units;}
+    else if(tx.category==="fee"){fd.feeUnits+=tx.units;}
+    else if(tx.category==="reinvestment"){fd.reinvestUnits+=tx.units;fd.dividendReinvested+=Math.abs(tx.amount);}
+    else if(tx.category==="switch_in"){fd.switchInUnits+=tx.units;}
+    else if(tx.category==="switch_out"){fd.switchOutUnits+=tx.units;}
+    else if(tx.category==="dividend"){fd.dividendPaid+=Math.abs(tx.amount);}
+  }
+  for(const[name,fd]of Object.entries(funds)){
+    const price=fundPrices[name]||0;
+    fd.currentPrice=price;
+    fd.netUnits=fd.premiumUnits+fd.feeUnits+fd.reinvestUnits+fd.switchInUnits+fd.switchOutUnits;
+    fd.totalUnits=fd.netUnits+fd.bonusUnits;
+    fd.netPremiumValue=fd.netUnits*price;
+    fd.bonusValue=fd.bonusUnits*price;
+    fd.totalValue=fd.totalUnits*price;
+    fd.trueGain=fd.netPremiumValue-fd.totalInvested;
+    fd.trueGainPct=fd.totalInvested>0?(fd.trueGain/fd.totalInvested)*100:0;
+  }
+  return funds;
+}
+
+function calcTimeSeries(txs){
+  if(txs.length<2)return[];
+  const sorted=[...txs].sort((a,b)=>a.txDate.localeCompare(b.txDate));
+  const holdings={},lastPrice={};
+  const byDate={};
+  for(const tx of sorted){
+    const f=tx.fundName;
+    if(!holdings[f])holdings[f]=0;
+    holdings[f]+=tx.units;
+    if(tx.price>0)lastPrice[f]=tx.price;
+    let total=0;
+    for(const[fund,units]of Object.entries(holdings))total+=Math.max(0,units)*(lastPrice[fund]||0);
+    byDate[tx.txDate]={date:tx.txDate,value:total};
+  }
+  return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
+}
+
+function portfolioTotals(fundData){
+  let totalInvested=0,totalValue=0,bonusValue=0,trueGain=0,dividendPaid=0;
+  for(const fd of Object.values(fundData)){
+    totalInvested+=fd.totalInvested;
+    totalValue+=fd.totalValue;
+    bonusValue+=fd.bonusValue;
+    trueGain+=fd.trueGain;
+    dividendPaid+=fd.dividendPaid;
+  }
+  const trueGainPct=totalInvested>0?(trueGain/totalInvested)*100:0;
+  return{totalInvested,totalValue,bonusValue,trueGain,trueGainPct,dividendPaid};
+}
+
+// ── Strategy / product helpers ──
+function getStrategy(product){
+  return product==="Invest Flex"?"growth":"dividend";
+}
+function stratBadge(product){
+  const s=getStrategy(product);
+  return s==="growth"
+    ?`<span class="badge badge-growth">📈 Growth</span>`
+    :`<span class="badge badge-dividend">💰 Dividend</span>`;
+}
+function productBadge(product){
+  if(product==="Invest Flex")return`<span class="badge badge-flex">Invest Flex</span>`;
+  if(product==="Invest Flex Vantage")return`<span class="badge badge-vantage">Invest Flex Vantage</span>`;
+  return`<span class="badge badge-trivantage">Invest Flex TriVantage</span>`;
+}
+
+// ── Excel / CSV parser ──
+function parseNum(val){
+  if(val===null||val===undefined||val==="-"||val==="")return 0;
+  const s=String(val).replace(/[$,\s]/g,"");
+  const neg=s.startsWith("(")||s.startsWith("-");
+  const n=parseFloat(s.replace(/[()]/g,""));
+  if(isNaN(n))return 0;
+  return neg?-Math.abs(n):Math.abs(n)*(String(val).includes("-")&&!String(val).includes("(")?-1:1);
+}
+function smartParseNum(val){
+  if(val===null||val===undefined||val==="-"||val==="")return 0;
+  const s=String(val).trim().replace(/[$,]/g,"");
+  if(s.startsWith("(")&&s.endsWith(")"))return-parseFloat(s.slice(1,-1))||0;
+  return parseFloat(s)||0;
+}
+function parseDate(val){
+  if(!val)return"";
+  if(val instanceof Date){
+    return val.getFullYear()+"-"+String(val.getMonth()+1).padStart(2,"0")+"-"+String(val.getDate()).padStart(2,"0");
+  }
+  const s=String(val).trim();
+  const m1=s.match(/^(\d{2})-(\d{2})-(\d{4})$/);// DD-MM-YYYY
+  if(m1)return`${m1[3]}-${m1[2]}-${m1[1]}`;
+  const m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);// YYYY-MM-DD
+  if(m2)return s;
+  const m3=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);// DD/MM/YYYY
+  if(m3)return`${m3[3]}-${m3[2]}-${m3[1]}`;
+  return s;
+}
+function findCol(headers,candidates){
+  for(const c of candidates){
+    const idx=headers.findIndex(h=>String(h).toLowerCase().includes(c.toLowerCase()));
+    if(idx>=0)return idx;
+  }
+  return-1;
+}
+
+async function parseExcelFile(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const data=new Uint8Array(e.target.result);
+        const wb=XLSX.read(data,{type:"array",cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        if(rows.length<2){resolve([]);return;}
+
+        const headers=rows[0].map(h=>String(h).trim());
+        const C={
+          fund:findCol(headers,["fund name","fund"]),
+          type:findCol(headers,["transaction type","type"]),
+          details:findCol(headers,["transaction details","details"]),
+          date:findCol(headers,["transaction date","date"]),
+          units:findCol(headers,["units"]),
+          amount:findCol(headers,["transaction amount","amount"]),
+          price:findCol(headers,["price(dollar","price (dollar","price per unit","price","nav"]),
+          free:findCol(headers,["free units","free"])
+        };
+
+        const txs=[];
+        for(let i=1;i<rows.length;i++){
+          const row=rows[i];
+          const fundName=String(row[C.fund]||"").trim();
+          if(!fundName)continue;
+          const txType=String(row[C.type]||"").trim();
+          const txDetails=String(row[C.details]||"").trim();
+          const txDate=parseDate(row[C.date]);
+          const units=smartParseNum(row[C.units]);
+          const amount=smartParseNum(row[C.amount]);
+          const price=smartParseNum(row[C.price]);
+          const freeLabel=C.free>=0?String(row[C.free]||"").trim():"";
+          if(!txDate)continue;
+          txs.push({
+            id:uid(),fundName,txType,txDetails,txDate,
+            units,amount,price,freeLabel,
+            category:categorize(txType,txDetails)
+          });
+        }
+        resolve(txs);
+      }catch(err){reject(err);}
+    };
+    reader.onerror=reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── Firestore ──
+async function saveClient(obj){return await addDoc(collection(db,"clients"),obj);}
+async function removeClient(fid){
+  await deleteDoc(doc(db,"clients",fid));
+  // delete all transactions for this client
+  const q=query(collection(db,"transactions"),where("clientId","==",fid));
+  const snap=await getDocs(q);
+  const batch=writeBatch(db);
+  snap.forEach(d=>batch.delete(d.ref));
+  await batch.commit();
+}
+async function saveTransactions(clientId,txs){
+  const batch=writeBatch(db);
+  // delete existing first
+  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",user.uid));
+  const snap=await getDocs(q);
+  snap.forEach(d=>batch.delete(d.ref));
+  // add new
+  for(const tx of txs){
+    const ref=doc(collection(db,"transactions"));
+    batch.set(ref,{...tx,clientId,uid:user.uid});
+  }
+  await batch.commit();
+}
+async function saveFundPriceDB(name,price){
+  await setDoc(doc(db,"fundPrices",name.replace(/\s+/g,"_")),{
+    name,price:parseFloat(price),updatedAt:new Date().toISOString()
+  },{merge:true});
+}
+
+function startListeners(){
+  unsubs.forEach(u=>u());unsubs=[];
+  const q1=query(collection(db,"clients"),where("uid","==",user.uid));
+  unsubs.push(onSnapshot(q1,snap=>{
+    clients=[];snap.forEach(d=>clients.push({...d.data(),fid:d.id}));
+    clients.sort((a,b)=>a.name.localeCompare(b.name));
+    renderAll();
+  }));
+  unsubs.push(onSnapshot(collection(db,"fundPrices"),snap=>{
+    fundPrices={};snap.forEach(d=>{const fd=d.data();fundPrices[fd.name]=fd.price;});
+    renderAll();
+  }));
+}
+
+// ── Rendering ──
+function renderAll(){renderTabs();renderPage();}
+function renderTabs(){
+  const TABS=[["dashboard","🏠 Clients"],["prices","💹 Fund Prices"],["addclient","+ Add Client"]];
+  document.getElementById("tabBar").innerHTML=
+    TABS.map(([k,v])=>`<button class="tab-btn${tab===k?" active":""}" onclick="setTab('${k}')">${v}</button>`).join("");
+}
+function renderPage(){
+  const el=document.getElementById("app");
+  if(tab==="dashboard")el.innerHTML=renderDashboard();
+  else if(tab==="prices")el.innerHTML=renderPrices();
+  else if(tab==="addclient")el.innerHTML=renderAddClientForm();
+  else if(tab==="client"&&currentClientId){el.innerHTML=renderClientDetail(currentClientId);setTimeout(()=>initCharts(currentClientId),50);}
+  else{tab="dashboard";el.innerHTML=renderDashboard();}
+  attachPageHandlers();
+}
+
+// ── Dashboard ──
+function renderDashboard(){
+  let html=`<div class="search-wrap">
+    <span class="search-ico">🔍</span>
+    <input class="search-inp" id="searchInp" type="text" placeholder="Search clients by name or policy number..." oninput="filterClients(this.value)"/>
+  </div>`;
+  if(clients.length===0){
+    html+=`<div class="empty"><span class="empty-icon">👤</span>No clients yet.<br>Click <strong style="color:var(--gold)">+ Add Client</strong> in the tabs above to get started.</div>`;
+    return html;
+  }
+  html+=`<div id="clientList">${buildClientList(clients)}</div>`;
+  return html;
+}
+function buildClientList(list){
+  if(list.length===0)return`<div class="empty"><span class="empty-icon">🔍</span>No clients match your search.</div>`;
+  return list.map((c,i)=>{
+    const strategy=getStrategy(c.product);
+    const txs=clientTxs[c.fid]||[];
+    const hasTxs=txs.length>0;
+    const fundData=hasTxs?calcPortfolio(txs):{};
+    const totals=hasTxs?portfolioTotals(fundData):{};
+    const hasPrice=Object.keys(fundPrices).length>0;
+    return`<div class="client-card" style="animation-delay:${i*0.05}s" onclick="viewClient('${c.fid}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:16px;font-weight:800;margin-bottom:5px;">${esc(c.name)}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${productBadge(c.product)}${stratBadge(c.product)}
+          </div>
+        </div>
+        ${hasTxs&&hasPrice?`<div style="text-align:right;">
+          <div style="font-size:11px;color:var(--dim);">Portfolio Value</div>
+          <div style="font-size:20px;font-weight:900;color:var(--gold-l);">${$f(totals.totalValue)}</div>
+          <div style="font-size:12px;font-weight:700;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)} excl. bonus</div>
+        </div>`:""}
+      </div>
+      <div style="display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;">
+        ${c.policyNo?`<span>📋 ${esc(c.policyNo)}</span>`:""}
+        <span>📅 Since ${fmtDate(c.startDate)}</span>
+        <span>💵 AP: ${$f(c.annualPremium)}/yr</span>
+        <span>📁 ${hasTxs?txs.length+" transactions":"No data uploaded"}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+window.filterClients=q=>{
+  const filtered=clients.filter(c=>
+    c.name.toLowerCase().includes(q.toLowerCase())||
+    (c.policyNo||"").toLowerCase().includes(q.toLowerCase())
+  );
+  const el=document.getElementById("clientList");
+  if(el)el.innerHTML=buildClientList(filtered);
+};
+
+// ── Add Client Form ──
+function renderAddClientForm(){
+  const fundOpts=FUNDS.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join("");
+  return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
+    <div class="sec-title">👤 New Client Profile</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">Full Name *</label><input class="inp" id="cName" placeholder="e.g. Nicholas Ong Jun Han"/></div>
+      <div><label class="lbl">Policy Number</label><input class="inp" id="cPolicy" placeholder="e.g. LV12345678"/></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div>
+        <label class="lbl">Product *</label>
+        <select class="sel" id="cProduct" onchange="updateStrategyLabel()">
+          <option value="">-- Select --</option>
+          ${PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Strategy</label>
+        <div id="stratLabel" style="padding:10px 13px;border-radius:10px;border:1px solid rgba(30,41,59,0.4);background:var(--bg3);font-size:13px;color:var(--dim);min-height:42px;display:flex;align-items:center;">
+          Select a product above
+        </div>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">Policy Start Date *</label><input class="inp" id="cStart" type="date"/></div>
+      <div><label class="lbl">Policy Term (years) *</label><input class="inp" id="cTerm" type="number" placeholder="e.g. 20"/></div>
+    </div>
+    <div class="g2" style="margin-bottom:16px;">
+      <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="e.g. 6000"/></div>
+      <div><label class="lbl">Notes (optional)</label><input class="inp" id="cNotes" placeholder="e.g. Risk profile, goals..."/></div>
+    </div>
+
+    <div class="sec-title" style="margin-bottom:10px;">📊 Fund Allocations</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:10px;">Add the funds in this client's policy and their % allocation.</div>
+    <div id="allocRows"></div>
+    <button class="btn-sm" onclick="addAllocRow()" style="margin-bottom:16px;">+ Add Fund</button>
+
+    <div id="addClientErr" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;"></div>
+    <button class="btn-pri full" onclick="doAddClient()">💾 Save Client</button>
+  </div>`;
+}
+window.updateStrategyLabel=()=>{
+  const p=document.getElementById("cProduct")?.value||"";
+  const el=document.getElementById("stratLabel");
+  if(!el)return;
+  if(!p){el.textContent="Select a product above";el.style.color="var(--dim)";return;}
+  const s=getStrategy(p);
+  el.innerHTML=s==="growth"
+    ?`<span class="badge badge-growth">📈 Growth — Dividends Reinvested</span>`
+    :`<span class="badge badge-dividend">💰 Dividend Payout — For Retirees</span>`;
+};
+let allocRows=[{id:uid(),fund:"",pct:""}];
+window.addAllocRow=()=>{allocRows.push({id:uid(),fund:"",pct:""});renderAllocRows();};
+window.removeAllocRow=id=>{if(allocRows.length<=1)return;allocRows=allocRows.filter(r=>r.id!==id);renderAllocRows();};
+function renderAllocRows(){
+  const fundOpts=FUNDS.map(f=>`<option value="${esc(f)}">${esc(f)}</option>`).join("");
+  const el=document.getElementById("allocRows");
+  if(!el)return;
+  el.innerHTML=allocRows.map(r=>`
+    <div class="alloc-row" id="ar-${r.id}">
+      <select class="sel fund-sel" onchange="updAlloc('${r.id}','fund',this.value)">
+        <option value="">-- Select Fund --</option>${fundOpts}
+      </select>
+      <input class="inp alloc-pct" type="number" min="0" max="100" placeholder="%" value="${r.pct}" onchange="updAlloc('${r.id}','pct',this.value)"/>
+      <button class="btn-del" onclick="removeAllocRow('${r.id}')">✕</button>
+    </div>`).join("");
+}
+window.updAlloc=(id,field,val)=>{allocRows=allocRows.map(r=>r.id===id?{...r,[field]:val}:r);};
+window.doAddClient=async()=>{
+  const name=document.getElementById("cName")?.value.trim()||"";
+  const policyNo=document.getElementById("cPolicy")?.value.trim()||"";
+  const product=document.getElementById("cProduct")?.value||"";
+  const startDate=document.getElementById("cStart")?.value||"";
+  const term=document.getElementById("cTerm")?.value||"";
+  const ap=document.getElementById("cAP")?.value||"";
+  const notes=document.getElementById("cNotes")?.value.trim()||"";
+  const errEl=document.getElementById("addClientErr");
+  const errs=[];
+  if(!name)errs.push("Name required.");
+  if(!product)errs.push("Product required.");
+  if(!startDate)errs.push("Start date required.");
+  if(!term||parseInt(term)<=0)errs.push("Policy term required.");
+  if(!ap||parseFloat(ap)<=0)errs.push("Annual premium required.");
+  if(errEl){if(errs.length){errEl.textContent=errs.join(" ");errEl.style.display="block";return;}errEl.style.display="none";}
+  const funds=allocRows.filter(r=>r.fund).map(r=>({name:r.fund,allocation:parseFloat(r.pct)||0}));
+  const obj={
+    uid:user.uid,name,policyNo,product,strategy:getStrategy(product),
+    startDate,term:parseInt(term),annualPremium:parseFloat(ap),
+    funds,notes,createdAt:new Date().toISOString()
+  };
+  try{
+    const ref=await saveClient(obj);
+    allocRows=[{id:uid(),fund:"",pct:""}];
+    showToast("✅ Client saved!");
+    tab="dashboard";renderAll();
+  }catch(e){if(errEl){errEl.textContent="Error: "+e.message;errEl.style.display="block";}}
+};
+
+// ── Client Detail ──
+function renderClientDetail(clientId){
+  const c=clients.find(x=>x.fid===clientId);
+  if(!c)return`<div class="empty">Client not found.</div>`;
+  const txs=clientTxs[clientId]||[];
+  const hasTxs=txs.length>0;
+  const fundData=hasTxs?calcPortfolio(txs):{};
+  const totals=hasTxs?portfolioTotals(fundData):{};
+  const strategy=getStrategy(c.product);
+  const hasPrices=Object.keys(fundPrices).length>0;
+
+  // Back + actions
+  let html=`<button class="btn-back" onclick="goBack()">← Back to Clients</button>`;
+  html+=`<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+    <div>
+      <div style="font-size:22px;font-weight:900;margin-bottom:6px;">${esc(c.name)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${productBadge(c.product)}${stratBadge(c.product)}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="btn-present" onclick="openPresent('${clientId}')">📊 Present</button>
+      <button class="btn-del" onclick="doDelClient('${clientId}')">🗑 Delete Client</button>
+    </div>
+  </div>`;
+
+  // Info strip
+  html+=`<div class="card" style="margin-bottom:14px;">
+    <div class="g3" style="margin-bottom:0;">
+      <div><div class="stat-lbl">Policy No.</div><div style="font-weight:700;">${esc(c.policyNo||"—")}</div></div>
+      <div><div class="stat-lbl">Started</div><div style="font-weight:700;">${fmtDate(c.startDate)}</div></div>
+      <div><div class="stat-lbl">Term</div><div style="font-weight:700;">${c.term} years</div></div>
+      <div><div class="stat-lbl">Annual Premium</div><div style="font-weight:700;color:var(--gold);">${$f(c.annualPremium)}</div></div>
+      <div><div class="stat-lbl">Monthly Premium</div><div style="font-weight:700;">${$f(c.annualPremium/12)}</div></div>
+      ${c.notes?`<div><div class="stat-lbl">Notes</div><div style="font-size:12px;color:var(--muted);">${esc(c.notes)}</div></div>`:""}
+    </div>
+  </div>`;
+
+  if(!hasPrices){
+    html+=`<div class="card" style="border-color:rgba(245,158,11,0.3);text-align:center;padding:24px;">
+      <div style="font-size:24px;margin-bottom:8px;">💹</div>
+      <div style="font-weight:700;color:var(--gold);">Set fund prices to see portfolio values</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:4px;">Go to <strong>Fund Prices</strong> tab and enter the latest prices from Income's website.</div>
+    </div>`;
+  }
+
+  // Portfolio summary (only if has transactions + prices)
+  if(hasTxs&&hasPrices){
+    html+=`<div class="sec-title">📈 Portfolio Summary</div>`;
+    html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
+      <div class="stat-card card-gold">
+        <div class="stat-lbl">Total Portfolio</div>
+        <div class="stat-val gold">${$f(totals.totalValue)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">You Invested</div>
+        <div class="stat-val muted">${$f(totals.totalInvested)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">True Gain (Excl. Bonus)</div>
+        <div class="stat-val ${totals.trueGain>=0?"green":"red"}">${$f(totals.trueGain)}</div>
+        <div style="font-size:11px;margin-top:2px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Startup Bonus Value</div>
+        <div class="stat-val gold">${$f(totals.bonusValue)}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px;">Shown separately</div>
+      </div>
+    </div>`;
+    if(strategy==="dividend"&&totals.dividendPaid>0){
+      html+=`<div class="card" style="text-align:center;border-color:rgba(139,92,246,0.3);margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;">Total Dividends Received</div>
+        <div style="font-size:28px;font-weight:900;color:#d8b4fe;margin-top:4px;">${$f(totals.dividendPaid)}</div>
+      </div>`;
+    }
+
+    // Charts
+    html+=`<div class="sec-title">📊 Portfolio Visualisation</div>
+    <div class="charts-row">
+      <div class="chart-card"><div class="chart-title">Fund Allocation by Value</div><div class="chart-wrap"><canvas id="donut-${clientId}" height="220"></canvas></div></div>
+      <div class="chart-card"><div class="chart-title">Invested vs. Current Value</div><div class="chart-wrap"><canvas id="bar-${clientId}" height="220"></canvas></div></div>
+    </div>
+    <div class="chart-card"><div class="chart-title">Portfolio Growth Over Time <span style="font-size:10px;color:var(--dim);font-weight:400;">(estimated from transaction prices)</span></div><div class="chart-wrap"><canvas id="line-${clientId}" height="130"></canvas></div></div>`;
+
+    // Fund breakdown
+    html+=`<div class="sec-title">🏦 Fund Breakdown</div>`;
+    for(const[fname,fd]of Object.entries(fundData)){
+      html+=`<div class="fund-card">
+        <div class="fund-name">${esc(fname)}</div>
+        <div class="g2">
+          <div>
+            <div class="fund-row"><span class="lk">Units (Premium)</span><span class="lv">${$u(fd.netUnits)}</span></div>
+            <div class="fund-row"><span class="lk">Units (Bonus)</span><span class="lv" style="color:var(--gold);">${$u(fd.bonusUnits)}</span></div>
+            ${fd.reinvestUnits>0?`<div class="fund-row"><span class="lk">Units (Reinvested Div.)</span><span class="lv" style="color:#d8b4fe;">${$u(fd.reinvestUnits)}</span></div>`:""}`
+            <div class="fund-row"><span class="lk">Total Units</span><span class="lv">${$u(fd.totalUnits)}</span></div>
+            <div class="fund-row"><span class="lk">Current Price</span><span class="lv">$${fd.currentPrice.toFixed(6)}</span></div>
+          </div>
+          <div>
+            <div class="fund-row"><span class="lk">Invested</span><span class="lv">${$f(fd.totalInvested)}</span></div>
+            <div class="fund-row"><span class="lk">Premium Value</span><span class="lv">${$f(fd.netPremiumValue)}</span></div>
+            <div class="fund-row"><span class="lk">True Gain</span>
+              <span class="lv" style="color:${fd.trueGain>=0?"var(--green)":"var(--red)"};">${$f(fd.trueGain)} (${$pct(fd.trueGainPct)})</span>
+            </div>
+            <div class="fund-row"><span class="lk">Bonus Value</span><span class="lv" style="color:var(--gold);">${$f(fd.bonusValue)}</span></div>
+            ${strategy==="dividend"&&fd.dividendPaid>0?`<div class="fund-row"><span class="lk">Dividends Paid</span><span class="lv" style="color:#d8b4fe;">${$f(fd.dividendPaid)}</span></div>`:""}
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px;">
+            <span>True gain progress</span>
+            <span style="color:${fd.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(fd.trueGainPct)}</span>
+          </div>
+          <div class="prog-wrap"><div class="prog-bar ${fd.trueGain>=0?"green":"red"}" style="width:${Math.min(100,Math.max(0,Math.abs(fd.trueGainPct)))}%"></div></div>
+        </div>
+      </div>`;
+    }
+  }else if(!hasTxs){
+    html+=`<div class="card" style="text-align:center;padding:24px;">
+      <div style="font-size:28px;margin-bottom:8px;">📁</div>
+      <div style="font-weight:700;color:var(--gold);margin-bottom:4px;">No transactions uploaded yet</div>
+      <div style="font-size:12px;color:var(--dim);">Upload the Fund Transaction History Excel export below.</div>
+    </div>`;
+  }
+
+  // Upload zone
+  html+=`<div class="sec-title" style="margin-top:20px;">📤 Upload Transactions</div>
+  <div class="drop-zone" id="dropZone-${clientId}" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleDrop(event,'${clientId}')">
+    <input type="file" accept=".xlsx,.xls,.csv" onchange="handleFileInput(event,'${clientId}')"/>
+    <span class="drop-icon">📂</span>
+    <div class="drop-text">Drag & drop Fund Transaction History Excel here</div>
+    <div class="drop-hint">or click to browse · .xlsx · .xls · .csv</div>
+  </div>
+  <div class="upload-status" id="uploadStatus-${clientId}"></div>`;
+
+  // Transaction history
+  if(hasTxs){
+    html+=`<div class="sec-title" style="margin-top:20px;">📋 Transaction History (${txs.length})</div>`;
+    html+=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;" id="txFilters-${clientId}">
+      ${["all","premium","bonus","reinvestment","fee","switch_in","switch_out","dividend"].map(f=>
+        `<button class="btn-sm" onclick="filterTx('${clientId}','${f}')" id="txf-${clientId}-${f}" style="${f==="all"?"background:var(--gold-glow);border-color:var(--gold);"}">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`
+      ).join("")}
+    </div>`;
+    html+=`<div style="overflow-x:auto;" id="txTable-${clientId}">${buildTxTable(txs,"all")}</div>`;
+  }
+
+  return html;
+}
+
+function buildTxTable(txs,filter){
+  const filtered=filter==="all"?txs:txs.filter(t=>t.category===filter);
+  if(filtered.length===0)return`<div class="empty">No ${filter} transactions.</div>`;
+  const sorted=[...filtered].sort((a,b)=>b.txDate.localeCompare(a.txDate));
+  return`<table class="tx-table">
+    <thead><tr>
+      <th>Date</th><th>Fund</th><th>Type</th><th>Details</th>
+      <th style="text-align:right;">Units</th>
+      <th style="text-align:right;">Amount</th>
+      <th style="text-align:right;">Price/Unit</th>
+      <th>Category</th>
+    </tr></thead>
+    <tbody>${sorted.map(tx=>`<tr>
+      <td style="white-space:nowrap;">${fmtDate(tx.txDate)}</td>
+      <td style="max-width:160px;font-size:11px;">${esc(tx.fundName)}</td>
+      <td style="font-size:11px;">${esc(tx.txType)}</td>
+      <td style="font-size:11px;">${esc(tx.txDetails)}</td>
+      <td style="text-align:right;font-family:monospace;color:${tx.units<0?"var(--red)":"var(--text)"};">${tx.units.toFixed(4)}</td>
+      <td style="text-align:right;font-family:monospace;color:${tx.amount<0?"var(--red)":"var(--text)"};">${$f(tx.amount)}</td>
+      <td style="text-align:right;font-family:monospace;">$${tx.price.toFixed(6)}</td>
+      <td><span class="tx-cat tx-${tx.category}">${tx.category}</span></td>
+    </tr>`).join("")}</tbody>
+  </table>`;
+}
+window.filterTx=(clientId,filter)=>{
+  const txs=clientTxs[clientId]||[];
+  const tableEl=document.getElementById(`txTable-${clientId}`);
+  if(tableEl)tableEl.innerHTML=buildTxTable(txs,filter);
+  document.querySelectorAll(`[id^="txf-${clientId}-"]`).forEach(btn=>{
+    btn.style.background="";btn.style.borderColor="";
+  });
+  const active=document.getElementById(`txf-${clientId}-${filter}`);
+  if(active){active.style.background="var(--gold-glow)";active.style.borderColor="var(--gold)";}
+};
+
+// ── Fund Prices ──
+function renderPrices(){
+  const allFunds=getAllFundNames();
+  let html=`<div class="sec-title">💹 Current Fund Prices</div>
+  <div style="font-size:12px;color:var(--dim);margin-bottom:16px;">
+    Update prices from <a href="https://www.income.com.sg/funds/historical-prices" target="_blank" style="color:var(--gold);">Income's historical prices page</a> (monthly end-of-month prices, publicly available).
+  </div>`;
+  html+=allFunds.map(f=>{
+    const p=fundPrices[f]||0;
+    const key=f.replace(/[\s()\/]/g,"_");
+    return`<div class="price-card">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">${esc(f)}</div>
+        <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:14px;">Not set</span>`}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="inp" id="pi-${key}" type="number" step="0.000001" placeholder="0.000000" value="${p||""}" style="width:140px;font-family:monospace;"/>
+        <button class="btn-sec" onclick="saveFundPrice('${esc(f)}','${key}')">Save</button>
+      </div>
+    </div>`;
+  }).join("");
+  return html;
+}
+window.saveFundPrice=async(name,key)=>{
+  const val=document.getElementById(`pi-${key}`)?.value;
+  if(!val||parseFloat(val)<=0){showToast("⚠️ Enter a valid price.");return;}
+  await saveFundPriceDB(name,val);
+  showToast(`✅ Price saved for ${name}`);
+};
+
+// ── File upload handlers ──
+window.handleDrop=async(e,clientId)=>{
+  e.preventDefault();
+  const zone=document.getElementById(`dropZone-${clientId}`);
+  if(zone)zone.classList.remove("drag-over");
+  const file=e.dataTransfer?.files?.[0];
+  if(file)await processUpload(file,clientId);
+};
+window.handleFileInput=async(e,clientId)=>{
+  const file=e.target.files?.[0];
+  if(file)await processUpload(file,clientId);
+};
+async function processUpload(file,clientId){
+  const statusEl=document.getElementById(`uploadStatus-${clientId}`);
+  if(statusEl){statusEl.className="upload-status";statusEl.textContent="⏳ Parsing file...";}
+  try{
+    if(!window.XLSX){throw new Error("Excel parser not loaded. Please refresh the page.");}
+    const txs=await parseExcelFile(file);
+    if(txs.length===0)throw new Error("No valid transactions found. Check the file format.");
+    await saveTransactions(clientId,txs);
+    clientTxs[clientId]=txs;
+    if(statusEl){statusEl.className="upload-status ok";statusEl.textContent=`✅ ${txs.length} transactions imported from ${file.name}`;}
+    showToast(`✅ ${txs.length} transactions uploaded!`);
+    // Refresh transactions listener
+    loadClientTxs(clientId);
+    renderPage();
+  }catch(err){
+    if(statusEl){statusEl.className="upload-status err";statusEl.textContent=`❌ ${err.message}`;}
+  }
+}
+async function loadClientTxs(clientId){
+  const q=query(collection(db,"transactions"),where("clientId","==",clientId),where("uid","==",user.uid));
+  const snap=await getDocs(q);
+  clientTxs[clientId]=[];
+  snap.forEach(d=>clientTxs[clientId].push(d.data()));
+  clientTxs[clientId].sort((a,b)=>b.txDate.localeCompare(a.txDate));
+}
+
+// ── Presentation Mode ──
+window.openPresent=async(clientId)=>{
+  const c=clients.find(x=>x.fid===clientId);
+  if(!c)return;
+  if(!clientTxs[clientId])await loadClientTxs(clientId);
+  const txs=clientTxs[clientId]||[];
+  const fundData=txs.length>0?calcPortfolio(txs):{};
+  const totals=txs.length>0?portfolioTotals(fundData):{};
+  const today=new Date().toLocaleDateString("en-SG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+  const hasPrices=Object.keys(fundPrices).length>0;
+  const strategy=getStrategy(c.product);
+
+  let html=`<div style="max-width:700px;margin:0 auto;padding-top:20px;">
+    <div class="present-name">${esc(c.name)}</div>
+    <div class="present-date">${productBadge(c.product)} ${stratBadge(c.product)} &nbsp;·&nbsp; ${today}</div>`;
+
+  if(!hasPrices||!txs.length){
+    html+=`<div style="text-align:center;color:var(--dim);padding:60px 20px;">No portfolio data available yet.</div>`;
+  }else{
+    html+=`<div style="text-align:center;margin-bottom:32px;">
+      <div style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Total Portfolio Value</div>
+      <div class="present-big">${$f(totals.totalValue)}</div>
+      <div style="font-size:16px;font-weight:700;margin-top:8px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)} true return (excluding startup bonus)</div>
+    </div>`;
+
+    html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px;">
+      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid var(--gold-border);">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">You Invested</div>
+        <div style="font-size:22px;font-weight:900;color:var(--muted);">${$f(totals.totalInvested)}</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid ${totals.trueGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">True Gain</div>
+        <div style="font-size:22px;font-weight:900;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$f(totals.trueGain)}</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid var(--gold-border);">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Startup Bonus</div>
+        <div style="font-size:22px;font-weight:900;color:var(--gold-l);">${$f(totals.bonusValue)}</div>
+      </div>
+    </div>`;
+
+    if(strategy==="dividend"&&totals.dividendPaid>0){
+      html+=`<div style="background:linear-gradient(135deg,#110a2a,#1a0f3a);border-radius:14px;padding:20px;text-align:center;border:1px solid rgba(139,92,246,0.3);margin-bottom:24px;">
+        <div style="font-size:12px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Total Dividends Received</div>
+        <div style="font-size:28px;font-weight:900;color:#d8b4fe;">${$f(totals.dividendPaid)}</div>
+      </div>`;
+    }
+
+    html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Fund Breakdown</div>`;
+    for(const[fname,fd]of Object.entries(fundData)){
+      html+=`<div style="background:var(--bg2);border-radius:14px;padding:18px;border:1px solid var(--gold-border);margin-bottom:10px;">
+        <div style="font-size:14px;font-weight:700;color:var(--gold-l);margin-bottom:12px;">${esc(fname)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;">
+          <div><div style="font-size:11px;color:var(--dim);">Premium Value</div><div style="font-size:16px;font-weight:800;">${$f(fd.netPremiumValue)}</div></div>
+          <div><div style="font-size:11px;color:var(--dim);">True Gain</div><div style="font-size:16px;font-weight:800;color:${fd.trueGain>=0?"var(--green)":"var(--red)"};">${$f(fd.trueGain)}</div></div>
+          <div><div style="font-size:11px;color:var(--dim);">Bonus Value</div><div style="font-size:16px;font-weight:800;color:var(--gold);">${$f(fd.bonusValue)}</div></div>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="prog-wrap"><div class="prog-bar ${fd.trueGain>=0?"green":"red"}" style="width:${Math.min(100,Math.max(0,Math.abs(fd.trueGainPct)))}%"></div></div>
+        </div>
+      </div>`;
+    }
+
+    html+=`<div style="text-align:center;padding:24px 0 8px;font-size:12px;color:var(--dim);font-style:italic;line-height:1.8;">
+      "True Gain" reflects only your actual investment performance — startup bonus units are tracked separately.<br>
+      <span style="color:var(--gold-d);">All values based on latest available fund prices.</span>
+    </div>`;
+  }
+
+  html+="</div>";
+  document.getElementById("presentContent").innerHTML=html;
+  document.getElementById("presentOverlay").classList.add("show");
+  document.body.style.overflow="hidden";
+};
+window.closePresent=()=>{
+  document.getElementById("presentOverlay").classList.remove("show");
+  document.body.style.overflow="";
+};
+
+// ── Charts ──
+function initCharts(clientId){
+  const txs=clientTxs[clientId]||[];
+  if(!txs.length)return;
+  const fundData=calcPortfolio(txs);
+  const names=Object.keys(fundData);
+  if(!names.length)return;
+  const shortName=n=>n.replace("Income ","").replace(" Fund","");
+
+  // Donut — fund allocation by total value
+  const dEl=document.getElementById(`donut-${clientId}`);
+  if(dEl){
+    destroyChart(`donut-${clientId}`);
+    charts[`donut-${clientId}`]=new Chart(dEl.getContext("2d"),{
+      type:"doughnut",
+      data:{
+        labels:names.map(shortName),
+        datasets:[{
+          data:names.map(n=>parseFloat(fundData[n].totalValue.toFixed(2))||0),
+          backgroundColor:CHART_COLORS_BG,
+          borderColor:"#07101e",borderWidth:3,hoverBorderWidth:4,hoverOffset:6
+        }]
+      },
+      options:{
+        responsive:true,cutout:"62%",
+        plugins:{
+          legend:{position:"bottom",labels:{color:"#94a3b8",font:{size:11},padding:14,boxWidth:12}},
+          tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${$f(ctx.parsed)}`}}
+        },
+        animation:{duration:900,easing:"easeInOutQuart"}
+      }
+    });
+  }
+
+  // Bar — invested vs current value (grouped)
+  const bEl=document.getElementById(`bar-${clientId}`);
+  if(bEl){
+    destroyChart(`bar-${clientId}`);
+    charts[`bar-${clientId}`]=new Chart(bEl.getContext("2d"),{
+      type:"bar",
+      data:{
+        labels:names.map(shortName),
+        datasets:[
+          {label:"Invested",data:names.map(n=>+fundData[n].totalInvested.toFixed(2)),backgroundColor:"rgba(71,85,105,0.8)",borderRadius:5,borderSkipped:false},
+          {label:"Value (excl. bonus)",data:names.map(n=>+fundData[n].netPremiumValue.toFixed(2)),backgroundColor:names.map(n=>fundData[n].trueGain>=0?"rgba(34,197,94,0.75)":"rgba(239,68,68,0.75)"),borderRadius:5,borderSkipped:false},
+          {label:"Bonus Value",data:names.map(n=>+fundData[n].bonusValue.toFixed(2)),backgroundColor:"rgba(245,158,11,0.55)",borderRadius:5,borderSkipped:false}
+        ]
+      },
+      options:{
+        responsive:true,
+        scales:{
+          x:{ticks:{color:"#64748b",font:{size:10}},grid:{color:"rgba(30,41,59,0.4)"}},
+          y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.4)"}}
+        },
+        plugins:{
+          legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:12}},
+          tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${$f(ctx.parsed.y)}`}}
+        },
+        animation:{duration:1000,easing:"easeInOutQuart"}
+      }
+    });
+  }
+
+  // Line — portfolio growth over time
+  const lEl=document.getElementById(`line-${clientId}`);
+  if(lEl){
+    const pts=calcTimeSeries(txs);
+    destroyChart(`line-${clientId}`);
+    if(pts.length>1){
+      charts[`line-${clientId}`]=new Chart(lEl.getContext("2d"),{
+        type:"line",
+        data:{
+          labels:pts.map(p=>fmtDate(p.date)),
+          datasets:[{
+            label:"Portfolio Value",
+            data:pts.map(p=>+p.value.toFixed(2)),
+            borderColor:"#f59e0b",
+            backgroundColor:"rgba(245,158,11,0.07)",
+            borderWidth:2.5,fill:true,tension:0.35,
+            pointBackgroundColor:"#f59e0b",pointRadius:3,pointHoverRadius:6,
+            pointBorderColor:"#07101e",pointBorderWidth:1
+          }]
+        },
+        options:{
+          responsive:true,
+          scales:{
+            x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:9},grid:{color:"rgba(30,41,59,0.3)"}},
+            y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.35)"}}
+          },
+          plugins:{
+            legend:{labels:{color:"#94a3b8",font:{size:11}}},
+            tooltip:{callbacks:{label:ctx=>` ${$f(ctx.parsed.y)}`}}
+          },
+          animation:{duration:1200,easing:"easeInOutQuart"}
+        }
+      });
+    }
+  }
+}
+
+// ── Navigation ──
+window.setTab=t=>{
+  tab=t;currentClientId=null;
+  document.getElementById("app").innerHTML="";
+  renderAll();window.scrollTo(0,0);
+};
+window.viewClient=async(id)=>{
+  currentClientId=id;tab="client";
+  if(!clientTxs[id])await loadClientTxs(id);
+  renderAll();window.scrollTo(0,0);
+};
+window.goBack=()=>{tab="dashboard";currentClientId=null;renderAll();window.scrollTo(0,0);};
+window.doDelClient=async(id)=>{
+  if(!confirm("Delete this client and ALL their transactions? This cannot be undone."))return;
+  await removeClient(id);
+  delete clientTxs[id];
+  showToast("🗑 Client deleted.");
+  tab="dashboard";currentClientId=null;renderAll();
+};
+
+function attachPageHandlers(){
+  if(tab==="addclient")renderAllocRows();
+}
+
+// ── Auth ──
+window.doSignIn=async()=>{
+  try{await signInWithPopup(auth,gProv);}
+  catch(e){if(e.code!=="auth/cancelled-by-user"&&e.code!=="auth/popup-closed-by-user")alert("Sign-in failed: "+e.message);}
+};
+window.doSignOut=async()=>{
+  if(confirm("Sign out?"))await signOut(auth);
+};
+onAuthStateChanged(auth,u=>{
+  user=u;
+  if(u){
+    document.getElementById("loginScreen").style.display="none";
+    document.getElementById("appShell").style.display="";
+    startListeners();
+  }else{
+    document.getElementById("loginScreen").style.display="";
+    document.getElementById("appShell").style.display="none";
+    unsubs.forEach(x=>x());unsubs=[];
+    clients=[];fundPrices={};clientTxs={};
+  }
+});
+</script>
+</body>
+</html>
