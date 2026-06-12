@@ -421,7 +421,7 @@ body{
 <div class="orb orb2"></div>
 
 <!-- Login -->
-<div id="loginScreen" class="login-wrap" style="display:none;">
+<div id="loginScreen" class="login-wrap">
   <div class="login-card">
     <span class="login-icon">💰</span>
     <h2>ILP Portfolio Tracker</h2>
@@ -454,9 +454,9 @@ body{
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import{initializeApp}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
-import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,setPersistence,browserLocalPersistence}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 
 // ══════════════════════════════════════
 // 🔧 FIREBASE CONFIG — Replace with your project config from console.firebase.google.com
