@@ -1,113 +1,72 @@
 // Vercel serverless function — fetches live Income ILP fund prices.
-// Primary: Income's internal /api/fund-prices/custom-range (discovered from JS bundle).
-// Fallback: Income historical-prices HTML page (end-of-month, always available).
+// Prices are embedded in each fund page's HTML as HTML-encoded JSON.
+// Falls back to the historical-prices page if individual pages fail.
 
-const FUND_SLUGS = [
-  "income-global-absolute-alpha-fund",
-  "income-global-artificial-intelligence",
-  "income-global-dynamic-bond-fund",
-  "income-global-emerging-markets-equity-fund",
-  "income-global-gold-equity-fund",
-  "income-global-growth-equity-fund",
-  "income-global-sustainable-fund",
-  "income-global-technology-fund",
-  "income-india-equity-fund",
-  "income-regional-china-fund",
-  "income-us-large-cap-equity-fund",
-  "income-world-healthscience-fund",
-  "money-market-fund",
-  "takaful-fund",
-];
-
-// Map slug → display name (matches what's stored in Firestore)
-const SLUG_TO_NAME = {
-  "income-global-absolute-alpha-fund":          "Income Global Absolute Alpha Fund",
-  "income-global-artificial-intelligence":      "Income Global Artificial Intelligence",
-  "income-global-dynamic-bond-fund":            "Income Global Dynamic Bond Fund",
-  "income-global-emerging-markets-equity-fund": "Income Global Emerging Markets Equity Fund",
-  "income-global-gold-equity-fund":             "Income Global Gold Equity Fund",
-  "income-global-growth-equity-fund":           "Income Global Growth Equity Fund",
-  "income-global-sustainable-fund":             "Income Global Sustainable Fund",
-  "income-global-technology-fund":              "Income Global Technology Fund",
-  "income-india-equity-fund":                   "Income India Equity Fund",
-  "income-regional-china-fund":                 "Income Regional China Fund",
-  "income-us-large-cap-equity-fund":            "Income US Large Cap Equity Fund",
-  "income-world-healthscience-fund":            "Income World Healthscience Fund",
-  "money-market-fund":                          "Money Market Fund",
-  "takaful-fund":                               "Takaful Fund",
+const FUND_SLUGS = {
+  "Income Global Absolute Alpha Fund":          "income-global-absolute-alpha-fund",
+  "Income Global Artificial Intelligence":      "income-global-artificial-intelligence",
+  "Income Global Dynamic Bond Fund":            "income-global-dynamic-bond-fund",
+  "Income Global Emerging Markets Equity Fund": "income-global-emerging-markets-equity-fund",
+  "Income Global Gold Equity Fund":             "income-global-gold-equity-fund",
+  "Income Global Growth Equity Fund":           "income-global-growth-equity-fund",
+  "Income Global Sustainable Fund":             "income-global-sustainable-fund",
+  "Income Global Technology Fund":              "income-global-technology-fund",
+  "Income India Equity Fund":                   "income-india-equity-fund",
+  "Income Regional China Fund":                 "income-regional-china-fund",
+  "Income US Large Cap Equity Fund":            "income-us-large-cap-equity-fund",
+  "Income World Healthscience Fund":            "income-world-healthscience-fund",
+  "Money Market Fund":                          "money-market-fund",
+  "Takaful Fund":                               "takaful-fund",
 };
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  "Accept": "application/json, text/html, */*",
+  "Accept": "text/html,application/xhtml+xml,*/*",
   "Accept-Language": "en-SG,en-GB;q=0.9,en;q=0.8",
-  "Referer": "https://www.income.com.sg/",
   "Cache-Control": "no-cache",
 };
 
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
-}
+// Extract the most recent bid price from a fund page HTML.
+// Pages embed price history as HTML-encoded JSON:
+//   {&quot;day&quot;:&quot;11/06/2026&quot;,&quot;bid_price&quot;:&quot;0.974000&quot;,...}
+function extractLatestBidPrice(html) {
+  // HTML-decode &quot; → "  so we can parse the JSON entries
+  const decoded = html.replace(/&quot;/g, '"');
 
-// Walk any JSON structure to find the first price-like number
-function findPrice(obj, depth = 0) {
-  if (depth > 10 || !obj || typeof obj !== "object") return null;
-  const PRICE_KEYS = ["latest_bid_price","bid_price","bidPrice","price","nav","navPrice","unitPrice","latestBidPrice"];
-  for (const k of PRICE_KEYS) {
-    if (k in obj) {
-      const v = typeof obj[k] === "number" ? obj[k] : parseFloat(obj[k]);
-      if (!isNaN(v) && v > 0.05 && v < 500) return v;
-    }
+  // Find all daily price entries: {"day":"DD/MM/YYYY","bid_price":"X.XXXXXX",...}
+  const entries = [];
+  const re = /"day"\s*:\s*"(\d{2}\/\d{2}\/\d{4})"\s*,\s*"bid_price"\s*:\s*"([0-9.]+)"/g;
+  let m;
+  while ((m = re.exec(decoded)) !== null) {
+    entries.push({ day: m[1], price: parseFloat(m[2]) });
   }
-  for (const v of Object.values(obj)) {
-    if (Array.isArray(v)) {
-      for (const item of v) { const r = findPrice(item, depth + 1); if (r) return r; }
-    } else if (v && typeof v === "object") {
-      const r = findPrice(v, depth + 1);
-      if (r) return r;
-    }
-  }
+
+  if (entries.length === 0) return null;
+
+  // Sort by date descending (DD/MM/YYYY → compare as YYYY-MM-DD)
+  entries.sort((a, b) => {
+    const toIso = d => d.split("/").reverse().join("-");
+    return toIso(b.day).localeCompare(toIso(a.day));
+  });
+
+  const latest = entries[0];
+  if (latest.price > 0.01 && latest.price < 500) return { price: latest.price, date: latest.day };
   return null;
 }
 
-// ── Strategy 1: Income live API ──────────────────────────────────────────────
-async function fetchLivePrice(slug) {
-  const today = isoDate(new Date());
-  // Use 30-day window to ensure we catch the most recent business day price
-  const monthAgo = isoDate(new Date(Date.now() - 30 * 86400000));
-
-  // Try multiple date formats in case the API is picky
-  const dateFormats = [
-    { start_date: monthAgo, end_date: today },
-    // DD/MM/YYYY format
-    {
-      start_date: monthAgo.split("-").reverse().join("/"),
-      end_date: today.split("-").reverse().join("/"),
-    },
-  ];
-
-  for (const dates of dateFormats) {
-    const params = new URLSearchParams({ fund_code: slug, ...dates });
-    const url = `https://www.income.com.sg/api/fund-prices/custom-range?${params}`;
-    try {
-      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
-      if (!r.ok) continue;
-      const data = await r.json();
-      // Response may be object or array
-      const price = Array.isArray(data)
-        ? (() => {
-            // Sort by date desc, take the latest entry
-            const sorted = [...data].sort((a, b) => String(b.date || b.as_of_date || "").localeCompare(String(a.date || a.as_of_date || "")));
-            return findPrice(sorted[0] || {});
-          })()
-        : findPrice(data);
-      if (price) return { price, source: "live", asOf: data.as_of_date || today };
-    } catch { /* try next format */ }
-  }
-  return null;
+// ── Strategy 1: individual fund pages (live data in HTML) ────────────────────
+async function fetchFundPagePrice(slug) {
+  try {
+    const r = await fetch(`https://www.income.com.sg/funds/${slug}`, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) return null;
+    return extractLatestBidPrice(await r.text());
+  } catch { return null; }
 }
 
-// ── Strategy 2: Income historical-prices HTML (fallback) ─────────────────────
+// ── Strategy 2: historical-prices page fallback ──────────────────────────────
 function normFund(s) {
   return s.trim().toLowerCase()
     .replace(/^income\s+/i, "")
@@ -118,7 +77,7 @@ function normFund(s) {
 async function fetchHistoricalAll() {
   try {
     const r = await fetch("https://www.income.com.sg/funds/historical-prices", {
-      headers: { ...HEADERS, Accept: "text/html" },
+      headers: HEADERS,
       signal: AbortSignal.timeout(18000),
     });
     if (!r.ok) return {};
@@ -146,30 +105,30 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  // Prices update once per business day — cache 4 h on CDN
+  // Cache 4 hours — prices update once per business day
   res.setHeader("Cache-Control", "s-maxage=14400, stale-while-revalidate=86400");
 
   const prices = {};
   const sourceMap = {};
+  const asOfMap = {};
 
-  // Step 1: Fetch all funds from live API in parallel
+  // Step 1: fetch all fund pages in parallel for live prices
   await Promise.allSettled(
-    FUND_SLUGS.map(async slug => {
-      const result = await fetchLivePrice(slug);
+    Object.entries(FUND_SLUGS).map(async ([name, slug]) => {
+      const result = await fetchFundPagePrice(slug);
       if (result) {
-        const name = SLUG_TO_NAME[slug];
         prices[name] = result.price;
-        sourceMap[name] = result.source;
+        sourceMap[name] = "live";
+        asOfMap[name] = result.date;
       }
     })
   );
 
-  // Step 2: Fill missing with historical page
-  const missing = FUND_SLUGS.filter(s => !prices[SLUG_TO_NAME[s]]);
+  // Step 2: fill any missing funds from the historical-prices page
+  const missing = Object.keys(FUND_SLUGS).filter(n => !prices[n]);
   if (missing.length > 0) {
     const hist = await fetchHistoricalAll();
-    for (const slug of missing) {
-      const name = SLUG_TO_NAME[slug];
+    for (const name of missing) {
       const p = hist[normFund(name)];
       if (p !== undefined) { prices[name] = p; sourceMap[name] = "historical"; }
     }
@@ -179,16 +138,16 @@ module.exports = async function handler(req, res) {
     return res.status(503).json({ error: "Could not fetch any fund prices. Try again later." });
   }
 
-  const liveSources = ["live"];
-  const hasLive = Object.values(sourceMap).some(s => liveSources.includes(s));
-  const hasHistorical = Object.values(sourceMap).some(s => s === "historical");
+  const hasLive = Object.values(sourceMap).some(s => s === "live");
+  const hasHist = Object.values(sourceMap).some(s => s === "historical");
 
   res.status(200).json({
     prices,
-    source: hasLive && !hasHistorical ? "live" : hasLive ? "mixed" : "historical",
+    source: hasLive && !hasHist ? "live" : hasLive ? "mixed" : "historical",
     sourceDetail: sourceMap,
+    asOf: asOfMap,
     fetchedAt: new Date().toISOString(),
     count: Object.keys(prices).length,
-    missing: FUND_SLUGS.filter(s => !prices[SLUG_TO_NAME[s]]).map(s => SLUG_TO_NAME[s]),
+    missing: Object.keys(FUND_SLUGS).filter(n => !prices[n]),
   });
 };
