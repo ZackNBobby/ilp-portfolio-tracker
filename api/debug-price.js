@@ -1,4 +1,4 @@
-// Debug: download Income's JS bundles and search for price API URLs
+// Debug: fetch the funds-details widget JS and extract the price API URL
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -10,69 +10,64 @@ const HEADERS = {
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  const slug = "income-global-dynamic-bond-fund";
+  const slug = req.query.slug || "income-global-dynamic-bond-fund";
 
-  // 1. Fetch the fund page HTML
+  // 1. Get the fund page to find the exact versioned URL of funds-details.js
   const pageR = await fetch(`https://www.income.com.sg/funds/${slug}`, {
     headers: HEADERS, signal: AbortSignal.timeout(12000),
   });
   const html = await pageR.text();
 
-  // 2. Extract all <script src="..."> URLs
-  const scriptSrcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
-    .map(m => m[1])
-    .filter(s => s.includes(".js"))
-    .map(s => s.startsWith("http") ? s : `https://www.income.com.sg${s}`);
+  const allScripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  const fundsDetailsSrc = allScripts.find(s => s.includes("funds-details"));
+  const fundsPriceSrc = allScripts.find(s => s.includes("fund-price") || s.includes("fundprice"));
 
-  // 3. Also check for inline data or config objects
-  const inlineScripts = [...html.matchAll(/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/gi)]
-    .map(m => m[1].trim())
-    .filter(s => s.length > 20);
+  const results = { allScripts, fundsDetailsSrc, fundsPriceSrc };
 
-  // Look for API endpoint hints in inline scripts
-  const inlineApiHints = [];
-  for (const script of inlineScripts) {
-    const urls = [...script.matchAll(/["'`](https?:\/\/[^"'`\s]{5,100})["'`]/g)].map(m => m[1]);
-    const paths = [...script.matchAll(/["'`](\/[a-zA-Z0-9/_-]{4,60})["'`]/g)].map(m => m[1]);
-    if (urls.length || paths.length) inlineApiHints.push({ snippet: script.slice(0, 200), urls, paths });
-  }
-
-  // 4. Search a sample of JS bundles for price/nav/bid API patterns
-  const bundleFindings = [];
-  const PRICE_PATTERNS = [
-    /["'`](https?:\/\/[^"'`\s]*(?:price|nav|bid|fund)[^"'`\s]{0,60})["'`]/gi,
-    /["'`](\/(?:api|v\d)\/[^"'`\s]*(?:price|nav|bid|fund)[^"'`\s]{0,60})["'`]/gi,
-    /(?:endpoint|baseUrl|apiUrl|host)\s*[:=]\s*["'`]([^"'`\s]{5,80})["'`]/gi,
-  ];
-
-  // Only check the first 5 bundles to stay within timeout
-  for (const src of scriptSrcs.slice(0, 5)) {
+  // 2. Fetch funds-details.js and extract anything URL-like
+  if (fundsDetailsSrc) {
     try {
-      const r = await fetch(src, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
-      if (!r.ok) continue;
+      const url = fundsDetailsSrc.startsWith("http") ? fundsDetailsSrc : `https://www.income.com.sg${fundsDetailsSrc}`;
+      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15000) });
       const js = await r.text();
-      const matches = [];
-      for (const pat of PRICE_PATTERNS) {
-        pat.lastIndex = 0;
-        let m;
-        while ((m = pat.exec(js)) !== null) {
-          matches.push(m[1]);
-          if (matches.length > 30) break;
+
+      // Extract all string literals that look like URLs or API paths
+      const httpUrls   = [...js.matchAll(/["'`](https?:\/\/[^"'`\s\\]{5,120})["'`]/g)].map(m => m[1]);
+      const apiPaths   = [...js.matchAll(/["'`](\/[a-zA-Z0-9._\-/]{5,80})["'`]/g)].map(m => m[1])
+                          .filter(p => /api|price|nav|bid|fund|data|json|endpoint/i.test(p));
+      const fetchCalls = [...js.matchAll(/fetch\s*\(\s*[^,)]{3,120}/g)].map(m => m[0].slice(0, 120));
+      const ajaxCalls  = [...js.matchAll(/(?:ajax|get|post)\s*\(\s*[^,)]{3,120}/g)].map(m => m[0].slice(0, 120));
+      const xhrOpen    = [...js.matchAll(/\.open\s*\([^)]{5,120}\)/g)].map(m => m[0]);
+
+      results.fundsDetailsJs = {
+        size: js.length,
+        httpUrls: [...new Set(httpUrls)].slice(0, 40),
+        apiPaths: [...new Set(apiPaths)].slice(0, 40),
+        fetchCalls: [...new Set(fetchCalls)].slice(0, 20),
+        ajaxCalls: [...new Set(ajaxCalls)].slice(0, 20),
+        xhrOpen: [...new Set(xhrOpen)].slice(0, 20),
+        // Also grab a snippet around "price" or "nav" or "bid" keywords
+        priceContext: [],
+      };
+
+      // Find context around price/nav/bid mentions
+      for (const kw of ["price", "bidNav", "navPrice", "unitPrice", "bid_nav"]) {
+        let idx = js.toLowerCase().indexOf(kw.toLowerCase());
+        while (idx !== -1 && results.fundsDetailsJs.priceContext.length < 20) {
+          results.fundsDetailsJs.priceContext.push(js.slice(Math.max(0, idx - 80), idx + 120));
+          idx = js.toLowerCase().indexOf(kw.toLowerCase(), idx + 1);
         }
       }
-      if (matches.length > 0) {
-        bundleFindings.push({ src, matches: [...new Set(matches)].slice(0, 30) });
-      }
     } catch (e) {
-      bundleFindings.push({ src, error: e.message });
+      results.fundsDetailsError = e.message;
     }
   }
 
-  res.status(200).json({
-    pageStatus: pageR.status,
-    scriptSrcs,
-    inlineApiHints,
-    bundleFindings,
-    totalScripts: scriptSrcs.length,
-  });
+  // 3. Also check the funds-list widget in case it has price data
+  const fundsListSrc = allScripts.find(s => s.includes("funds-details") || s.includes("fund-list") || s.includes("funds-list"));
+  if (fundsListSrc && fundsListSrc !== fundsDetailsSrc) {
+    results.fundsListSrc = fundsListSrc;
+  }
+
+  res.status(200).json(results);
 };
