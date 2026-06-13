@@ -790,6 +790,11 @@ function startListeners(){
     clients=[];snap.forEach(d=>clients.push({...d.data(),fid:d.id}));
     clients.sort((a,b)=>a.name.localeCompare(b.name));
     renderAll();
+    // Load transactions for any client not yet cached so dashboard values are visible immediately
+    const toLoad=clients.filter(c=>!clientTxs[c.fid]);
+    if(toLoad.length>0){
+      Promise.all(toLoad.map(c=>loadClientTxs(c.fid))).then(()=>renderAll());
+    }
   },err=>console.error("clients listener error:",err)));
   unsubs.push(onSnapshot(collection(db,"fundPrices"),snap=>{
     fundPrices={};snap.forEach(d=>{const fd=d.data();fundPrices[fd.name]=fd.price;});
@@ -801,8 +806,9 @@ function startListeners(){
 function renderAll(){renderTabs();renderPage();}
 function renderTabs(){
   const TABS=[["dashboard","🏠 Clients"],["prices","💹 Fund Prices"],["addclient","+ Add Client"]];
+  const activeTab=tab==="client"?"dashboard":tab;
   document.getElementById("tabBar").innerHTML=
-    TABS.map(([k,v])=>`<button class="tab-btn${tab===k?" active":""}" onclick="setTab('${k}')">${v}</button>`).join("");
+    TABS.map(([k,v])=>`<button class="tab-btn${activeTab===k?" active":""}" onclick="setTab('${k}')">${v}</button>`).join("");
 }
 function renderPage(){
   const el=document.getElementById("app");
