@@ -595,6 +595,24 @@ function getAllFundNames(){
 }
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
+// Crosshair plugin — draws a vertical dashed line that follows the cursor on line charts
+const xhairPlugin={
+  id:'xhair',
+  afterDraw(chart){
+    if(chart._xhX===undefined)return;
+    const{ctx,chartArea:{top,bottom}}=chart;
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(chart._xhX,top);ctx.lineTo(chart._xhX,bottom);ctx.stroke();
+    ctx.restore();
+  },
+  afterEvent(chart,args){
+    const e=args.event;
+    if(e.type==='mousemove'){chart._xhX=e.x;chart.draw();}
+    else if(e.type==='mouseout'){delete chart._xhX;chart.draw();}
+  }
+};
+
 // ── Utils ──
 const $f=n=>"$"+Number(n||0).toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2});
 const $u=n=>Number(n||0).toLocaleString("en-SG",{minimumFractionDigits:4,maximumFractionDigits:6});
@@ -1768,12 +1786,13 @@ function initCharts(clientId){
             borderColor:"#f59e0b",
             backgroundColor:"rgba(245,158,11,0.07)",
             borderWidth:2.5,fill:true,tension:0.35,
-            pointBackgroundColor:"#f59e0b",pointRadius:3,pointHoverRadius:6,
+            pointBackgroundColor:"#f59e0b",pointRadius:3,pointHoverRadius:7,
             pointBorderColor:"#07101e",pointBorderWidth:1
           }]
         },
         options:{
           responsive:true,
+          interaction:{mode:'nearest',axis:'x',intersect:false},
           scales:{
             x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:9},grid:{color:"rgba(30,41,59,0.3)"}},
             y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.35)"}}
@@ -1783,7 +1802,8 @@ function initCharts(clientId){
             tooltip:{callbacks:{label:ctx=>` ${$f(ctx.parsed.y)}`}}
           },
           animation:{duration:1200,easing:"easeInOutQuart"}
-        }
+        },
+        plugins:[xhairPlugin]
       });
     }
   }
@@ -2433,15 +2453,24 @@ function _drawChart(canvas,chartData,period,fmt){
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
   _fdmChart=new Chart(canvas,{
     type:"line",
-    data:{labels,datasets:[{data:prices,borderColor:col,backgroundColor:colBg,borderWidth:2,fill:true,pointRadius:data.length>120?0:3,tension:0.3}]},
+    data:{labels,datasets:[{data:prices,borderColor:col,backgroundColor:colBg,borderWidth:2,fill:true,
+      pointRadius:data.length>120?0:3,pointHoverRadius:7,tension:0.3}]},
     options:{
       responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`$${c.raw.toFixed(6)}`}}},
+      interaction:{mode:'nearest',axis:'x',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title:items=>items[0]?.label||"",
+          label:c=>`Bid: $${c.raw.toFixed(6)}`
+        }}
+      },
       scales:{
         x:{ticks:{maxTicksLimit:7,color:"#6b7280",maxRotation:0},grid:{color:"rgba(255,255,255,0.04)"}},
         y:{ticks:{color:"#6b7280",callback:v=>"$"+v.toFixed(4)},grid:{color:"rgba(255,255,255,0.04)"}}
       }
-    }
+    },
+    plugins:[xhairPlugin]
   });
 }
 
