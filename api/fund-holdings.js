@@ -6,19 +6,18 @@ const UNIVERSE = "FOSGP%24%24ALL";
 
 // Mirrors fund-morningstar.js — update both when adding new SecIds
 const FUND_SECIDS = {
-  "Income Global Absolute Alpha Fund":  "F000016EDC",
-  "Income Global Dynamic Bond Fund":    "F00000IRSW",
-  "Income Global Gold Equity Fund":     "F0GBR04AR8",
-  "Income World Healthscience Fund":    "F0GBR04K8L",
-  "Income India Equity Fund":           "F00000JTUS",
-  // Confirmed once user provides factsheets:
-  // "Income Global Artificial Intelligence": "F00000ZVQS",
-  // "Income Global Technology Fund":          "F000010EYV",
-  // "Income Global Emerging Markets Equity Fund": "...",
-  // "Income Global Growth Equity Fund":       "...",
-  // "Income Global Sustainable Fund":         "...",
-  // "Income Regional China Fund":             "...",
-  // "Income US Large Cap Equity Fund":        "...",
+  "Income Global Absolute Alpha Fund":       "F000016EDC",
+  "Income Global Dynamic Bond Fund":         "F00000IRSW",
+  "Income Global Gold Equity Fund":          "F0GBR04AR8",
+  "Income World Healthscience Fund":         "F0GBR04K8L",
+  "Income India Equity Fund":                "F00000JTUS",
+  "Income Global Artificial Intelligence":   "F00000ZVQS",  // Allianz Global AI AT (H2-SGD) Acc
+  "Income Global Emerging Markets Equity Fund": "F00000PN6R", // JPM EM Dividend A mth SGD Hdg
+  "Income Global Growth Equity Fund":        "F00001QUO9",  // Manulife Fundsmith A-SGD Acc (proxy for Fundsmith SICAV R Class)
+  "Income Regional China Fund":              "F0HKG062N3",  // FSSA Regional China A Acc SGD
+  "Income US Large Cap Equity Fund":         "F00001QUO7",  // Schroder ISF US Large Cap A Acc SGD
+  // "Income Global Sustainable Fund" — JPMorgan Global Income ESG not found in FOSGP$$ALL universe
+  // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund, no underlying UCITS
 };
 
 const SCREENER_POINTS = [

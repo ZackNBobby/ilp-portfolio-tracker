@@ -34,6 +34,33 @@ const FUND_MAP = {
     searchTerm: "Franklin India acc SGD",
     note: "Franklin India Fund A(acc) SGD",
   },
+  "Income Global Artificial Intelligence": {
+    secId: "F00000ZVQS",
+    searchTerm: "Allianz Global Artificial Intelligence AT SGD",
+    note: "Allianz Global Artificial Intelligence – Class AT (H2-SGD) Acc",
+  },
+  "Income Global Emerging Markets Equity Fund": {
+    secId: "F00000PN6R",
+    searchTerm: "JPM Emerging Markets Div A mth SGD Hdg",
+    note: "JPMorgan Funds – Emerging Markets Dividend Fund A (mth) – SGD (Hedged)",
+  },
+  "Income Global Growth Equity Fund": {
+    secId: "F00001QUO9",
+    searchTerm: "Manulife Fundsmith Equity A-SGD Acc",
+    note: "Fundsmith SICAV Fundsmith Equity Fund R Class Acc (proxy via Manulife Fundsmith SGD wrapper)",
+  },
+  "Income Regional China Fund": {
+    secId: "F0HKG062N3",
+    searchTerm: "FSSA Regional China A Acc",
+    note: "FSSA Regional China Fund – Class A (Acc) SGD",
+  },
+  "Income US Large Cap Equity Fund": {
+    secId: "F00001QUO7",
+    searchTerm: "Schroder ISF US Large Cap A Acc SGD",
+    note: "Schroder International Selection Fund US Large Cap – SGD A Accumulation",
+  },
+  // "Income Global Sustainable Fund" — JPMorgan Investment Funds Global Income ESG not found in FOSGP$$ALL
+  // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund, no underlying UCITS to map
 };
 
 const DATA_POINTS = [
