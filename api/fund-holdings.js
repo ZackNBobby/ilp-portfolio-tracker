@@ -18,7 +18,9 @@ const FUND_SECIDS = {
   "Income Regional China Fund":                 { secId: "F0HKG062N3" },
   "Income US Large Cap Equity Fund":            { secId: "F00001QUO7" },
   "Income Global Sustainable Fund":             { secId: "F000016LX1", universe: "FOEUR%24%24ALL" },
+  "Income US Dividend and Growth Fund":         { secId: "F00000Q4B0" },
   // "Income Global Technology Fund" — Wellington direct ILP sub-fund; no underlying UCITS in any Morningstar universe
+  // "Income Singapore Dividend Equity Fund" — Amova fund not in any Morningstar universe; uses staticHoldings only
 };
 
 const SCREENER_POINTS = [

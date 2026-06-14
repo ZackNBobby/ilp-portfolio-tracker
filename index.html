@@ -570,6 +570,8 @@ const DEFAULT_FUNDS=[
   "Income Global Technology Fund",
   "Income India Equity Fund",
   "Income Regional China Fund",
+  "Income Singapore Dividend Equity Fund",
+  "Income US Dividend and Growth Fund",
   "Income US Large Cap Equity Fund",
   "Income World Healthscience Fund",
   "Money Market Fund",
@@ -1533,6 +1535,8 @@ const INCOME_SLUGS={
   "Income Global Technology Fund":"income-global-technology-fund",
   "Income India Equity Fund":"income-india-equity-fund",
   "Income Regional China Fund":"income-regional-china-fund",
+  "Income Singapore Dividend Equity Fund":"income-singapore-dividend-equity-fund",
+  "Income US Dividend and Growth Fund":"income-us-dividend-and-growth-fund",
   "Income US Large Cap Equity Fund":"income-us-large-cap-equity-fund",
   "Income World Healthscience Fund":"income-world-healthscience-fund",
   "Money Market Fund":"money-market-fund",
@@ -2105,6 +2109,79 @@ const FUND_DB={
       {year:2025,event:"Income Regional China Fund incepted (21 January 2025) — providing Singapore ILP investors access to FSSA's Greater China strategy"},
     ]
   },
+  "Income Singapore Dividend Equity Fund":{
+    subFund:"Amova Singapore Dividend Equity Fund SGD Class",
+    subAdvisor:"Amova Asset Management Asia Limited (Sumitomo Mitsui Trust Group)",
+    subAdvisorDesc:"Amova Asset Management Asia Limited is a Singapore-based fund manager backed by the Sumitomo Mitsui Trust Group — one of Japan's largest trust banking groups. Amova's flagship Singapore equity strategy has over 25 years of continuous operation since inception in August 1999, making it one of the longest-running Singapore-focused dividend equity funds available. The fund focuses on Singapore-listed companies with strong dividend track records and sustainable earnings, drawing on Sumitomo Mitsui Trust's deep Asian equity research capabilities. With SGD 2.95 billion in AUM as of April 2026 and a concentrated 49-stock portfolio, the fund provides conviction-driven exposure to Singapore's blue-chip dividend payers. Available under Invest Flex Vantage and TriVantage for dividend-focused income investors.",
+    assetClass:"Equity — Singapore",geography:"Singapore",currency:"SGD",riskLevel:5,
+    dividendFrequency:"Monthly distributions",
+    objective:"To achieve long-term capital appreciation and income through investment in Singapore-listed equities with strong dividend characteristics. The fund focuses on financially sound companies with sustainable dividend payouts across Singapore's key sectors.",
+    strategy:"Concentrated portfolio of approximately 49 Singapore-listed companies selected for dividend sustainability, earnings quality, and business fundamentals. Largest allocations to Singapore's major banks (DBS, OCBC, UOB), industrial conglomerates, and REITs. The fund benefits from Singapore's status as a dividend-friendly market — Singapore companies pay dividends from after-tax profits with no withholding tax for SGD investors. Sub-advised by Amova Asset Management Asia, backed by the Sumitomo Mitsui Trust Group with deep on-the-ground Singapore equity research.",
+    focus:["Singapore Equity","Dividend Income","Blue Chip"],
+    annualizedReturns:{asOf:"30/04/2026","1M":3.34,"3M":4.31,"6M":12.71,"1Y":31.42,"3Y":16.29,"5Y":10.27},
+    sellingPts:[
+      {ico:"🇸🇬",text:"Pure Singapore equity exposure: DBS, OCBC, UOB, ST Engineering, Keppel, Singtel — the backbone of Singapore's economy. With over 25 years of continuous operation since 1999, Amova's Singapore Dividend Equity strategy has navigated every major market cycle including the Asian Financial Crisis aftermath, the Global Financial Crisis, and COVID-19."},
+      {ico:"💰",text:"Dividend income engine: Singapore's major banks and blue-chip industrials are among Asia's most reliable dividend payers. Singapore companies pay dividends from after-tax profits with no additional withholding tax for local investors — making this fund exceptionally tax-efficient for Singapore policyholders."},
+      {ico:"📈",text:"Outstanding recent performance: 31.42% over 1 year and 16.29% p.a. over 3 years (as of April 2026), significantly outperforming the broader Singapore market. Backed by Sumitomo Mitsui Trust Group's deep research capabilities and Amova's long-standing relationships with Singapore's listed companies."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:1999,event:"Amova Singapore Dividend Equity Fund incepted (August 1999) — one of Singapore's earliest dedicated dividend equity funds"},
+      {year:2003,event:"Singapore economy recovers from SARS — DBS, OCBC, UOB begin decades of sustained dividend growth"},
+      {year:2008,event:"Global Financial Crisis — Singapore banks emerge stronger, setting foundation for long-term dividend compounding"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+      {year:2026,event:"Fund reaches SGD 2.95 billion in AUM (April 2026) — reflecting strong investor confidence in Singapore equity income strategy"},
+    ],
+    staticHoldings:{
+      asOf:"30/04/2026",source:"Amova Factsheet",
+      assetAlloc:{"Equity":93.0,"Cash and Derivatives":7.0},
+      sectorAlloc:{"Financials":26.1,"Industrials":20.8,"Real Estate":17.8,"Information Technology":5.3,"Consumer Staples":5.2,"Communication Services":4.7,"Others":13.0,"Cash and Derivatives":7.0},
+      geoAlloc:{"Singapore":84.7,"Hong Kong":4.4,"Others":3.7,"Philippines":0.2,"Cash and Derivatives":7.0},
+      holdings:[
+        {name:"DBS Group Holdings",pct:8.9},{name:"OCBC",pct:7.5},
+        {name:"United Overseas Bank",pct:5.5},{name:"ST Engineering",pct:4.7},
+        {name:"Keppel",pct:4.6},{name:"First Resources",pct:4.5},
+        {name:"Singtel",pct:4.4},{name:"SGX",pct:4.2},
+        {name:"Sembcorp Industries",pct:3.8},{name:"Genting Singapore",pct:3.2}
+      ]
+    },
+  },
+  "Income US Dividend and Growth Fund":{
+    subFund:"Allianz Income and Growth AMi3 (H2-SGD)",
+    subAdvisor:"Voya Investment Management LLC (sub-advisor) · Allianz Global Investors GmbH (management company)",
+    subAdvisorDesc:"Allianz Income and Growth is one of the world's most successful multi-asset income funds, with over USD 56 billion in total fund assets as of April 2026. Managed by Allianz Global Investors and sub-advised by Voya Investment Management LLC, the fund pioneered a unique three-asset-class approach: US equities, US high yield bonds, and US convertible securities — each contributing approximately one-third of the portfolio. This structure means the fund captures upside from equities, earns income from high yield bonds, and benefits from bond-like downside protection with equity-like upside through convertibles. The SGD-hedged AMi3 (H2-SGD) share class removes USD/SGD currency risk and distributes income monthly. Available under Invest Flex Vantage and TriVantage as a core income fund.",
+    assetClass:"Multi Asset — US Income",geography:"United States / Canada",currency:"SGD (Hedged)",riskLevel:3,
+    dividendFrequency:"Monthly distributions",
+    objective:"To seek high current income and capital appreciation by investing approximately equal proportions in US equity securities, US high yield bonds, and US convertible securities — providing a diversified stream of income and growth across multiple asset classes.",
+    strategy:"The fund's unique 'three-bucket' approach invests roughly one-third each in US equities (dividend and growth stocks), US high yield corporate bonds (income), and US convertible securities (bond-equity hybrid providing downside protection with upside participation). This means the fund earns income from two of three buckets while maintaining equity growth exposure. The SGD-hedged (H2) share class eliminates USD/SGD currency risk. Sub-advised by Voya Investment Management LLC, specialists in US fixed income and convertible securities. As of April 2026: Equity 31.71%, Convertible Securities 31.58%, High Yield Bonds 30.77%.",
+    focus:["Multi Asset","Income","SGD-Hedged","US Equity"],
+    annualizedReturns:{asOf:"30/04/2026","1M":6.95,"3M":1.67,"6M":2.53,"1Y":15.71,"3Y":10.07,"5Y":3.35},
+    sellingPts:[
+      {ico:"💼",text:"One of the world's largest multi-asset income funds: USD 56 billion in total fund assets (April 2026). Allianz Income and Growth has been paying monthly income distributions for over a decade — providing a reliable, diversified income stream from US equities, high yield bonds, and convertible securities simultaneously."},
+      {ico:"🛡️",text:"The 'three-bucket' structure provides natural diversification within a single fund: US equities deliver capital growth, high yield bonds deliver regular coupon income, and convertible securities offer bond-like downside protection with equity-like upside potential. Risk level 3/7 — relatively moderate for a fund with significant equity exposure."},
+      {ico:"🌐",text:"SGD-hedged (H2) share class removes USD/SGD exchange rate risk entirely. Combined with monthly distributions, this makes the fund ideal for Singapore policyholders seeking predictable SGD-denominated income — particularly suited for Invest Flex Vantage and TriVantage products."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:2011,event:"Allianz Income and Growth Fund launched (31 May 2011) — pioneering the three-bucket US multi-asset income approach"},
+      {year:2013,event:"SGD-hedged share class launched (1 July 2013) — making the fund accessible to Singapore investors without USD/SGD currency risk"},
+      {year:2020,event:"COVID-19 market recovery — Allianz Income and Growth's multi-asset structure cushioned the drawdown through high yield income while equities recovered"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+      {year:2026,event:"Fund surpasses USD 56 billion in total AUM (April 2026) — confirming its status as one of the world's largest income-focused multi-asset funds"},
+    ],
+    staticHoldings:{
+      asOf:"30/04/2026",source:"Allianz Factsheet",
+      assetAlloc:{"Equity":31.71,"Convertible Securities":31.58,"High Yield Bonds":30.77,"Cash":5.94},
+      sectorAlloc:{"Information Technology":25.19,"Industrials":11.56,"Communication Services":10.71,"Consumer Discretionary":10.52,"Financials":10.28,"Health care":7.12,"Energy":5.02,"Cash":4.65,"Utilities":4.24,"Materials":3.65,"Real Estate":3.25,"Consumer Staples":2.52,"Others":1.29},
+      holdings:[
+        {name:"NVIDIA Corp",pct:2.94},{name:"Apple",pct:2.23},
+        {name:"Alphabet Class A",pct:2.11},{name:"Western Digital Conv 3.0% 15 Nov 2028",pct:1.77},
+        {name:"Amazon.com",pct:1.51},{name:"Microsoft",pct:1.44},
+        {name:"Broadcom",pct:1.17},{name:"Welltower Conv 3.125% 15 Jul 2029",pct:0.86},
+        {name:"Wells Fargo 7.5% Perpetual",pct:0.82},{name:"Live Nation Conv 2.875% 15 Jan 2030",pct:0.78}
+      ]
+    },
+  },
   "Income US Large Cap Equity Fund":{
     subFund:"Schroder International Selection Fund US Large Cap – SGD A Accumulation",
     subAdvisor:"Schroder Investment Management (Europe) S.A. (German Branch)",
@@ -2559,7 +2636,8 @@ function renderHoldingsData(h,sourceLabel){
   out+=`<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">${sourceLabel}</div>`;
 
   // ── Asset Allocation ──
-  const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6","Stock":"#f59e0b"};
+  const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6","Stock":"#f59e0b",
+    "Convertible Securities":"#8b5cf6","High Yield Bonds":"#ef4444","Cash and Derivatives":"#10b981"};
   if(h.assetAlloc&&Object.keys(h.assetAlloc).length){
     out+=`<div class="fdm-sec-hd">🏦 Asset Allocation</div>`;
     const sorted=Object.entries(h.assetAlloc).sort((a,b)=>b[1]-a[1]);
@@ -2583,6 +2661,7 @@ function renderHoldingsData(h,sourceLabel){
     "Australia":"#10b981","Germany":"#8b5cf6","European Union":"#7c3aed",
     "Brazil":"#22c55e","South Africa":"#f59e0b","Mexico":"#ef4444",
     "Peru":"#06b6d4","Colombia":"#a855f7","Singapore":"#3b82f6",
+    "Hong Kong":"#ef4444","Philippines":"#f97316","Others":"#6b7280","Cash and Derivatives":"#10b981",
   };
   if(h.geoAlloc&&Object.keys(h.geoAlloc).length){
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🌍 Geographic Allocation</div>`;
@@ -2607,6 +2686,10 @@ function renderHoldingsData(h,sourceLabel){
     "Agency MBS":"#3b82f6","Government Related":"#22c55e","Investment Grade Credit":"#f59e0b",
     "Cash & Equivalents":"#10b981","High Yield Credit":"#ef4444","Emerging Markets":"#f97316",
     "CMBS":"#8b5cf6","ABS":"#06b6d4","Non-US RMBS":"#64748b","Non-Agency MBS":"#a855f7","Bank Loan":"#ec4899",
+    // Allianz / equity fund sector name aliases
+    "Information Technology":"#8b5cf6","Communication Services":"#06b6d4","Consumer Discretionary":"#f59e0b",
+    "Financials":"#3b82f6","Health care":"#10b981","Materials":"#f97316","Consumer Staples":"#22c55e",
+    "Cash":"#10b981","Others":"#6b7280","Cash and Derivatives":"#10b981",
   };
   if(h.sectorAlloc&&Object.keys(h.sectorAlloc).length){
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">📊 Sector Allocation</div>`;

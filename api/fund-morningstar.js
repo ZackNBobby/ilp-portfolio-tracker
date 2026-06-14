@@ -65,7 +65,13 @@ const FUND_MAP = {
     searchTerm: "JPM Global Income ESG A mth SGD Hdg",
     note: "JPMorgan Investment Funds – Global Income ESG Fund A (mth) – SGD (Hedged)",
   },
+  "Income US Dividend and Growth Fund": {
+    secId: "F00000Q4B0",
+    searchTerm: "Allianz Income and Growth AMi3 SGD",
+    note: "Allianz Income and Growth AMi3 (H2-SGD) – ISIN LU0943347566",
+  },
   // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund; no underlying UCITS; not in any Morningstar universe
+  // "Income Singapore Dividend Equity Fund" — Amova fund ISIN SG9999003826 is not indexed in any Morningstar universe
 };
 
 const DATA_POINTS = [
