@@ -433,8 +433,9 @@ body{
 .fdm-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .fdm-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:0.04em;}
 .fdm-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
-.fdm-tab{padding:10px 18px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 0.15s;}
+.fdm-tab{padding:10px 18px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 0.15s;position:relative;}
 .fdm-tab.active{color:var(--gold-l);border-bottom-color:var(--gold);}
+.fdm-tab.active::before{content:'';position:absolute;inset:-1px;padding:1.5px;background:conic-gradient(from var(--ba),var(--gold) 0deg,transparent 60deg,transparent 150deg,var(--gold-l) 180deg,transparent 240deg,transparent 330deg,var(--gold) 360deg);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;}
 .fdm-body{padding:18px 22px 22px;overflow-y:auto;flex:1;}
 .fdm-close{position:absolute;right:16px;top:16px;background:rgba(255,255,255,0.07);border:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px;padding:5px 10px;transition:all 0.15s;z-index:1;}
 .fdm-close:hover{background:rgba(255,255,255,0.14);color:#fff;}
@@ -1560,12 +1561,16 @@ window.doFetchPrices=async()=>{
   }
 };
 
-// Auto-fetch prices silently on startup if none are set yet
+// Auto-fetch prices once per day on page load (tracks date in localStorage per device)
 async function autoFetchPricesOnStartup(){
-  // Wait a moment for Firestore listeners to hydrate
+  // Wait for Firestore listeners to hydrate fund prices first
   await new Promise(r=>setTimeout(r,3000));
-  const anySet=DEFAULT_FUNDS.some(f=>fundPrices[f]>0);
-  if(!anySet)window.doFetchPrices().catch(()=>{});
+  const today=new Date().toISOString().split("T")[0];
+  const lastFetch=localStorage.getItem("lastAutoFetch");
+  if(lastFetch===today)return; // Already fetched today on this device
+  // Mark as fetched before starting (prevents double-fetch if user reloads mid-fetch)
+  localStorage.setItem("lastAutoFetch",today);
+  window.doFetchPrices().catch(()=>{});
 }
 
 // ── File upload handlers ──
@@ -2107,7 +2112,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmMStar=null,_fdmTab="overview",_fdmChart=null;
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2119,17 +2124,19 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmMStar=null;_fdmTab="overview";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
   ov.style.display="flex";
   renderFdmShell();
   renderFdmBody();
-  // Load stored Firestore price history (used for 3M/6M/1Y/3Y/5Y calculations)
+  // Load stored Firestore price history (builds over time as prices are fetched)
   loadFdmHistory(name);
-  // Also fetch live chart data from Income's website via Vercel
+  // Fetch live chart data from Income's website via Vercel
   fetchFdmData(name);
+  // Fetch Morningstar performance data (for funds with known SecId mapping)
+  fetchFdmMorningstar(name);
 };
 
 async function loadFdmHistory(name){
@@ -2168,7 +2175,7 @@ window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
-  _fdmFund=null;_fdmData=null;
+  _fdmFund=null;_fdmData=null;_fdmMStar=null;
 };
 
 function fetchFdmData(name){
@@ -2180,6 +2187,18 @@ function fetchFdmData(name){
       if(_fdmTab==="performance")renderFdmBody();
     })
     .catch(e=>{_fdmData={error:e.message};if(_fdmTab==="performance")renderFdmBody();});
+}
+
+function fetchFdmMorningstar(name){
+  fetch(`/api/fund-morningstar?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(20000)})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.noMapping&&!data.error){
+        _fdmMStar=data;
+        if(_fdmTab==="performance")renderFdmBody();
+      }
+    })
+    .catch(()=>{});
 }
 
 window.switchFdmTab=(tab)=>{
@@ -2264,14 +2283,19 @@ function renderFdmPerformance(){
   const info=FUND_DB[_fdmFund]||{};
   let h="";
 
-  // Determine best available performance source (priority: Firestore history → static factsheet data → Vercel API)
+  // Performance source priority: Morningstar → Firestore stored history → static factsheet → Vercel live API
   const storedPerf=calcPerfFromStored(_fdmHistory);
   const staticAR=info.annualizedReturns;
   const livePerf=_fdmData&&!_fdmData.error?_fdmData.performance:null;
+  const msPerf=_fdmMStar&&_fdmMStar.performance?_fdmMStar.performance:null;
 
-  // Use Firestore history if we have at least 2 entries; else static factsheet; else live API
   let perf=null,perfSource="";
-  if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
+  if(msPerf&&Object.values(msPerf).some(v=>v!==null)){
+    perf=msPerf;
+    const stars=_fdmMStar.starRating?`${"★".repeat(_fdmMStar.starRating)}${"☆".repeat(5-_fdmMStar.starRating)}`:"";
+    const aum=_fdmMStar.totalAssets?` · AUM SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M`:"";
+    perfSource=`⭐ Morningstar data for ${esc(_fdmMStar.morningstarName||"")}${aum}${stars?" · "+stars:""}`;
+  }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
     perf=storedPerf;
     perfSource=`📅 Calculated from ${_fdmHistory.length} stored price points (${_fdmHistory[_fdmHistory.length-1]?.date} – ${_fdmHistory[0]?.date})`;
   }else if(staticAR){
@@ -2286,9 +2310,21 @@ function renderFdmPerformance(){
   const latest=_fdmData&&!_fdmData.error?_fdmData.latest:null;
 
   // Performance grid
-  if(!perf&&_fdmHistory===null&&!_fdmData){
+  if(!perf&&_fdmHistory===null&&!_fdmData&&!_fdmMStar){
     h+=`<div class="fdm-loading">⏳ Loading performance data...</div>`;
     return h;
+  }
+
+  // Morningstar badge if data arrived
+  if(_fdmMStar&&_fdmMStar.starRating){
+    const stars="★".repeat(_fdmMStar.starRating)+"☆".repeat(5-_fdmMStar.starRating);
+    const aum=_fdmMStar.totalAssets?`<span style="color:#94a3b8;font-size:11px;margin-left:10px;">AUM: SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M</span>`:"";
+    h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 12px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;">
+      <span style="color:var(--gold);font-size:18px;letter-spacing:1px;">${stars}</span>
+      <span style="color:#e2e8f0;font-size:12px;font-weight:700;">Morningstar Rating</span>
+      ${aum}
+      ${_fdmMStar.categoryName?`<span style="color:#94a3b8;font-size:11px;margin-left:auto;">${esc(_fdmMStar.categoryName)}</span>`:""}
+    </div>`;
   }
 
   if(perf){

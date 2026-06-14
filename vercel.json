@@ -2,6 +2,7 @@
   "version": 2,
   "functions": {
     "api/fund-prices.js": { "maxDuration": 30 },
-    "api/fund-detail.js": { "maxDuration": 30 }
+    "api/fund-detail.js": { "maxDuration": 30 },
+    "api/fund-morningstar.js": { "maxDuration": 30 }
   }
 }
