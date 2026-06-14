@@ -5,19 +5,20 @@ const TOKEN = "klr5zyak8x";
 const UNIVERSE = "FOSGP%24%24ALL";
 
 // Mirrors fund-morningstar.js — update both when adding new SecIds
+// secId → { secId, universe? } — universe defaults to UNIVERSE if not set
 const FUND_SECIDS = {
-  "Income Global Absolute Alpha Fund":       "F000016EDC",
-  "Income Global Dynamic Bond Fund":         "F00000IRSW",
-  "Income Global Gold Equity Fund":          "F0GBR04AR8",
-  "Income World Healthscience Fund":         "F0GBR04K8L",
-  "Income India Equity Fund":                "F00000JTUS",
-  "Income Global Artificial Intelligence":   "F00000ZVQS",  // Allianz Global AI AT (H2-SGD) Acc
-  "Income Global Emerging Markets Equity Fund": "F00000PN6R", // JPM EM Dividend A mth SGD Hdg
-  "Income Global Growth Equity Fund":        "F00001QUO9",  // Manulife Fundsmith A-SGD Acc (proxy for Fundsmith SICAV R Class)
-  "Income Regional China Fund":              "F0HKG062N3",  // FSSA Regional China A Acc SGD
-  "Income US Large Cap Equity Fund":         "F00001QUO7",  // Schroder ISF US Large Cap A Acc SGD
-  // "Income Global Sustainable Fund" — JPMorgan Global Income ESG not found in FOSGP$$ALL universe
-  // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund, no underlying UCITS
+  "Income Global Absolute Alpha Fund":          { secId: "F000016EDC" },
+  "Income Global Dynamic Bond Fund":            { secId: "F00000IRSW" },
+  "Income Global Gold Equity Fund":             { secId: "F0GBR04AR8" },
+  "Income World Healthscience Fund":            { secId: "F0GBR04K8L" },
+  "Income India Equity Fund":                   { secId: "F00000JTUS" },
+  "Income Global Artificial Intelligence":      { secId: "F00000ZVQS" },
+  "Income Global Emerging Markets Equity Fund": { secId: "F00000PN6R" },
+  "Income Global Growth Equity Fund":           { secId: "F00001QUO9" },  // Manulife Fundsmith proxy
+  "Income Regional China Fund":                 { secId: "F0HKG062N3" },
+  "Income US Large Cap Equity Fund":            { secId: "F00001QUO7" },
+  "Income Global Sustainable Fund":             { secId: "F000016LX1", universe: "FOEUR%24%24ALL" },
+  // "Income Global Technology Fund" — Wellington direct ILP sub-fund; no underlying UCITS in any Morningstar universe
 };
 
 const SCREENER_POINTS = [
@@ -52,19 +53,21 @@ module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=172800");
 
   const name = (req.query.name || "").trim();
-  const secId = FUND_SECIDS[name];
+  const mapping = FUND_SECIDS[name];
 
-  if (!secId) {
+  if (!mapping) {
     return res.status(200).json({ noMapping: true, name,
       message: "Sub-fund not yet mapped. Add SecId in api/fund-holdings.js." });
   }
+
+  const { secId, universe } = mapping;
 
   try {
     // — Screener call: allocation data points —
     const screenerUrl = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
       + `?outputType=json&languageId=en-SG`
       + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
-      + `&universeIds=${UNIVERSE}`
+      + `&universeIds=${universe || UNIVERSE}`
       + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`;
 
     const sr = await fetch(screenerUrl, { headers: HEADERS, signal: AbortSignal.timeout(12000) });

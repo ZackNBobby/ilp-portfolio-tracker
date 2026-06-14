@@ -59,8 +59,13 @@ const FUND_MAP = {
     searchTerm: "Schroder ISF US Large Cap A Acc SGD",
     note: "Schroder International Selection Fund US Large Cap – SGD A Accumulation",
   },
-  // "Income Global Sustainable Fund" — JPMorgan Investment Funds Global Income ESG not found in FOSGP$$ALL
-  // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund, no underlying UCITS to map
+  "Income Global Sustainable Fund": {
+    secId: "F000016LX1",
+    universe: "FOEUR%24%24ALL",  // Luxembourg SICAV — not in FOSGP$$ALL, found in European universe
+    searchTerm: "JPM Global Income ESG A mth SGD Hdg",
+    note: "JPMorgan Investment Funds – Global Income ESG Fund A (mth) – SGD (Hedged)",
+  },
+  // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund; no underlying UCITS; not in any Morningstar universe
 };
 
 const DATA_POINTS = [
@@ -104,12 +109,12 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const { secId, searchTerm, note } = mapping;
+  const { secId, searchTerm, note, universe } = mapping;
   const baseParams = {
     outputType: "json",
     languageId: "en-SG",
     securityDataPoints: encodeURIComponent(DATA_POINTS),
-    universeIds: UNIVERSE,
+    universeIds: universe || UNIVERSE,
   };
 
   try {
