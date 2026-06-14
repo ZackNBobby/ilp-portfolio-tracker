@@ -22,8 +22,9 @@ const FUND_SECIDS = {
 
 const SCREENER_POINTS = [
   "SecId","Name","PortfolioDate",
-  // Asset allocation
+  // Asset allocation — try both common Morningstar field name variants
   "AssetAllocCash","AssetAllocBond","AssetAllocStock","AssetAllocOther",
+  "AssetAllocEquity","AssetAllocBondLong","AssetAllocCashLong",
   // Sector weights
   "SectorBasicMaterials","SectorCommunicationServices","SectorConsumerCyclical",
   "SectorConsumerDefensive","SectorEnergy","SectorFinancialServices",
@@ -100,9 +101,9 @@ module.exports = async function handler(req, res) {
       morningstarName: row.Name || null,
       portfolioDate: row.PortfolioDate || null,
       assetAlloc: nonNull({
-        "Equity":  pct(row.AssetAllocStock),
-        "Bonds":   pct(row.AssetAllocBond),
-        "Cash":    pct(row.AssetAllocCash),
+        "Equity":  pct(row.AssetAllocStock ?? row.AssetAllocEquity),
+        "Bonds":   pct(row.AssetAllocBond  ?? row.AssetAllocBondLong),
+        "Cash":    pct(row.AssetAllocCash  ?? row.AssetAllocCashLong),
         "Other":   pct(row.AssetAllocOther),
       }),
       sectorAlloc: nonNull({
