@@ -437,6 +437,17 @@ body{
 .fdm-tab.active{color:var(--gold-l);border-bottom-color:var(--gold);}
 .fdm-tab.active::before{content:'';position:absolute;inset:-1px;padding:1.5px;background:conic-gradient(from var(--ba),var(--gold) 0deg,transparent 60deg,transparent 150deg,var(--gold-l) 180deg,transparent 240deg,transparent 330deg,var(--gold) 360deg);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;}
 .fdm-body{padding:18px 22px 22px;overflow-y:auto;flex:1;}
+.fdm-alloc-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.fdm-alloc-label{font-size:12px;color:#cbd5e1;width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fdm-alloc-bar-bg{flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;}
+.fdm-alloc-bar{height:100%;border-radius:4px;transition:width 0.6s cubic-bezier(.4,0,.2,1);}
+.fdm-alloc-pct{font-size:12px;font-weight:700;color:#f1f5f9;width:44px;text-align:right;flex-shrink:0;}
+.fdm-hold-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.fdm-hold-rank{font-size:10px;color:var(--dim);width:18px;text-align:center;flex-shrink:0;}
+.fdm-hold-name{flex:1;font-size:12px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fdm-hold-pct{font-size:12px;font-weight:700;color:var(--gold);width:44px;text-align:right;flex-shrink:0;}
+.fdm-hold-bar-bg{width:80px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;flex-shrink:0;}
+.fdm-hold-bar{height:100%;border-radius:3px;background:var(--gold);}
 .fdm-close{position:absolute;right:16px;top:16px;background:rgba(255,255,255,0.07);border:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px;padding:5px 10px;transition:all 0.15s;z-index:1;}
 .fdm-close:hover{background:rgba(255,255,255,0.14);color:#fff;}
 .fdm-sec-hd{font-size:10px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin:18px 0 10px;}
@@ -2132,7 +2143,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmMStar=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null;
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2144,7 +2155,7 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmMStar=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
@@ -2157,6 +2168,8 @@ window.openFundDetail=(name)=>{
   fetchFdmData(name);
   // Fetch Morningstar performance data (for funds with known SecId mapping)
   fetchFdmMorningstar(name);
+  // Fetch Morningstar holdings / allocation data
+  fetchFdmHoldings(name);
 };
 
 async function loadFdmHistory(name){
@@ -2195,7 +2208,7 @@ window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
-  _fdmFund=null;_fdmData=null;_fdmMStar=null;
+  _fdmFund=null;_fdmData=null;_fdmMStar=null;_fdmHoldings=null;
 };
 
 function fetchFdmData(name){
@@ -2216,6 +2229,18 @@ function fetchFdmMorningstar(name){
       if(!data.noMapping&&!data.error){
         _fdmMStar=data;
         if(_fdmTab==="performance")renderFdmBody();
+      }
+    })
+    .catch(()=>{});
+}
+
+function fetchFdmHoldings(name){
+  fetch(`/api/fund-holdings?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(20000)})
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.noMapping){
+        _fdmHoldings=data.error?null:data;
+        if(_fdmTab==="holdings")renderFdmBody();
       }
     })
     .catch(()=>{});
@@ -2247,7 +2272,7 @@ function renderFdmShell(){
        <span class="fdm-badge" style="background:rgba(100,116,139,0.15);color:#cbd5e1;">${info.currency||"—"}</span>
        <span class="fdm-badge" style="background:rgba(239,68,68,0.1);color:#fca5a5;">Risk ${info.riskLevel||"—"}/7 · ${RISK_LABEL[info.riskLevel]||"—"}</span>
      </div>`;
-  const TABS=[["overview","📋 Overview"],["performance","📈 Performance"],["history","📅 History"]];
+  const TABS=[["overview","📋 Overview"],["performance","📈 Performance"],["holdings","💼 Holdings"],["history","📅 History"]];
   document.getElementById("fdmTabs").innerHTML=
     TABS.map(([k,v])=>`<button class="fdm-tab${_fdmTab===k?" active":""}" onclick="switchFdmTab('${k}')">${v}</button>`).join("");
 }
@@ -2257,6 +2282,7 @@ function renderFdmBody(){
   if(!el)return;
   if(_fdmTab==="overview")el.innerHTML=renderFdmOverview();
   else if(_fdmTab==="performance")el.innerHTML=renderFdmPerformance();
+  else if(_fdmTab==="holdings")el.innerHTML=renderFdmHoldings();
   else el.innerHTML=renderFdmHistory();
   if(_fdmTab==="performance"){
     const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
@@ -2408,6 +2434,100 @@ function renderFdmPerformance(){
   }
 
   return h;
+}
+
+function renderFdmHoldings(){
+  if(!_fdmHoldings){
+    const info=FUND_DB[_fdmFund]||{};
+    // Check if this fund has a Morningstar mapping at all
+    const MAPPED=["Income Global Absolute Alpha Fund","Income Global Dynamic Bond Fund","Income Global Gold Equity Fund","Income World Healthscience Fund","Income India Equity Fund"];
+    if(!MAPPED.includes(_fdmFund)){
+      return`<div style="text-align:center;padding:30px 20px;">
+        <div style="font-size:32px;margin-bottom:12px;">💼</div>
+        <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Not Yet Available</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">Sub-fund details for this fund are being confirmed.<br>Once the sub-advisor is verified, holdings data will be added.</div>
+      </div>`;
+    }
+    return`<div class="fdm-loading">⏳ Loading holdings from Morningstar...</div>`;
+  }
+
+  const h=_fdmHoldings;
+  let out="";
+
+  // Portfolio date note
+  if(h.portfolioDate){
+    out+=`<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">📅 Portfolio data as of ${h.portfolioDate} · Source: Morningstar</div>`;
+  }
+
+  // ── Asset Allocation ──
+  const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6"};
+  if(h.assetAlloc&&Object.keys(h.assetAlloc).length){
+    out+=`<div class="fdm-sec-hd">🏦 Asset Allocation</div>`;
+    const sorted=Object.entries(h.assetAlloc).sort((a,b)=>b[1]-a[1]);
+    const max=sorted[0]?.[1]||100;
+    sorted.forEach(([label,val])=>{
+      const col=assetColors[label]||"#6b7280";
+      out+=`<div class="fdm-alloc-row">
+        <div class="fdm-alloc-label">${esc(label)}</div>
+        <div class="fdm-alloc-bar-bg"><div class="fdm-alloc-bar" style="width:${(val/max*100).toFixed(1)}%;background:${col};"></div></div>
+        <div class="fdm-alloc-pct">${val.toFixed(1)}%</div>
+      </div>`;
+    });
+  }
+
+  // ── Geographic Allocation ──
+  const geoColors={"Americas":"#3b82f6","Greater Asia":"#f59e0b","Greater Europe":"#8b5cf6","Middle East/Africa":"#10b981"};
+  if(h.geoAlloc&&Object.keys(h.geoAlloc).length){
+    out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🌍 Geographic Allocation</div>`;
+    const sorted=Object.entries(h.geoAlloc).sort((a,b)=>b[1]-a[1]);
+    const max=sorted[0]?.[1]||100;
+    sorted.forEach(([label,val])=>{
+      const col=geoColors[label]||"#6b7280";
+      out+=`<div class="fdm-alloc-row">
+        <div class="fdm-alloc-label">${esc(label)}</div>
+        <div class="fdm-alloc-bar-bg"><div class="fdm-alloc-bar" style="width:${(val/max*100).toFixed(1)}%;background:${col};"></div></div>
+        <div class="fdm-alloc-pct">${val.toFixed(1)}%</div>
+      </div>`;
+    });
+  }
+
+  // ── Sector Allocation ──
+  const sectorColors={"Technology":"#8b5cf6","Healthcare":"#10b981","Financial Services":"#3b82f6","Consumer Cyclical":"#f59e0b","Communication":"#06b6d4","Industrials":"#64748b","Consumer Defensive":"#22c55e","Energy":"#ef4444","Basic Materials":"#f97316","Real Estate":"#ec4899","Utilities":"#6366f1"};
+  if(h.sectorAlloc&&Object.keys(h.sectorAlloc).length){
+    out+=`<div class="fdm-sec-hd" style="margin-top:16px;">📊 Sector Allocation</div>`;
+    const sorted=Object.entries(h.sectorAlloc).sort((a,b)=>b[1]-a[1]);
+    const max=sorted[0]?.[1]||100;
+    sorted.forEach(([label,val])=>{
+      const col=sectorColors[label]||"#6b7280";
+      out+=`<div class="fdm-alloc-row">
+        <div class="fdm-alloc-label">${esc(label)}</div>
+        <div class="fdm-alloc-bar-bg"><div class="fdm-alloc-bar" style="width:${(val/max*100).toFixed(1)}%;background:${col};"></div></div>
+        <div class="fdm-alloc-pct">${val.toFixed(1)}%</div>
+      </div>`;
+    });
+  }
+
+  // ── Top Holdings ──
+  if(h.holdings&&h.holdings.length){
+    const maxPct=h.holdings[0].pct;
+    out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🏆 Top ${h.holdings.length} Holdings</div>`;
+    h.holdings.forEach((hld,i)=>{
+      out+=`<div class="fdm-hold-row">
+        <div class="fdm-hold-rank">${i+1}</div>
+        <div class="fdm-hold-name" title="${esc(hld.name)}">${esc(hld.name)}</div>
+        <div class="fdm-hold-bar-bg"><div class="fdm-hold-bar" style="width:${(hld.pct/maxPct*100).toFixed(1)}%;"></div></div>
+        <div class="fdm-hold-pct">${hld.pct.toFixed(2)}%</div>
+      </div>`;
+    });
+  } else if(!h.assetAlloc||!Object.keys(h.assetAlloc).length){
+    out+=`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No holdings data returned from Morningstar.<br>Check the latest fund factsheet for current holdings.</div>`;
+  } else {
+    out+=`<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:#94a3b8;line-height:1.6;">
+      ℹ️ Individual stock/bond holdings are not available via Morningstar screener API. Asset and sector allocation above are sourced from Morningstar. For individual holdings, refer to the latest fund factsheet.
+    </div>`;
+  }
+
+  return out;
 }
 
 function renderFdmHistory(){
