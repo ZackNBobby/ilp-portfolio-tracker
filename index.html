@@ -329,10 +329,12 @@ body{
 .price-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
 @media(max-width:600px){.price-grid{grid-template-columns:1fr;}}
 .price-card{
-  background:var(--bg3);border-radius:10px;padding:10px 14px;
+  background:var(--bg3);border-radius:10px;padding:12px 14px;
   border:1px solid rgba(30,41,59,0.5);
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  display:flex;flex-direction:column;gap:10px;
+  cursor:pointer;transition:border-color 0.18s,background 0.18s;
 }
+.price-card:hover{border-color:rgba(245,158,11,0.35);background:var(--bg4);}
 .price-val{font-size:15px;font-weight:800;color:var(--green);white-space:nowrap;}
 
 /* ── Presentation overlay ── */
@@ -439,9 +441,9 @@ body{
 .fdm-sec-hd{font-size:10px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin:18px 0 10px;}
 .fdm-sec-hd:first-child{margin-top:0;}
 .fdm-kv{display:flex;gap:8px;font-size:13px;margin-bottom:7px;align-items:flex-start;}
-.fdm-kv .k{color:var(--dim);min-width:130px;flex-shrink:0;}
-.fdm-kv .v{color:#e2e8f0;font-weight:600;line-height:1.4;}
-.fdm-text{font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:10px;}
+.fdm-kv .k{color:#94a3b8;min-width:130px;flex-shrink:0;font-size:13px;}
+.fdm-kv .v{color:#f1f5f9;font-weight:600;line-height:1.4;font-size:13px;}
+.fdm-text{font-size:14px;color:#cbd5e1;line-height:1.7;margin-bottom:10px;}
 .fdm-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
 .fdm-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:#93c5fd;}
 .fdm-perf-row{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:14px 0;}
@@ -455,14 +457,14 @@ body{
 .fdm-scenario-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
 .fdm-scenario-row:last-child{border-bottom:none;}
 .fdm-selling{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
-.fdm-selling-pt{display:flex;gap:10px;font-size:13px;color:var(--muted);line-height:1.5;background:rgba(255,255,255,0.03);border-radius:8px;padding:10px 12px;}
+.fdm-selling-pt{display:flex;gap:10px;font-size:14px;color:#cbd5e1;line-height:1.6;background:rgba(255,255,255,0.04);border-radius:8px;padding:12px 14px;}
 .fdm-selling-pt .ico{font-size:15px;flex-shrink:0;margin-top:1px;}
 .fdm-timeline{padding-left:24px;position:relative;}
 .fdm-timeline::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--border);}
 .fdm-tl-item{position:relative;margin-bottom:18px;}
 .fdm-tl-dot{position:absolute;left:-20px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--gold);border:2px solid var(--bg2);}
 .fdm-tl-year{font-size:11px;font-weight:800;color:var(--gold);margin-bottom:3px;}
-.fdm-tl-text{font-size:13px;color:var(--muted);line-height:1.5;}
+.fdm-tl-text{font-size:14px;color:#cbd5e1;line-height:1.55;}
 .risk-row{display:flex;align-items:center;gap:5px;}
 .risk-pip{width:11px;height:11px;border-radius:50%;background:var(--border);}
 .risk-pip.on{background:var(--gold);}
@@ -1449,14 +1451,11 @@ function renderPrices(){
   html+=allFunds.map(f=>{
     const p=fundPrices[f]||0;
     const short=f.replace("Income ","").replace(" Fund","");
-    return`<div class="price-card" style="flex-direction:column;gap:8px;align-items:stretch;">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <div style="font-size:12px;font-weight:600;color:var(--muted);flex:1;line-height:1.3;">${esc(short)}</div>
-        <button class="btn-info-fund" onclick="openFundDetail('${esc(f)}')" title="Fund details &amp; performance">ℹ️ Info</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+    return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance">
+      <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;">${esc(short)}</div>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
         <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
-        <button onclick="editPrice(this.dataset.fund)" data-fund="${esc(f)}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
+        <button onclick="event.stopPropagation();editPrice(this.dataset.fund)" data-fund="${esc(f)}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
       </div>
     </div>`;
   }).join("");
@@ -1531,6 +1530,15 @@ window.doFetchPrices=async()=>{
 
     let found=0;
     for(const[name,price]of Object.entries(data.prices)){await saveFundPriceDB(name,price);found++;}
+
+    // Save each price to history so long-term performance can be calculated over time
+    const today=new Date().toISOString().split("T")[0];
+    const hb=writeBatch(db);
+    for(const[name,price]of Object.entries(data.prices)){
+      const did=name.replace(/[^a-zA-Z0-9]/g,"_")+"_"+today;
+      hb.set(doc(db,"fundPriceHistory",did),{fundName:name,price:parseFloat(price),date:today,fetchedAt:new Date().toISOString()});
+    }
+    await hb.commit().catch(e=>console.warn("History save error:",e));
 
     reset();
     const missing=data.missing||[];
@@ -1801,23 +1809,27 @@ function attachPageHandlers(){}
 // ── Fund Detail Static Database ──────────────────────────────────────────────
 const FUND_DB={
   "Income Global Absolute Alpha Fund":{
-    subFund:"Allianz Dynamic Diversified Growth Fund",
-    subAdvisor:"Allianz Global Investors",
-    subAdvisorDesc:"Allianz Global Investors is one of Europe's largest active asset managers, with over EUR 500 billion in assets under management. As part of the Allianz SE Group — one of the world's largest financial services companies — they bring institutional-grade expertise now accessible through your ILP.",
-    assetClass:"Multi-Asset / Alternative",geography:"Global",currency:"SGD",riskLevel:4,
-    dividendFrequency:"None (accumulation fund)",
-    objective:"To generate consistent absolute (positive) returns over a full market cycle, regardless of whether equity or bond markets are rising or falling.",
-    strategy:"Dynamically allocates across equities, fixed income, and alternative strategies. Asset allocation shifts based on market conditions — when volatility rises, the fund reduces risk exposure to protect capital. Designed to smooth out the ride investors experience.",
-    focus:["Absolute Return","Multi-Asset","Capital Protection"],
+    subFund:"Fullerton Lux Funds – Global Absolute Alpha A SGD Cap",
+    subAdvisor:"Fullerton Fund Management Company Ltd",
+    subAdvisorDesc:"Fullerton Fund Management is a Singapore-based asset manager and a wholly-owned subsidiary of Temasek Holdings — Singapore's state investment company. With over SGD 14 billion in AUM and a presence across Asia, Fullerton's investment team has managed the Global Absolute Alpha strategy since 2010. Morningstar has awarded this fund a 5-star rating.",
+    assetClass:"Equity — Global Large Cap",geography:"Global",currency:"SGD",riskLevel:6,
+    dividendFrequency:"Income distributed (refer to fund factsheet for frequency)",
+    objective:"To generate long-term positive return, including both capital appreciation and income, by investing primarily in equities, preferred shares, stock warrants, convertibles, cash and cash equivalents globally.",
+    strategy:"Invests primarily in global equities (~89% stocks) with a focus on large-cap growth companies worldwide. The portfolio manager uses an absolute return philosophy — seeking to grow wealth consistently over time. NVIDIA, Roblox, Siemens Energy, JPMorgan Chase, and Microsoft have historically been among the top holdings.",
+    focus:["Global Equity","Large Cap Growth","Absolute Return"],
+    annualizedReturns:{asOf:"11/06/2026",YTD:14.72,"1M":-1.36,"1Y":41.31,"3Y":28.54,"5Y":16.07},
     sellingPts:[
-      {ico:"🏛️",text:"Sub-advised by Allianz Global Investors — part of one of the world's largest insurance and financial services groups, trusted by sovereign wealth funds and pension funds globally."},
-      {ico:"🛡️",text:"Designed to pursue positive returns in all market conditions. The fund manager actively reduces risk when markets are volatile, aiming to protect your capital during downturns."},
-      {ico:"📊",text:"Multi-asset approach means your money is spread across different asset types simultaneously — not a single-bet strategy. This diversification is a cornerstone of long-term wealth building."},
+      {ico:"🏛️",text:"Sub-advised by Fullerton Fund Management — a Temasek-owned Singapore asset manager with a 5-star Morningstar rating. Managed by the same portfolio manager since 2010, delivering over 41% in just the past year (as of Jun 2026)."},
+      {ico:"📈",text:"1-year return of 41.31% and 3-year annualised return of 28.54% — far exceeding the typical 2–4% offered by banks or fixed deposits. This is what your money can do when professionally managed in global markets."},
+      {ico:"🌍",text:"Invests in the world's leading companies across all sectors and geographies. You're not betting on Singapore alone — your wealth grows with the global economy's most innovative and profitable companies."},
     ],
     milestones:[
       {year:1970,event:"NTUC Income founded as a co-operative to provide affordable insurance to Singapore workers"},
-      {year:1998,event:"Allianz Global Investors established as a dedicated asset management division"},
+      {year:1974,event:"Fullerton Fund Management established, later becoming a wholly-owned subsidiary of Temasek Holdings"},
+      {year:2010,event:"Portfolio manager Ken Goh begins managing the Global Absolute Alpha strategy at Fullerton"},
+      {year:2021,event:"Income Global Absolute Alpha Fund class incepted (11 Feb 2021)"},
       {year:2022,event:"NTUC Income restructured from a co-operative to Income Insurance Limited"},
+      {year:2026,event:"Fund achieves 41.31% 1-year return and earns Morningstar 5-star rating"},
     ]
   },
   "Income Global Artificial Intelligence":{
@@ -2095,7 +2107,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTab="overview",_fdmChart=null;
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2107,16 +2119,50 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTab="overview";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
   ov.style.display="flex";
   renderFdmShell();
   renderFdmBody();
-  // Pre-fetch performance data in background
+  // Load stored Firestore price history (used for 3M/6M/1Y/3Y/5Y calculations)
+  loadFdmHistory(name);
+  // Also fetch live chart data from Income's website via Vercel
   fetchFdmData(name);
 };
+
+async function loadFdmHistory(name){
+  try{
+    const q=query(collection(db,"fundPriceHistory"),where("fundName","==",name));
+    const snap=await getDocs(q);
+    const rows=[];
+    snap.forEach(d=>rows.push(d.data()));
+    // Sort newest first by date (YYYY-MM-DD strings sort correctly)
+    rows.sort((a,b)=>b.date.localeCompare(a.date));
+    _fdmHistory=rows;
+    if(_fdmTab==="performance")renderFdmBody();
+  }catch(e){_fdmHistory=[];if(_fdmTab==="performance")renderFdmBody();}
+}
+
+function calcPerfFromStored(history){
+  if(!history||!history.length)return null;
+  const latest=history[0];
+  const latestDate=new Date(latest.date);
+  const latestPrice=latest.price;
+  const findPrice=(daysAgo)=>{
+    const t=new Date(latestDate);t.setDate(t.getDate()-daysAgo);
+    const ts=t.toISOString().split("T")[0];
+    for(const e of history){if(e.date<=ts)return e.price;}
+    return null;
+  };
+  const pct=(daysAgo)=>{
+    const old=findPrice(daysAgo);
+    if(old===null||old<=0)return null;
+    return+((latestPrice-old)/old*100).toFixed(2);
+  };
+  return{"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":pct(1095),"5Y":pct(1825)};
+}
 
 window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
@@ -2173,8 +2219,10 @@ function renderFdmBody(){
   if(_fdmTab==="overview")el.innerHTML=renderFdmOverview();
   else if(_fdmTab==="performance")el.innerHTML=renderFdmPerformance();
   else el.innerHTML=renderFdmHistory();
-  if(_fdmTab==="performance"&&_fdmData&&!_fdmData.error&&_fdmData.chartData){
-    setTimeout(()=>drawFdmChart(_fdmPeriod),30);
+  if(_fdmTab==="performance"){
+    const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+    const hasStored=_fdmHistory&&_fdmHistory.length>=2;
+    if(hasLive||hasStored)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
   }
 }
 
@@ -2213,57 +2261,96 @@ function renderFdmOverview(){
 
 function renderFdmPerformance(){
   const PERIODS=["1M","3M","6M","1Y","3Y","5Y"];
+  const info=FUND_DB[_fdmFund]||{};
   let h="";
-  if(!_fdmData){
-    h+=`<div class="fdm-loading">⏳ Fetching live price history from Income's website...</div>`;
+
+  // Determine best available performance source (priority: Firestore history → static factsheet data → Vercel API)
+  const storedPerf=calcPerfFromStored(_fdmHistory);
+  const staticAR=info.annualizedReturns;
+  const livePerf=_fdmData&&!_fdmData.error?_fdmData.performance:null;
+
+  // Use Firestore history if we have at least 2 entries; else static factsheet; else live API
+  let perf=null,perfSource="";
+  if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
+    perf=storedPerf;
+    perfSource=`📅 Calculated from ${_fdmHistory.length} stored price points (${_fdmHistory[_fdmHistory.length-1]?.date} – ${_fdmHistory[0]?.date})`;
+  }else if(staticAR){
+    perf=staticAR;
+    perfSource=`📋 From fund factsheet as of ${staticAR.asOf} — press ⟳ Fetch to start building live history`;
+  }else if(livePerf){
+    perf=livePerf;
+    perfSource=`📡 From Income's website (limited to ~30 days of embedded price data)`;
+  }
+
+  // Latest price info
+  const latest=_fdmData&&!_fdmData.error?_fdmData.latest:null;
+
+  // Performance grid
+  if(!perf&&_fdmHistory===null&&!_fdmData){
+    h+=`<div class="fdm-loading">⏳ Loading performance data...</div>`;
     return h;
   }
-  if(_fdmData.error){
-    h+=`<div class="fdm-err">⚠️ Could not load performance data.<br><small>${esc(_fdmData.error)}</small></div>`;
-    return h;
-  }
-  const perf=_fdmData.performance||{};
-  const latest=_fdmData.latest;
-  const oldest=_fdmData.oldestDate;
-  const total=_fdmData.totalEntries||0;
-  h+=`<div class="fdm-sec-hd">📊 Performance by Period (Bid Price Returns)</div>`;
-  h+=`<div class="fdm-perf-row">`;
-  PERIODS.forEach(p=>{
-    const v=perf[p];
-    const col=v===null||v===undefined?"var(--dim)":v>=0?"var(--green)":"var(--red)";
-    const txt=v===null||v===undefined?"N/A":`${v>=0?"+":""}${v.toFixed(2)}%`;
-    h+=`<div class="fdm-perf-cell${_fdmPeriod===p?" active":""}" onclick="selectFdmPeriod('${p}')">
-      <div class="fdm-perf-period">${p}</div>
-      <div class="fdm-perf-pct" style="color:${col};">${txt}</div>
-    </div>`;
-  });
-  h+=`</div>`;
-  if(latest)h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:4px;">Latest price: <strong style="color:#e2e8f0;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}${oldest?` · History from ${oldest} (${total} entries)`:""}</div>`;
-  h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
-  // $10,000 scenario
-  const scenarios=[];
-  [["1 Year Ago","1Y",365],["3 Years Ago","3Y",1095],["5 Years Ago","5Y",1825]].forEach(([lbl,k])=>{
-    const v=perf[k];
-    if(v!==null&&v!==undefined)scenarios.push({lbl,v,worth:10000*(1+v/100)});
-  });
-  if(scenarios.length){
-    h+=`<div class="fdm-scenario">
-      <div class="fdm-scenario-hd">💰 If You Had Invested SGD $10,000...</div>`;
-    scenarios.forEach(s=>{
-      const gain=s.worth-10000;
-      const col=gain>=0?"var(--green)":"var(--red)";
-      h+=`<div class="fdm-scenario-row">
-        <span style="color:var(--dim);">${esc(s.lbl)}</span>
-        <span>
-          <strong style="color:#e2e8f0;">${$f(s.worth)}</strong>
-          <span style="color:${col};font-size:11px;margin-left:6px;">${gain>=0?"+":"-"}${$f(Math.abs(gain))}</span>
-        </span>
+
+  if(perf){
+    h+=`<div class="fdm-sec-hd">📊 Performance by Period</div>`;
+    h+=`<div class="fdm-perf-row">`;
+    PERIODS.forEach(p=>{
+      const v=perf[p];
+      const col=v===null||v===undefined?"#6b7280":v>=0?"var(--green)":"var(--red)";
+      const txt=v===null||v===undefined?"N/A":`${v>=0?"+":""}${v.toFixed(2)}%`;
+      h+=`<div class="fdm-perf-cell${_fdmPeriod===p?" active":""}" onclick="selectFdmPeriod('${p}')">
+        <div class="fdm-perf-period">${p}</div>
+        <div class="fdm-perf-pct" style="color:${col};">${txt}</div>
       </div>`;
     });
-    h+=`<div style="font-size:10px;color:var(--dim);margin-top:8px;">⚠️ Based on bid price movement only. Past performance does not guarantee future results. Currency fluctuations apply.</div>`;
     h+=`</div>`;
+    if(perfSource)h+=`<div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${perfSource}</div>`;
   }
-  h+=`<p class="fdm-note">Performance figures are calculated from bid price data sourced from Income Insurance's website. They reflect price-only returns and do not include distribution reinvestment.</p>`;
+
+  // Price chart (from Vercel live data if available)
+  if(!_fdmData&&_fdmHistory===null){
+    h+=`<div class="fdm-loading" style="padding:20px;">⏳ Fetching price chart from Income's website...</div>`;
+  }else if(_fdmData&&!_fdmData.error&&_fdmData.chartData){
+    if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest bid price: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
+    h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
+    h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">Price chart shows last 30 days from Income's website. Press ⟳ Fetch regularly to build long-term history.</div>`;
+  }else if(_fdmHistory&&_fdmHistory.length>=2){
+    // Build chart from stored history
+    h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
+  }else if(_fdmData&&_fdmData.error){
+    h+=`<div class="fdm-err">⚠️ Chart unavailable: ${esc(_fdmData.error)}</div>`;
+  }
+
+  // $10,000 scenario
+  if(perf){
+    const scenarios=[];
+    [["1 Year Ago","1Y"],["3 Years Ago","3Y"],["5 Years Ago","5Y"]].forEach(([lbl,k])=>{
+      const v=perf[k];
+      if(v!==null&&v!==undefined)scenarios.push({lbl,v,worth:10000*(1+v/100)});
+    });
+    if(scenarios.length){
+      h+=`<div class="fdm-scenario">
+        <div class="fdm-scenario-hd">💰 If You Had Invested SGD $10,000...</div>`;
+      scenarios.forEach(s=>{
+        const gain=s.worth-10000;
+        const col=gain>=0?"var(--green)":"var(--red)";
+        h+=`<div class="fdm-scenario-row">
+          <span style="color:#94a3b8;">${esc(s.lbl)}</span>
+          <span>
+            <strong style="color:#f1f5f9;">${$f(s.worth)}</strong>
+            <span style="color:${col};font-size:12px;margin-left:6px;">${gain>=0?"+":"-"}${$f(Math.abs(gain))}</span>
+          </span>
+        </div>`;
+      });
+      h+=`<div style="font-size:11px;color:#6b7280;margin-top:8px;">⚠️ Based on bid/NAV price movement only. Past performance does not guarantee future results.</div>`;
+      h+=`</div>`;
+    }
+  }
+
+  if(!perf&&!_fdmData){
+    h+=`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No performance data yet. Press <strong style="color:var(--gold);">⟳ Fetch Latest Prices</strong> from the Fund Prices tab to start building history.</div>`;
+  }
+
   return h;
 }
 
@@ -2284,20 +2371,25 @@ function renderFdmHistory(){
 
 function drawFdmChart(period){
   const canvas=document.getElementById("fdmChartCanvas");
-  if(!canvas||!_fdmData||!_fdmData.chartData)return;
+  if(!canvas)return;
+  // Use live chart data if available; fall back to stored Firestore history
+  if(_fdmData&&!_fdmData.error&&_fdmData.chartData)return _drawChart(canvas,_fdmData.chartData,period,"dmy");
+  if(_fdmHistory&&_fdmHistory.length>=2){
+    // Convert stored {date:"YYYY-MM-DD",price} to chart format, oldest first
+    const hist=_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price}));
+    return _drawChart(canvas,hist,period,"iso");
+  }
+}
+function _drawChart(canvas,chartData,period,fmt){
+  if(!chartData||!chartData.length)return;
   const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-  const all=_fdmData.chartData;
-  const filtered=all.filter(e=>{
-    const[d,m,y]=e.date.split("/");
-    return new Date(`${y}-${m}-${d}`)>=cutoff;
-  });
-  const data=filtered.length>=2?filtered:all;
+  // Parse date depending on format: "DD/MM/YYYY" (dmy) or "YYYY-MM-DD" (iso)
+  const toDate=d=>fmt==="iso"?new Date(d):new Date(d.split("/").reverse().join("-"));
+  const filtered=chartData.filter(e=>toDate(e.date)>=cutoff);
+  const data=filtered.length>=2?filtered:chartData;
   const prices=data.map(e=>e.price);
-  const labels=data.map(e=>{
-    const[d,m,y]=e.date.split("/");
-    return new Date(`${y}-${m}-${d}`).toLocaleDateString("en-SG",{day:"numeric",month:"short",year:data.length>180?"2-digit":"numeric"});
-  });
+  const labels=data.map(e=>toDate(e.date).toLocaleDateString("en-SG",{day:"numeric",month:"short",year:data.length>180?"2-digit":"numeric"}));
   const first=prices[0],last=prices[prices.length-1];
   const isUp=last>=first;
   const col=isUp?"#10b981":"#ef4444";
