@@ -421,7 +421,58 @@ body{
   .present-name{font-size:24px;}
   .stat-val{font-size:16px;}
   .inp,.sel,.search-inp{font-size:16px!important;}
+  .fdm-perf-row{grid-template-columns:repeat(3,1fr);}
 }
+/* ── Fund Detail Modal ── */
+.fdm-overlay{position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.82);display:none;align-items:center;justify-content:center;padding:12px;}
+.fdm-box{background:var(--bg2);border-radius:18px;border:1px solid var(--border);width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 80px rgba(0,0,0,0.9);position:relative;}
+.fdm-hdr{padding:20px 22px 0;border-radius:18px 18px 0 0;flex-shrink:0;}
+.fdm-title{font-size:17px;font-weight:900;color:#fff;margin-bottom:8px;padding-right:44px;line-height:1.3;}
+.fdm-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.fdm-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:0.04em;}
+.fdm-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.fdm-tab{padding:10px 18px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 0.15s;}
+.fdm-tab.active{color:var(--gold-l);border-bottom-color:var(--gold);}
+.fdm-body{padding:18px 22px 22px;overflow-y:auto;flex:1;}
+.fdm-close{position:absolute;right:16px;top:16px;background:rgba(255,255,255,0.07);border:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px;padding:5px 10px;transition:all 0.15s;z-index:1;}
+.fdm-close:hover{background:rgba(255,255,255,0.14);color:#fff;}
+.fdm-sec-hd{font-size:10px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:0.1em;margin:18px 0 10px;}
+.fdm-sec-hd:first-child{margin-top:0;}
+.fdm-kv{display:flex;gap:8px;font-size:13px;margin-bottom:7px;align-items:flex-start;}
+.fdm-kv .k{color:var(--dim);min-width:130px;flex-shrink:0;}
+.fdm-kv .v{color:#e2e8f0;font-weight:600;line-height:1.4;}
+.fdm-text{font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:10px;}
+.fdm-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.fdm-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:#93c5fd;}
+.fdm-perf-row{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:14px 0;}
+.fdm-perf-cell{background:var(--card);border-radius:10px;padding:10px 4px;text-align:center;border:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
+.fdm-perf-cell:hover,.fdm-perf-cell.active{border-color:var(--gold);background:rgba(245,158,11,0.08);}
+.fdm-perf-period{font-size:10px;font-weight:700;color:var(--dim);margin-bottom:4px;}
+.fdm-perf-pct{font-size:14px;font-weight:900;}
+.fdm-chart-wrap{position:relative;height:220px;margin:14px 0;}
+.fdm-scenario{background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);border-radius:12px;padding:14px 16px;margin-top:16px;}
+.fdm-scenario-hd{font-size:11px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
+.fdm-scenario-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.fdm-scenario-row:last-child{border-bottom:none;}
+.fdm-selling{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.fdm-selling-pt{display:flex;gap:10px;font-size:13px;color:var(--muted);line-height:1.5;background:rgba(255,255,255,0.03);border-radius:8px;padding:10px 12px;}
+.fdm-selling-pt .ico{font-size:15px;flex-shrink:0;margin-top:1px;}
+.fdm-timeline{padding-left:24px;position:relative;}
+.fdm-timeline::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--border);}
+.fdm-tl-item{position:relative;margin-bottom:18px;}
+.fdm-tl-dot{position:absolute;left:-20px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--gold);border:2px solid var(--bg2);}
+.fdm-tl-year{font-size:11px;font-weight:800;color:var(--gold);margin-bottom:3px;}
+.fdm-tl-text{font-size:13px;color:var(--muted);line-height:1.5;}
+.risk-row{display:flex;align-items:center;gap:5px;}
+.risk-pip{width:11px;height:11px;border-radius:50%;background:var(--border);}
+.risk-pip.on{background:var(--gold);}
+.risk-pip.on.r6{background:#ef4444;}
+.risk-pip.on.r7{background:#dc2626;}
+.btn-info-fund{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:3px 8px;color:#93c5fd;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s;white-space:nowrap;flex-shrink:0;}
+.btn-info-fund:hover{background:rgba(59,130,246,0.25);border-color:rgba(59,130,246,0.5);}
+.fdm-loading{text-align:center;padding:48px 20px;color:var(--dim);font-size:13px;}
+.fdm-err{color:var(--red);font-size:13px;padding:20px;text-align:center;}
+.fdm-note{font-size:11px;color:var(--dim);margin-top:6px;font-style:italic;}
 </style>
 </head>
 <body>
@@ -459,6 +510,16 @@ body{
       <button class="btn-pri" style="flex:1;" onclick="saveEditedPrice()">✅ Save</button>
       <button class="btn-sec" onclick="closeEditor()">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Fund Detail Modal -->
+<div class="fdm-overlay" id="fdmOverlay" onclick="if(event.target===this)closeFundDetail()">
+  <div class="fdm-box">
+    <button class="fdm-close" onclick="closeFundDetail()">✕</button>
+    <div class="fdm-hdr" id="fdmHdr"></div>
+    <div class="fdm-tabs" id="fdmTabs"></div>
+    <div class="fdm-body" id="fdmBody"></div>
   </div>
 </div>
 
@@ -1388,9 +1449,12 @@ function renderPrices(){
   html+=allFunds.map(f=>{
     const p=fundPrices[f]||0;
     const short=f.replace("Income ","").replace(" Fund","");
-    return`<div class="price-card">
-      <div style="font-size:12px;font-weight:600;color:var(--muted);flex:1;">${esc(short)}</div>
+    return`<div class="price-card" style="flex-direction:column;gap:8px;align-items:stretch;">
       <div style="display:flex;align-items:center;gap:6px;">
+        <div style="font-size:12px;font-weight:600;color:var(--muted);flex:1;line-height:1.3;">${esc(short)}</div>
+        <button class="btn-info-fund" onclick="openFundDetail('${esc(f)}')" title="Fund details &amp; performance">ℹ️ Info</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
         <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
         <button onclick="editPrice(this.dataset.fund)" data-fund="${esc(f)}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
       </div>
@@ -1733,6 +1797,525 @@ window.doDelClient=async(id)=>{
 };
 
 function attachPageHandlers(){}
+
+// ── Fund Detail Static Database ──────────────────────────────────────────────
+const FUND_DB={
+  "Income Global Absolute Alpha Fund":{
+    subFund:"Allianz Dynamic Diversified Growth Fund",
+    subAdvisor:"Allianz Global Investors",
+    subAdvisorDesc:"Allianz Global Investors is one of Europe's largest active asset managers, with over EUR 500 billion in assets under management. As part of the Allianz SE Group — one of the world's largest financial services companies — they bring institutional-grade expertise now accessible through your ILP.",
+    assetClass:"Multi-Asset / Alternative",geography:"Global",currency:"SGD",riskLevel:4,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To generate consistent absolute (positive) returns over a full market cycle, regardless of whether equity or bond markets are rising or falling.",
+    strategy:"Dynamically allocates across equities, fixed income, and alternative strategies. Asset allocation shifts based on market conditions — when volatility rises, the fund reduces risk exposure to protect capital. Designed to smooth out the ride investors experience.",
+    focus:["Absolute Return","Multi-Asset","Capital Protection"],
+    sellingPts:[
+      {ico:"🏛️",text:"Sub-advised by Allianz Global Investors — part of one of the world's largest insurance and financial services groups, trusted by sovereign wealth funds and pension funds globally."},
+      {ico:"🛡️",text:"Designed to pursue positive returns in all market conditions. The fund manager actively reduces risk when markets are volatile, aiming to protect your capital during downturns."},
+      {ico:"📊",text:"Multi-asset approach means your money is spread across different asset types simultaneously — not a single-bet strategy. This diversification is a cornerstone of long-term wealth building."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded as a co-operative to provide affordable insurance to Singapore workers"},
+      {year:1998,event:"Allianz Global Investors established as a dedicated asset management division"},
+      {year:2022,event:"NTUC Income restructured from a co-operative to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Artificial Intelligence":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund invests in companies at the forefront of artificial intelligence and technology innovation. The sub-advisor is a specialist technology investor with deep research capabilities across global AI and tech companies.",
+    assetClass:"Equity — Technology",geography:"Global",currency:"USD",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital growth by investing in companies leading in or directly benefiting from the development and adoption of artificial intelligence.",
+    strategy:"Targets companies across the AI value chain: semiconductor chip makers (the 'picks and shovels'), cloud computing platforms, enterprise AI software, and companies in sectors being transformed by AI such as healthcare diagnostics, autonomous vehicles, and financial modelling.",
+    focus:["Artificial Intelligence","Technology","High Growth"],
+    sellingPts:[
+      {ico:"🤖",text:"AI is the biggest technology transformation since the internet. Companies that lead in AI are positioned to capture enormous productivity gains — investing early in this wave is what separates the wealthy from those who watched from the sidelines."},
+      {ico:"📈",text:"Technology sector has historically been one of the highest-returning asset classes over 10+ year periods. This fund gives concentrated exposure to the highest-growth sub-sector within technology."},
+      {ico:"🌍",text:"Diversified across global AI companies — not just US tech giants. Includes Asian semiconductor leaders, European AI software firms, and emerging market tech champions."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:2022,event:"ChatGPT launched, signalling the mainstream arrival of generative AI — accelerating demand for AI-focused investments"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Dynamic Bond Fund":{
+    subFund:"PIMCO GIS Dynamic Bond Fund",
+    subAdvisor:"PIMCO (Pacific Investment Management Company LLC)",
+    subAdvisorDesc:"PIMCO is the world's premier active fixed income manager, overseeing approximately US$2 trillion in assets. Founded in 1971 by Bill Gross — who pioneered the concept of actively managed bonds — PIMCO is trusted by central banks, sovereign wealth funds, and institutional investors in over 50 countries. Their macroeconomic research team is widely regarded as one of the most sophisticated in finance.",
+    assetClass:"Fixed Income",geography:"Global",currency:"USD",riskLevel:4,
+    dividendFrequency:"Semi-annual distributions (available for reinvestment back into the fund)",
+    objective:"To achieve maximum total return through active investment across global fixed income markets, while preserving capital and managing risk prudently.",
+    strategy:"Flexibly allocates across government bonds, investment-grade and high-yield corporate bonds, mortgage-backed securities, and emerging market debt. Duration and credit exposure are actively managed based on PIMCO's macroeconomic outlook — allowing the fund to benefit from both rising and falling rate environments.",
+    focus:["Global Fixed Income","Active Management","Regular Distributions"],
+    sellingPts:[
+      {ico:"🏆",text:"Managed by PIMCO — the undisputed world leader in active bond management with ~US$2 trillion under management. The same expertise used by global pension funds and central banks, now accessible to you."},
+      {ico:"💰",text:"Semi-annual dividends mean your investment generates regular cash flows. When reinvested (as units), these compounding returns significantly accelerate wealth growth over time — this is how the wealthy make money work for them."},
+      {ico:"⚖️",text:"Bonds provide stability that equity funds cannot. When stock markets fall sharply, quality bond portfolios often hold steady or rise — making this a valuable ballast in any investment portfolio."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:1971,event:"PIMCO founded by Bill Gross in Newport Beach, California — revolutionising fixed income with active bond management"},
+      {year:2000,event:"PIMCO acquired by Allianz SE, gaining backing from one of the world's largest financial groups"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Emerging Markets Equity Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund is sub-advised by a specialist emerging markets equity manager with on-the-ground research presence across key EM economies. Emerging markets collectively represent over 50% of global GDP and house the world's fastest-growing consumer class.",
+    assetClass:"Equity — Emerging Markets",geography:"Global Emerging Markets",currency:"USD",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital appreciation through investment in equities of companies operating in or exposed to emerging market economies.",
+    strategy:"Invests across major emerging economies: China, India, Brazil, Taiwan, South Korea, South Africa, and others. Targets companies benefiting from rising middle-class consumption, infrastructure build-out, and technological leapfrogging. Higher growth potential than developed markets, with correspondingly higher volatility.",
+    focus:["Emerging Markets","High Growth","Global Diversification"],
+    sellingPts:[
+      {ico:"🚀",text:"Emerging markets are home to the fastest-growing economies on earth. China and India alone are projected to account for over 35% of global GDP growth in the next decade — this fund lets you capture that growth."},
+      {ico:"💹",text:"Historically, emerging market equities have delivered significantly higher long-term returns than developed markets, rewarding patient investors who can tolerate short-term volatility."},
+      {ico:"🌏",text:"True global diversification: not correlated to Singapore or US market cycles. When developed markets stagnate, emerging markets often thrive — and vice versa."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:2001,event:"Goldman Sachs coins the 'BRIC' term (Brazil, Russia, India, China) — formalising the investment thesis for emerging market growth"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Gold Equity Fund":{
+    subFund:"BGF World Gold Fund",
+    subAdvisor:"BlackRock (BlackRock Fund Advisors)",
+    subAdvisorDesc:"BlackRock is the world's largest asset manager with over US$10 trillion in assets under management — more than the annual GDP of Germany and Japan combined. The BGF World Gold Fund has been one of BlackRock's flagship thematic funds for over two decades, with a long track record of delivering gold price exposure through mining equities.",
+    assetClass:"Equity — Commodities (Gold Mining)",geography:"Global",currency:"USD",riskLevel:7,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To maximise total return in US dollars by investing in equity securities of companies whose predominant economic activity is gold mining and related precious metals.",
+    strategy:"Invests primarily in shares of gold mining companies worldwide — from large diversified miners to mid-cap specialists. Mining stocks provide leveraged exposure to gold price moves: when gold rises 10%, gold mining profits can rise 20–30% due to operating leverage. This amplifies gains (and losses) relative to holding physical gold.",
+    focus:["Gold","Inflation Hedge","Precious Metals"],
+    sellingPts:[
+      {ico:"🥇",text:"Sub-advised by BlackRock — the world's largest asset manager, trusted by governments, central banks, and sovereign wealth funds across the globe. This is institutional-grade expertise at your fingertips."},
+      {ico:"🛡️",text:"Gold has been a store of value for over 5,000 years. In every major financial crisis, currency devaluation, or inflationary period, gold has historically held or increased its purchasing power — protecting wealth when other assets fall."},
+      {ico:"⚡",text:"Gold mining shares amplify gold price moves. A 10% rise in gold often produces 20–40% gains in mining stocks due to operating leverage — making this the most efficient way to benefit from a gold bull market."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:1994,event:"BGF World Gold Fund launched (then under Merrill Lynch Investment Managers)"},
+      {year:2006,event:"BlackRock acquires Merrill Lynch Investment Managers, taking over the fund"},
+      {year:2009,event:"Gold surges during the Global Financial Crisis — fund delivers exceptional returns as investors sought safe haven assets"},
+      {year:2020,event:"Gold reaches all-time high of US$2,089/oz during COVID-19 pandemic uncertainty"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Growth Equity Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund is sub-advised by a specialist global equity manager focused on identifying high-quality growth companies worldwide. They combine rigorous fundamental analysis with a long-term investment horizon.",
+    assetClass:"Equity — Global",geography:"Global",currency:"USD",riskLevel:5,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital appreciation through investment in a diversified portfolio of high-quality, growth-oriented global equities.",
+    strategy:"Focuses on companies with durable competitive advantages, strong balance sheets, and the ability to grow earnings faster than the overall market. Invests across developed and emerging markets, with a preference for market leaders in their respective industries.",
+    focus:["Global Equities","Quality Growth","Long-Term Wealth"],
+    sellingPts:[
+      {ico:"📈",text:"A globally diversified equity portfolio is the foundation of long-term wealth creation. Historically, global equities have returned approximately 7–10% per annum over long periods — far outpacing the 2–3% you'd earn in a bank or fixed deposit."},
+      {ico:"🌍",text:"By investing globally, your money is not tied to the performance of any single country's economy. When Singapore or Asia underperforms, other regions may be thriving — true diversification smooths returns over time."},
+      {ico:"⏰",text:"Time in the market beats timing the market. A client who invested consistently over 20+ years in global equities has historically built substantial wealth through the power of compounding — the most powerful force in personal finance."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Sustainable Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund is managed by a specialist ESG-focused investment team that integrates environmental, social, and governance factors into every investment decision. ESG investing has moved from a niche to a mainstream strategy, with trillions of institutional capital now allocated using these principles.",
+    assetClass:"Equity — Global (ESG)",geography:"Global",currency:"USD",riskLevel:5,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital growth by investing in companies that demonstrate strong ESG practices and are contributing positively to a sustainable future.",
+    strategy:"Screens out companies involved in tobacco, weapons manufacturing, adult entertainment, gambling, and high-carbon fossil fuels. Actively seeks companies excelling in clean energy, water management, healthcare innovation, and inclusive economic practices. ESG leaders tend to have better risk management and are better positioned for regulatory changes globally.",
+    focus:["ESG","Sustainable Investing","Responsible Growth"],
+    sellingPts:[
+      {ico:"🌱",text:"ESG-screened companies have historically shown lower volatility and fewer catastrophic losses than non-screened peers. Good governance and sustainable practices are early warning signals of company quality."},
+      {ico:"🌏",text:"The global transition to clean energy and sustainable business practices represents a multi-decade, multi-trillion-dollar investment opportunity. Positioning your portfolio here now is forward-thinking wealth management."},
+      {ico:"❤️",text:"For clients who care about where their money goes: this fund excludes tobacco, weapons, and major polluters. Your wealth grows while making a positive contribution — investing with a conscience, without sacrificing returns."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:2015,event:"UN Paris Agreement signed — 196 nations commit to climate targets, accelerating capital flows toward sustainable investments"},
+      {year:2021,event:"ESG assets under management globally surpass US$35 trillion — mainstream institutional adoption complete"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Global Technology Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"Managed by a specialist technology equity team with deep expertise in identifying technology leaders across hardware, software, semiconductors, and internet platforms globally.",
+    assetClass:"Equity — Technology",geography:"Global",currency:"USD",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital growth by investing in equity securities of companies involved in the development, production, or distribution of technology products and services globally.",
+    strategy:"Concentrated exposure to technology leaders across software (cloud, enterprise, consumer), hardware (semiconductors, networking), internet platforms (search, e-commerce, social media), and fintech. Typically US-heavy but with meaningful exposure to Asian tech leaders in Taiwan, South Korea, and China.",
+    focus:["Technology","Innovation","High Growth"],
+    sellingPts:[
+      {ico:"💻",text:"Technology has been the single best-performing sector globally over the past 20 years. The companies changing how we work, communicate, shop, and live have created extraordinary wealth for long-term investors."},
+      {ico:"⚡",text:"Technology innovation compounds: today's smartphone is more powerful than the world's most powerful computer in 1990. Companies at the frontier of this exponential progress can deliver returns that fundamentally change a family's financial position over a generation."},
+      {ico:"🌐",text:"Unlike Singapore's property market or local stocks, global tech exposure gives you access to the world's most innovative companies — the Apples, Microsofts, and NVIDIAs that are shaping the next century of human progress."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:1994,event:"Netscape launches the first widely-used web browser — beginning the internet era"},
+      {year:2007,event:"Apple launches the iPhone — beginning the smartphone revolution"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+      {year:2022,event:"ChatGPT released — beginning the AI era, the next major technology wave"},
+    ]
+  },
+  "Income India Equity Fund":{
+    subFund:"Franklin India Fund",
+    subAdvisor:"Franklin Templeton Asset Management",
+    subAdvisorDesc:"Franklin Templeton is one of the world's largest asset managers, founded in 1947 with over US$1.5 trillion in AUM. Their India investment team is one of the most experienced in the market, with on-the-ground analysts in Mumbai and decades of continuous India investing experience since the 1990s.",
+    assetClass:"Equity — India",geography:"India",currency:"USD",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital appreciation through investment primarily in equity and equity-related securities of Indian companies across all market capitalisations.",
+    strategy:"Invests across India's entire stock market — large-cap blue chips (Reliance, HDFC, Infosys), mid-cap growth companies, and selective small caps. Sector focus includes financials (benefiting from financial inclusion), consumer goods (rising middle class), healthcare, and technology services. Active stock selection by Franklin's India team, who have unparalleled local market knowledge.",
+    focus:["India","Emerging Market","Demographic Growth"],
+    sellingPts:[
+      {ico:"🇮🇳",text:"India is projected to become the world's 3rd largest economy by 2030. With 1.4 billion people and a median age of just 28, India's consumption-driven growth story is one of the most powerful multi-decade investment themes available today."},
+      {ico:"🏦",text:"Franklin Templeton has been investing in India since the 1990s. Their Franklin India Fund is one of the most established and well-regarded India equity vehicles globally — deep expertise, long track record."},
+      {ico:"📱",text:"India's digital revolution is transforming banking, retail, healthcare, and government services. Companies enabling this transformation are growing at rates impossible in mature economies — early investors have been handsomely rewarded."},
+    ],
+    milestones:[
+      {year:1947,event:"Franklin Templeton founded by Rupert H. Johnson Sr. in New Jersey, USA"},
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:1996,event:"Franklin Templeton enters India, establishing one of the first foreign asset management operations in the country"},
+      {year:2022,event:"India's stock market surpasses Hong Kong to become the 4th largest globally by market capitalisation"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+      {year:2023,event:"India becomes the world's most populous nation, surpassing China"},
+    ]
+  },
+  "Income Regional China Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund is sub-advised by a specialist Greater China equity manager with extensive on-the-ground research across mainland China, Hong Kong, and Taiwan. The Greater China region hosts some of the world's most dynamic companies across technology, manufacturing, and consumer sectors.",
+    assetClass:"Equity — Greater China",geography:"China / Greater China",currency:"USD",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital appreciation through investment primarily in equity securities of companies based in or with significant exposure to the Greater China region.",
+    strategy:"Invests across mainland China (A-shares and H-shares), Hong Kong-listed companies, and Taiwan equities. Targets sectors tied to China's structural growth: domestic consumption, clean energy, advanced manufacturing, and digital economy. Active management to navigate China's unique regulatory and geopolitical environment.",
+    focus:["China","Greater China","Asian Growth"],
+    sellingPts:[
+      {ico:"🇨🇳",text:"China is the world's 2nd largest economy and home to some of its most innovative companies. Chinese equities often trade at significant discounts to Western equivalents — creating compelling value for long-term investors who can look past short-term volatility."},
+      {ico:"💡",text:"China's domestic consumption story is just beginning. As hundreds of millions move into the middle class, companies serving their healthcare, education, entertainment, and financial needs are positioned for exceptional growth."},
+      {ico:"⚖️",text:"Allocating a portion of your portfolio to China provides genuine diversification — Chinese markets don't always move in the same direction as US or Singapore markets, reducing overall portfolio volatility."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:1978,event:"China begins economic reform under Deng Xiaoping — beginning four decades of extraordinary growth"},
+      {year:2001,event:"China joins the World Trade Organisation — opening the world's largest manufacturing economy to global trade"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income US Large Cap Equity Fund":{
+    subFund:"Refer to Income's latest fund factsheet for current sub-fund details",
+    subAdvisor:"Specialist external fund manager — refer to latest factsheet",
+    subAdvisorDesc:"This fund provides exposure to America's largest and most profitable companies — the global leaders that dominate their industries worldwide. Sub-advised by a specialist US equity manager.",
+    assetClass:"Equity — United States",geography:"United States",currency:"USD",riskLevel:5,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital growth through investment in a diversified portfolio of large-cap US equity securities.",
+    strategy:"Focuses on the largest and most liquid US companies — typically S&P 500 constituents. Captures US economic leadership through global giants like Apple, Microsoft, Amazon, Alphabet (Google), Meta, NVIDIA, and Berkshire Hathaway. These companies generate the majority of their revenues globally, not just from the US.",
+    focus:["US Large Cap","Blue Chip","Global Leaders"],
+    sellingPts:[
+      {ico:"🇺🇸",text:"The US stock market has been the world's top-performing major market over the past century. US large-cap companies are global businesses — when you invest here, you're investing in companies that dominate every continent."},
+      {ico:"💰",text:"Apple, Microsoft, Google, Amazon — these are not just American companies, they are the infrastructure of the modern global economy. Their products are used by billions of people daily, creating extraordinary, durable earnings power."},
+      {ico:"📊",text:"The S&P 500 has historically returned approximately 10% per annum over long periods. Putting aside $1,000 per month for 30 years at this rate would produce over $2 million — the power of consistent, patient investing in quality assets."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:1976,event:"Vanguard launches the first S&P 500 index fund — democratising access to US large-cap equities"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income World Healthscience Fund":{
+    subFund:"BGF World Healthscience Fund",
+    subAdvisor:"BlackRock (BlackRock Fund Advisors)",
+    subAdvisorDesc:"BlackRock is the world's largest asset manager with over US$10 trillion in assets under management. The BGF World Healthscience Fund was launched in 2001 and is one of BlackRock's most established thematic funds, with a 20+ year track record of investing in global healthcare innovation.",
+    assetClass:"Equity — Healthcare",geography:"Global",currency:"USD",riskLevel:5,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To maximise total return in US dollars through investment in equity securities of companies operating across the global healthcare and life science industries.",
+    strategy:"Invests across the full healthcare value chain: large pharmaceutical companies (Pfizer, Novartis, Roche), innovative biotechnology firms, medical device makers (Medtronic, Abbott), diagnostics companies, and managed care organisations. Benefits from structural tailwinds: ageing global population, rising healthcare spending, and continuous medical innovation.",
+    focus:["Healthcare","Defensive Growth","Innovation"],
+    sellingPts:[
+      {ico:"🏥",text:"Healthcare is uniquely defensive: people need medicine and medical care regardless of whether the economy is in boom or recession. This provides stability when other sectors are falling sharply — making healthcare a valuable part of any long-term portfolio."},
+      {ico:"👴",text:"The world's population is ageing rapidly. By 2050, there will be 2 billion people over 60 globally — double today's figure. Every one of them will need more healthcare, more medication, and more medical devices. This is a structural growth story that will play out for decades."},
+      {ico:"🧬",text:"Sub-advised by BlackRock — the world's largest asset manager. The BGF World Healthscience Fund has over 20 years of continuous operation, navigating every market cycle from the dot-com crash to COVID-19 and beyond."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded"},
+      {year:1994,event:"BGF World Gold Fund launched by Merrill Lynch Investment Managers (now BlackRock)"},
+      {year:2001,event:"BGF World Healthscience Fund launched — capturing the emerging biotech and healthcare revolution"},
+      {year:2006,event:"BlackRock acquires Merrill Lynch Investment Managers, taking over the fund family"},
+      {year:2020,event:"COVID-19 pandemic — healthcare and biotech funds surge as medical innovation accelerates"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Money Market Fund":{
+    subFund:"Managed directly by Income Insurance Limited",
+    subAdvisor:"Income Insurance Limited (internal management)",
+    subAdvisorDesc:"The Money Market Fund is managed in-house by Income Insurance's own investment team. It invests exclusively in high-quality, short-duration Singapore-dollar money market instruments. This is the lowest-risk fund in the range, prioritising capital preservation and liquidity above all else.",
+    assetClass:"Money Market",geography:"Singapore",currency:"SGD",riskLevel:1,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To preserve capital and provide liquidity while earning a modest return through investment in high-quality, short-term SGD money market instruments.",
+    strategy:"Invests in Singapore government securities, AAA-rated bank deposits, commercial paper, and other short-term instruments with maturities typically under 12 months. Extremely low risk — typically used as a temporary 'safe harbour' during market uncertainty or while awaiting a better entry point into higher-growth funds.",
+    focus:["Capital Preservation","Liquidity","Zero Equity Risk"],
+    sellingPts:[
+      {ico:"🔒",text:"The safest fund in the range — your capital is highly protected. Ideal for cautious investors or as a temporary holding while deciding on longer-term investment strategy."},
+      {ico:"💧",text:"High liquidity means your money is accessible quickly if needed. A useful place to 'park' funds temporarily while evaluating other investment opportunities."},
+      {ico:"📋",text:"Often used as part of a broader ILP strategy — holding some allocation here provides stability while other funds (equities, bonds) pursue higher growth."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded as a co-operative to serve Singapore workers"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Takaful Fund":{
+    subFund:"Managed in accordance with Shariah principles",
+    subAdvisor:"Income Insurance Limited (with Shariah Supervisory Board oversight)",
+    subAdvisorDesc:"The Takaful Fund is structured under Islamic finance principles, supervised by a Shariah Supervisory Board of qualified Islamic scholars. It operates on the principle of mutual assistance (ta'awun) — participants contribute to a pooled fund and share in the benefits. All investments are Shariah-compliant, screened and approved by the board.",
+    assetClass:"Multi-Asset — Shariah Compliant",geography:"Global",currency:"SGD",riskLevel:2,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To provide long-term capital growth through investment in Shariah-compliant instruments, strictly adhering to Islamic finance principles.",
+    strategy:"Invests in halal equities (screened to exclude alcohol, tobacco, gambling, conventional financial services, weapons, and entertainment), sukuk (Islamic bonds), and Shariah-compliant money market instruments. Regular purification of any inadvertently non-compliant income is performed and donated to charity.",
+    focus:["Shariah Compliant","Islamic Finance","Ethical Investing"],
+    sellingPts:[
+      {ico:"☪️",text:"Fully Shariah-compliant investment — every holding is screened and approved by a qualified Shariah Supervisory Board. Invest with the confidence that your wealth grows in accordance with Islamic principles."},
+      {ico:"🤝",text:"Based on the Islamic principle of mutual assistance (ta'awun): all participants share in the benefits and risks together, without the element of riba (interest) or gharar (excessive uncertainty)."},
+      {ico:"❤️",text:"Ethical by design: excludes industries that conflict with Islamic values. For Muslim clients who want their wealth managed according to their faith, this is the appropriate vehicle within the Income ILP range."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:1995,event:"Islamic finance begins rapid global growth, with sukuk markets expanding across the Middle East, Malaysia, and Indonesia"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+};
+
+// ── Fund Detail Modal ─────────────────────────────────────────────────────────
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmTab="overview",_fdmChart=null;
+
+function riskPips(level){
+  return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
+}
+function colorPct(v){
+  if(v===null||v===undefined)return`<span style="color:var(--dim)">N/A</span>`;
+  const c=v>=0?"var(--green)":"var(--red)";
+  return`<span style="color:${c};font-weight:900;">${v>=0?"+":""}${v.toFixed(2)}%</span>`;
+}
+
+window.openFundDetail=(name)=>{
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmTab="overview";
+  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  const ov=document.getElementById("fdmOverlay");
+  if(!ov)return;
+  ov.style.display="flex";
+  renderFdmShell();
+  renderFdmBody();
+  // Pre-fetch performance data in background
+  fetchFdmData(name);
+};
+
+window.closeFundDetail=()=>{
+  const ov=document.getElementById("fdmOverlay");
+  if(ov)ov.style.display="none";
+  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  _fdmFund=null;_fdmData=null;
+};
+
+function fetchFdmData(name){
+  fetch(`/api/fund-detail?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(28000)})
+    .then(r=>r.json())
+    .then(data=>{
+      _fdmData=data;
+      // If user is on performance tab, re-render now that data arrived
+      if(_fdmTab==="performance")renderFdmBody();
+    })
+    .catch(e=>{_fdmData={error:e.message};if(_fdmTab==="performance")renderFdmBody();});
+}
+
+window.switchFdmTab=(tab)=>{
+  _fdmTab=tab;
+  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  renderFdmShell();
+  renderFdmBody();
+};
+
+window.selectFdmPeriod=(period)=>{
+  _fdmPeriod=period;
+  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  renderFdmBody();
+};
+
+function renderFdmShell(){
+  const info=FUND_DB[_fdmFund]||{};
+  const RISK_LABEL=["","Very Low","Low","Low-Medium","Medium","Medium-High","High","Very High"];
+  const ASSET_COLOR={"Fixed Income":"rgba(59,130,246,0.15)","Equity — Technology":"rgba(139,92,246,0.15)","Multi-Asset / Alternative":"rgba(245,158,11,0.12)","Money Market":"rgba(16,185,129,0.12)","Multi-Asset — Shariah Compliant":"rgba(16,185,129,0.12)"};
+  const badgeBg=ASSET_COLOR[info.assetClass]||"rgba(100,116,139,0.15)";
+  document.getElementById("fdmHdr").innerHTML=
+    `<div class="fdm-title">${esc(_fdmFund)}</div>
+     <div class="fdm-badges">
+       <span class="fdm-badge" style="background:${badgeBg};color:#e2e8f0;">${info.assetClass||"—"}</span>
+       <span class="fdm-badge" style="background:rgba(100,116,139,0.15);color:#cbd5e1;">🌍 ${info.geography||"—"}</span>
+       <span class="fdm-badge" style="background:rgba(100,116,139,0.15);color:#cbd5e1;">${info.currency||"—"}</span>
+       <span class="fdm-badge" style="background:rgba(239,68,68,0.1);color:#fca5a5;">Risk ${info.riskLevel||"—"}/7 · ${RISK_LABEL[info.riskLevel]||"—"}</span>
+     </div>`;
+  const TABS=[["overview","📋 Overview"],["performance","📈 Performance"],["history","📅 History"]];
+  document.getElementById("fdmTabs").innerHTML=
+    TABS.map(([k,v])=>`<button class="fdm-tab${_fdmTab===k?" active":""}" onclick="switchFdmTab('${k}')">${v}</button>`).join("");
+}
+
+function renderFdmBody(){
+  const el=document.getElementById("fdmBody");
+  if(!el)return;
+  if(_fdmTab==="overview")el.innerHTML=renderFdmOverview();
+  else if(_fdmTab==="performance")el.innerHTML=renderFdmPerformance();
+  else el.innerHTML=renderFdmHistory();
+  if(_fdmTab==="performance"&&_fdmData&&!_fdmData.error&&_fdmData.chartData){
+    setTimeout(()=>drawFdmChart(_fdmPeriod),30);
+  }
+}
+
+function renderFdmOverview(){
+  const info=FUND_DB[_fdmFund]||{};
+  let h="";
+  // Selling points
+  if(info.sellingPts&&info.sellingPts.length){
+    h+=`<div class="fdm-sec-hd">💡 Why Invest in This Fund?</div>`;
+    h+=`<div class="fdm-selling">`;
+    info.sellingPts.forEach(s=>{h+=`<div class="fdm-selling-pt"><span class="ico">${s.ico}</span>${esc(s.text)}</div>`;});
+    h+=`</div>`;
+  }
+  h+=`<div class="fdm-sec-hd">📋 Fund Facts</div>`;
+  h+=`<div class="fdm-kv"><span class="k">Sub-Fund</span><span class="v">${esc(info.subFund||"—")}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Sub-Advisor</span><span class="v">${esc(info.subAdvisor||"—")}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Asset Class</span><span class="v">${esc(info.assetClass||"—")}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Geography</span><span class="v">${esc(info.geography||"—")}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Currency</span><span class="v">${esc(info.currency||"—")}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Risk Level</span><span class="v">${riskPips(info.riskLevel||0)}</span></div>`;
+  h+=`<div class="fdm-kv"><span class="k">Distributions</span><span class="v">${esc(info.dividendFrequency||"—")}</span></div>`;
+  if(info.focus&&info.focus.length){
+    h+=`<div class="fdm-kv"><span class="k">Key Themes</span><span class="v"><div class="fdm-tags">${info.focus.map(f=>`<span class="fdm-tag">${esc(f)}</span>`).join("")}</div></span></div>`;
+  }
+  if(info.subAdvisorDesc){
+    h+=`<div class="fdm-sec-hd">🏛️ About the Sub-Advisor</div>`;
+    h+=`<div class="fdm-text">${esc(info.subAdvisorDesc)}</div>`;
+  }
+  h+=`<div class="fdm-sec-hd">🎯 Investment Objective</div>`;
+  h+=`<div class="fdm-text">${esc(info.objective||"Refer to fund factsheet.")}</div>`;
+  h+=`<div class="fdm-sec-hd">⚙️ Investment Strategy</div>`;
+  h+=`<div class="fdm-text">${esc(info.strategy||"Refer to fund factsheet.")}</div>`;
+  h+=`<p class="fdm-note">ⓘ Sub-fund and sub-advisor details are accurate as of the last update. Always refer to Income Insurance's latest fund factsheet for current information.</p>`;
+  return h;
+}
+
+function renderFdmPerformance(){
+  const PERIODS=["1M","3M","6M","1Y","3Y","5Y"];
+  let h="";
+  if(!_fdmData){
+    h+=`<div class="fdm-loading">⏳ Fetching live price history from Income's website...</div>`;
+    return h;
+  }
+  if(_fdmData.error){
+    h+=`<div class="fdm-err">⚠️ Could not load performance data.<br><small>${esc(_fdmData.error)}</small></div>`;
+    return h;
+  }
+  const perf=_fdmData.performance||{};
+  const latest=_fdmData.latest;
+  const oldest=_fdmData.oldestDate;
+  const total=_fdmData.totalEntries||0;
+  h+=`<div class="fdm-sec-hd">📊 Performance by Period (Bid Price Returns)</div>`;
+  h+=`<div class="fdm-perf-row">`;
+  PERIODS.forEach(p=>{
+    const v=perf[p];
+    const col=v===null||v===undefined?"var(--dim)":v>=0?"var(--green)":"var(--red)";
+    const txt=v===null||v===undefined?"N/A":`${v>=0?"+":""}${v.toFixed(2)}%`;
+    h+=`<div class="fdm-perf-cell${_fdmPeriod===p?" active":""}" onclick="selectFdmPeriod('${p}')">
+      <div class="fdm-perf-period">${p}</div>
+      <div class="fdm-perf-pct" style="color:${col};">${txt}</div>
+    </div>`;
+  });
+  h+=`</div>`;
+  if(latest)h+=`<div style="font-size:11px;color:var(--dim);margin-bottom:4px;">Latest price: <strong style="color:#e2e8f0;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}${oldest?` · History from ${oldest} (${total} entries)`:""}</div>`;
+  h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
+  // $10,000 scenario
+  const scenarios=[];
+  [["1 Year Ago","1Y",365],["3 Years Ago","3Y",1095],["5 Years Ago","5Y",1825]].forEach(([lbl,k])=>{
+    const v=perf[k];
+    if(v!==null&&v!==undefined)scenarios.push({lbl,v,worth:10000*(1+v/100)});
+  });
+  if(scenarios.length){
+    h+=`<div class="fdm-scenario">
+      <div class="fdm-scenario-hd">💰 If You Had Invested SGD $10,000...</div>`;
+    scenarios.forEach(s=>{
+      const gain=s.worth-10000;
+      const col=gain>=0?"var(--green)":"var(--red)";
+      h+=`<div class="fdm-scenario-row">
+        <span style="color:var(--dim);">${esc(s.lbl)}</span>
+        <span>
+          <strong style="color:#e2e8f0;">${$f(s.worth)}</strong>
+          <span style="color:${col};font-size:11px;margin-left:6px;">${gain>=0?"+":"-"}${$f(Math.abs(gain))}</span>
+        </span>
+      </div>`;
+    });
+    h+=`<div style="font-size:10px;color:var(--dim);margin-top:8px;">⚠️ Based on bid price movement only. Past performance does not guarantee future results. Currency fluctuations apply.</div>`;
+    h+=`</div>`;
+  }
+  h+=`<p class="fdm-note">Performance figures are calculated from bid price data sourced from Income Insurance's website. They reflect price-only returns and do not include distribution reinvestment.</p>`;
+  return h;
+}
+
+function renderFdmHistory(){
+  const info=FUND_DB[_fdmFund]||{};
+  const ms=(info.milestones||[]).slice().sort((a,b)=>a.year-b.year);
+  if(!ms.length)return`<div class="fdm-loading">No history data available for this fund.</div>`;
+  return`<div class="fdm-sec-hd">📅 Key Milestones</div>
+    <div class="fdm-timeline">
+    ${ms.map(m=>`<div class="fdm-tl-item">
+      <div class="fdm-tl-dot"></div>
+      <div class="fdm-tl-year">${m.year}</div>
+      <div class="fdm-tl-text">${esc(m.event)}</div>
+    </div>`).join("")}
+    </div>
+    <p class="fdm-note">Historical milestones are indicative. Refer to Income Insurance's official publications for complete fund history.</p>`;
+}
+
+function drawFdmChart(period){
+  const canvas=document.getElementById("fdmChartCanvas");
+  if(!canvas||!_fdmData||!_fdmData.chartData)return;
+  const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
+  const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
+  const all=_fdmData.chartData;
+  const filtered=all.filter(e=>{
+    const[d,m,y]=e.date.split("/");
+    return new Date(`${y}-${m}-${d}`)>=cutoff;
+  });
+  const data=filtered.length>=2?filtered:all;
+  const prices=data.map(e=>e.price);
+  const labels=data.map(e=>{
+    const[d,m,y]=e.date.split("/");
+    return new Date(`${y}-${m}-${d}`).toLocaleDateString("en-SG",{day:"numeric",month:"short",year:data.length>180?"2-digit":"numeric"});
+  });
+  const first=prices[0],last=prices[prices.length-1];
+  const isUp=last>=first;
+  const col=isUp?"#10b981":"#ef4444";
+  const colBg=isUp?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)";
+  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  _fdmChart=new Chart(canvas,{
+    type:"line",
+    data:{labels,datasets:[{data:prices,borderColor:col,backgroundColor:colBg,borderWidth:2,fill:true,pointRadius:data.length>120?0:3,tension:0.3}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`$${c.raw.toFixed(6)}`}}},
+      scales:{
+        x:{ticks:{maxTicksLimit:7,color:"#6b7280",maxRotation:0},grid:{color:"rgba(255,255,255,0.04)"}},
+        y:{ticks:{color:"#6b7280",callback:v=>"$"+v.toFixed(4)},grid:{color:"rgba(255,255,255,0.04)"}}
+      }
+    }
+  });
+}
 
 // Start app directly — no login required
 startListeners();
