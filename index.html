@@ -129,15 +129,15 @@ body{
   border-bottom:2px solid transparent;transition:color 0.2s,border-color 0.2s;
   position:relative;
 }
-.tab-btn.active{color:#38bdf8;}
+.tab-btn.active{color:#06b6d4;}
 .tab-btn.active::before{
   content:'';position:absolute;inset:-1px;padding:1.5px;
-  background:conic-gradient(from var(--ba),#0ea5e9 0deg,transparent 60deg,transparent 150deg,#38bdf8 180deg,transparent 240deg,transparent 330deg,#0ea5e9 360deg);
+  background:conic-gradient(from var(--ba),#f59e0b 0deg,transparent 60deg,transparent 150deg,#06b6d4 180deg,transparent 240deg,transparent 330deg,#f59e0b 360deg);
   -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
   -webkit-mask-composite:xor;mask-composite:exclude;
   border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;
 }
-.tab-btn:hover:not(.active){color:var(--muted);border-bottom-color:rgba(14,165,233,0.35);}
+.tab-btn:hover:not(.active){color:var(--muted);border-bottom-color:rgba(6,182,212,0.35);}
 
 /* ── Content ── */
 .content{padding:20px 24px;max-width:980px;margin:0 auto;position:relative;z-index:1;}
@@ -427,15 +427,15 @@ body{
 }
 /* ── Fund Detail Modal ── */
 .fdm-overlay{position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.82);display:none;align-items:center;justify-content:center;padding:12px;}
-.fdm-box{background:var(--bg2);border-radius:18px;border:1px solid var(--border);width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 80px rgba(0,0,0,0.9);position:relative;}
+.fdm-box{background:var(--bg2);border-radius:18px;border:1px solid var(--border);width:100%;max-width:700px;height:min(88vh,720px);display:flex;flex-direction:column;box-shadow:0 20px 80px rgba(0,0,0,0.9);position:relative;}
 .fdm-hdr{padding:20px 22px 0;border-radius:18px 18px 0 0;flex-shrink:0;}
 .fdm-title{font-size:17px;font-weight:900;color:#fff;margin-bottom:8px;padding-right:44px;line-height:1.3;}
 .fdm-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .fdm-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:0.04em;}
 .fdm-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
 .fdm-tab{padding:10px 18px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;transition:all 0.15s;position:relative;}
-.fdm-tab.active{color:#a78bfa;border-bottom-color:#8b5cf6;}
-.fdm-tab.active::before{content:'';position:absolute;inset:-1px;padding:1.5px;background:conic-gradient(from var(--ba),#8b5cf6 0deg,transparent 60deg,transparent 150deg,#a78bfa 180deg,transparent 240deg,transparent 330deg,#8b5cf6 360deg);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;}
+.fdm-tab.active{color:#a78bfa;border-bottom-color:#a855f7;}
+.fdm-tab.active::before{content:'';position:absolute;inset:-1px;padding:1.5px;background:conic-gradient(from var(--ba),#a855f7 0deg,transparent 60deg,transparent 150deg,#f43f5e 180deg,transparent 240deg,transparent 330deg,#a855f7 360deg);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;border-radius:4px 4px 0 0;animation:borderSpin 2.5s linear infinite;pointer-events:none;}
 .fdm-body{padding:18px 22px 22px;overflow-y:auto;flex:1;}
 .fdm-alloc-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
 .fdm-alloc-label{font-size:12px;color:#cbd5e1;width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1854,6 +1854,18 @@ const FUND_DB={
     strategy:"Invests primarily in global equities (~89% stocks) with a focus on large-cap growth companies worldwide. The portfolio manager uses an absolute return philosophy — seeking to grow wealth consistently over time. NVIDIA, Roblox, Siemens Energy, JPMorgan Chase, and Microsoft have historically been among the top holdings.",
     focus:["Global Equity","Large Cap Growth","Absolute Return"],
     annualizedReturns:{asOf:"11/06/2026",YTD:14.72,"1M":-1.36,"1Y":41.31,"3Y":28.54,"5Y":16.07},
+    staticHoldings:{
+      asOf:"31/05/2026",source:"FundSingapore / Morningstar",
+      assetAlloc:{"Equity":89.23,"Cash":10.77},
+      geoAlloc:{"United States":50.09,"Asia - Developed":24.07,"Eurozone":12.41,"Asia - Emerging":9.66,"Europe ex Euro":2.01,"Japan":1.13,"Canada":0.63},
+      sectorAlloc:{"Technology":40.10,"Financial Services":22.07,"Industrials":11.95,"Communication":11.36,"Consumer Cyclical":7.37,"Basic Materials":3.10,"Consumer Defensive":2.01,"Utilities":1.42,"Energy":0.63},
+      holdings:[
+        {name:"NVIDIA CORP",pct:5.30},{name:"ROBLOX CORP CL A",pct:5.04},{name:"SIEMENS ENERGY AG",pct:4.58},
+        {name:"JPMORGAN CHASE & CO",pct:4.57},{name:"MICROSOFT CORP",pct:3.98},{name:"HEIDELBERG MATERIALS AG",pct:3.83},
+        {name:"META PLATFORMS INC CL A",pct:3.70},{name:"CATERPILLAR INC",pct:3.60},{name:"NETFLIX INC",pct:3.50},
+        {name:"ROCKWELL AUTOMATION INC",pct:3.32}
+      ]
+    },
     sellingPts:[
       {ico:"🏛️",text:"Sub-advised by Fullerton Fund Management — a Temasek-owned Singapore asset manager with a 5-star Morningstar rating. Managed by the same portfolio manager since 2010, delivering over 41% in just the past year (as of Jun 2026)."},
       {ico:"📈",text:"1-year return of 41.31% and 3-year annualised return of 28.54% — far exceeding the typical 2–4% offered by banks or fixed deposits. This is what your money can do when professionally managed in global markets."},
@@ -2477,17 +2489,27 @@ function renderFdmHoldings(){
   }
 
   if(h.error){
+    const info=FUND_DB[_fdmFund]||{};
+    if(info.staticHoldings) return renderHoldingsData(info.staticHoldings,`📋 As of ${info.staticHoldings.asOf} · Source: ${info.staticHoldings.source}`);
     return`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">⚠️ Could not load holdings data. Please try again later.</div>`;
   }
-  let out="";
 
-  // Portfolio date note
-  if(h.portfolioDate){
-    out+=`<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">📅 Portfolio data as of ${h.portfolioDate} · Source: Morningstar</div>`;
+  // If Morningstar data is incomplete (no sector or geo), fall back to static factsheet data
+  {
+    const info=FUND_DB[_fdmFund]||{};
+    const msComplete=(h.sectorAlloc&&Object.keys(h.sectorAlloc).length>0)||(h.geoAlloc&&Object.keys(h.geoAlloc).length>0)||(h.holdings&&h.holdings.length>0);
+    if(!msComplete&&info.staticHoldings) return renderHoldingsData(info.staticHoldings,`📋 As of ${info.staticHoldings.asOf} · Source: ${info.staticHoldings.source}`);
   }
 
+  return renderHoldingsData(h,`📅 Portfolio data as of ${h.portfolioDate||"?"} · Source: Morningstar`);
+}
+
+function renderHoldingsData(h,sourceLabel){
+  let out="";
+  out+=`<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">${sourceLabel}</div>`;
+
   // ── Asset Allocation ──
-  const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6"};
+  const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6","Stock":"#f59e0b"};
   if(h.assetAlloc&&Object.keys(h.assetAlloc).length){
     out+=`<div class="fdm-sec-hd">🏦 Asset Allocation</div>`;
     const sorted=Object.entries(h.assetAlloc).sort((a,b)=>b[1]-a[1]);
@@ -2503,7 +2525,12 @@ function renderFdmHoldings(){
   }
 
   // ── Geographic Allocation ──
-  const geoColors={"Americas":"#3b82f6","Greater Asia":"#f59e0b","Greater Europe":"#8b5cf6","Middle East/Africa":"#10b981"};
+  const geoColors={
+    "Americas":"#3b82f6","Greater Asia":"#f59e0b","Greater Europe":"#8b5cf6","Middle East/Africa":"#10b981",
+    "United States":"#3b82f6","Asia - Developed":"#f59e0b","Asia - Emerging":"#06b6d4",
+    "Eurozone":"#8b5cf6","Europe ex Euro":"#a855f7","Japan":"#22c55e","Canada":"#64748b",
+    "United Kingdom":"#ec4899","China":"#ef4444","India":"#f97316",
+  };
   if(h.geoAlloc&&Object.keys(h.geoAlloc).length){
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🌍 Geographic Allocation</div>`;
     const sorted=Object.entries(h.geoAlloc).sort((a,b)=>b[1]-a[1]);
@@ -2547,10 +2574,10 @@ function renderFdmHoldings(){
       </div>`;
     });
   } else if(!h.assetAlloc||!Object.keys(h.assetAlloc).length){
-    out+=`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No holdings data returned from Morningstar.<br>Check the latest fund factsheet for current holdings.</div>`;
+    out+=`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No allocation data available. Please refer to the latest fund factsheet.</div>`;
   } else {
     out+=`<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:#94a3b8;line-height:1.6;">
-      ℹ️ Individual stock/bond holdings are not available via Morningstar screener API. Asset and sector allocation above are sourced from Morningstar. For individual holdings, refer to the latest fund factsheet.
+      ℹ️ Individual holdings not available from this data source. For full holdings list, refer to the latest fund factsheet.
     </div>`;
   }
 
