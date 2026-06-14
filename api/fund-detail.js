@@ -12,6 +12,8 @@ const FUND_SLUGS = {
   "Income Global Technology Fund":              "income-global-technology-fund",
   "Income India Equity Fund":                   "income-india-equity-fund",
   "Income Regional China Fund":                 "income-regional-china-fund",
+  "Income Singapore Dividend Equity Fund":      "income-singapore-dividend-equity-fund",
+  "Income US Dividend and Growth Fund":         "income-us-dividend-and-growth-fund",
   "Income US Large Cap Equity Fund":            "income-us-large-cap-equity-fund",
   "Income World Healthscience Fund":            "income-world-healthscience-fund",
   "Money Market Fund":                          "money-market-fund",
