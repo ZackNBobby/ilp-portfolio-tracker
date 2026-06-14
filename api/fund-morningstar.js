@@ -15,9 +15,9 @@ const FUND_MAP = {
     note: "Fullerton Lux Funds – Global Absolute Alpha A SGD Cap",
   },
   "Income Global Dynamic Bond Fund": {
-    secId: "F00000IRSW",
-    searchTerm: "PIMCO GIS Dynamic Bond E Inc",
-    note: "PIMCO GIS Dynamic Bond Fund",
+    secId: "F00000PHFD",
+    searchTerm: "PIMCO GIS Income E SGD Hedged Inc",
+    note: "PIMCO GIS Income Fund E Income SGD (Hedged)",
   },
   "Income Global Gold Equity Fund": {
     secId: "F0GBR04AR8",

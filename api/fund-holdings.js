@@ -8,7 +8,7 @@ const UNIVERSE = "FOSGP%24%24ALL";
 // secId → { secId, universe? } — universe defaults to UNIVERSE if not set
 const FUND_SECIDS = {
   "Income Global Absolute Alpha Fund":          { secId: "F000016EDC" },
-  "Income Global Dynamic Bond Fund":            { secId: "F00000IRSW" },
+  "Income Global Dynamic Bond Fund":            { secId: "F00000PHFD" },
   "Income Global Gold Equity Fund":             { secId: "F0GBR04AR8" },
   "Income World Healthscience Fund":            { secId: "F0GBR04K8L" },
   "Income India Equity Fund":                   { secId: "F00000JTUS" },

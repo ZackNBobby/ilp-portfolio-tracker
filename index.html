@@ -1905,23 +1905,38 @@ const FUND_DB={
     ]
   },
   "Income Global Dynamic Bond Fund":{
-    subFund:"PIMCO GIS Dynamic Bond Fund",
+    subFund:"PIMCO GIS Income Fund SGD (Hedged)",
     subAdvisor:"PIMCO (Pacific Investment Management Company LLC)",
     subAdvisorDesc:"PIMCO is the world's premier active fixed income manager, overseeing approximately US$2 trillion in assets. Founded in 1971 by Bill Gross — who pioneered the concept of actively managed bonds — PIMCO is trusted by central banks, sovereign wealth funds, and institutional investors in over 50 countries. Their macroeconomic research team is widely regarded as one of the most sophisticated in finance.",
-    assetClass:"Fixed Income",geography:"Global",currency:"USD",riskLevel:4,
-    dividendFrequency:"Semi-annual distributions (available for reinvestment back into the fund)",
-    objective:"To achieve maximum total return through active investment across global fixed income markets, while preserving capital and managing risk prudently.",
-    strategy:"Flexibly allocates across government bonds, investment-grade and high-yield corporate bonds, mortgage-backed securities, and emerging market debt. Duration and credit exposure are actively managed based on PIMCO's macroeconomic outlook — allowing the fund to benefit from both rising and falling rate environments.",
-    focus:["Global Fixed Income","Active Management","Regular Distributions"],
+    assetClass:"Fixed Income",geography:"Global",currency:"SGD (Hedged)",riskLevel:4,
+    dividendFrequency:"Monthly distributions",
+    objective:"To seek high current income by investing in a diversified portfolio of fixed income instruments across global markets, with capital appreciation as a secondary objective.",
+    strategy:"The world's largest actively managed bond fund (~US$124 billion AUM), managed by PIMCO's Dan Ivascyn. Invests across agency mortgage-backed securities (largest allocation), government bonds, investment-grade and high-yield corporate credit, and emerging market debt. The SGD-hedged share class eliminates currency risk for Singapore investors.",
+    focus:["Global Fixed Income","Monthly Income","Capital Preservation"],
+    annualizedReturns:{asOf:"31/03/2026","1M":-2.81,"3M":-1.63,"6M":-0.26,"1Y":2.57,"3Y":4.04,"5Y":1.34},
+    staticHoldings:{
+      asOf:"31/03/2026",source:"PIMCO Factsheet",
+      assetAlloc:{"Bonds":88,"Cash & Equivalents":12},
+      sectorAlloc:{"Agency MBS":36,"Government Related":14,"Investment Grade Credit":12,"Cash & Equivalents":12,"Emerging Markets":6,"High Yield Credit":5,"CMBS":4,"ABS":3,"Non-US RMBS":3,"Non-Agency MBS":3,"Bank Loan":1},
+      geoAlloc:{"United States":77.9,"United Kingdom":11.9,"Australia":5.3,"Peru":1.1,"European Union":1.1,"Brazil":1.1,"South Africa":1.0,"Colombia":0.9,"Mexico":0.5},
+      holdings:[
+        {name:"FNMA TBA 6.0% FEB 30YR",pct:4.7},{name:"FNMA TBA 6.5% FEB 30YR",pct:3.4},
+        {name:"FNMA TBA 5.5% FEB 30YR",pct:3.2},{name:"FNMA TBA 6.0% MAR 30YR",pct:3.2},
+        {name:"UMBS 30YR 5.0 TBA",pct:2.4},{name:"FNMA TBA 4.0% FEB 30YR",pct:1.8},
+        {name:"FNMA TBA 6.5% MAR 30YR",pct:1.7},{name:"FNMA TBA 6.5% JAN 30YR",pct:1.2},
+        {name:"US TREASURY INFLATE PROT BD",pct:1.2},{name:"FNMA TBA 4.5% FEB 30YR",pct:1.2}
+      ]
+    },
     sellingPts:[
-      {ico:"🏆",text:"Managed by PIMCO — the undisputed world leader in active bond management with ~US$2 trillion under management. The same expertise used by global pension funds and central banks, now accessible to you."},
-      {ico:"💰",text:"Semi-annual dividends mean your investment generates regular cash flows. When reinvested (as units), these compounding returns significantly accelerate wealth growth over time — this is how the wealthy make money work for them."},
+      {ico:"🏆",text:"Managed by PIMCO — the undisputed world leader in active bond management. The PIMCO Income Fund is the world's largest actively managed bond fund at ~US$124 billion, run by Dan Ivascyn, widely regarded as the best fixed income manager alive. The same expertise used by global pension funds and central banks, now accessible to you."},
+      {ico:"💰",text:"Monthly dividends mean your investment generates regular cash flows every single month. When reinvested (as units), these compounding returns significantly accelerate wealth growth over time — this is how the wealthy make money work for them."},
       {ico:"⚖️",text:"Bonds provide stability that equity funds cannot. When stock markets fall sharply, quality bond portfolios often hold steady or rise — making this a valuable ballast in any investment portfolio."},
     ],
     milestones:[
       {year:1970,event:"NTUC Income founded in Singapore"},
       {year:1971,event:"PIMCO founded by Bill Gross in Newport Beach, California — revolutionising fixed income with active bond management"},
       {year:2000,event:"PIMCO acquired by Allianz SE, gaining backing from one of the world's largest financial groups"},
+      {year:2012,event:"PIMCO Income Fund launched by Dan Ivascyn — becomes the world's largest actively managed bond fund"},
       {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
     ]
   },
@@ -2178,7 +2193,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTimeseries=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null;
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2190,14 +2205,16 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
   ov.style.display="flex";
   renderFdmShell();
   renderFdmBody();
-  // Load stored Firestore price history (builds over time as prices are fetched)
+  // Fetch 6-year daily price history from Morningstar (primary chart source)
+  fetchFdmTimeseries(name);
+  // Load stored Firestore price history (fallback / supplements timeseries)
   loadFdmHistory(name);
   // Fetch live chart data from Income's website via Vercel
   fetchFdmData(name);
@@ -2206,6 +2223,16 @@ window.openFundDetail=(name)=>{
   // Fetch Morningstar holdings / allocation data
   fetchFdmHoldings(name);
 };
+
+function fetchFdmTimeseries(name){
+  fetch(`/api/fund-timeseries?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(20000)})
+    .then(r=>r.json())
+    .then(data=>{
+      _fdmTimeseries=(data.prices&&data.prices.length>=2)?data:null;
+      if(_fdmTab==="performance")renderFdmBody();
+    })
+    .catch(()=>{ _fdmTimeseries=null; });
+}
 
 async function loadFdmHistory(name){
   try{
@@ -2243,7 +2270,7 @@ window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
-  _fdmFund=null;_fdmData=null;_fdmMStar=null;_fdmHoldings=null;
+  _fdmFund=null;_fdmData=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;
 };
 
 function fetchFdmData(name){
@@ -2318,9 +2345,10 @@ function renderFdmBody(){
   else if(_fdmTab==="holdings")el.innerHTML=renderFdmHoldings();
   else el.innerHTML=renderFdmHistory();
   if(_fdmTab==="performance"){
-    const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+    const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
     const hasStored=_fdmHistory&&_fdmHistory.length>=2;
-    if(hasLive||hasStored)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
+    const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+    if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
   }
 }
 
@@ -2422,16 +2450,38 @@ function renderFdmPerformance(){
     if(perfSource)h+=`<div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${perfSource}</div>`;
   }
 
-  // Price chart (from Vercel live data if available)
-  if(!_fdmData&&_fdmHistory===null){
-    h+=`<div class="fdm-loading" style="padding:20px;">⏳ Fetching price chart from Income's website...</div>`;
-  }else if(_fdmData&&!_fdmData.error&&_fdmData.chartData){
+  // Price chart — priority: Morningstar timeseries > Firestore history > live 30-day
+  const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
+  const hasStored=_fdmHistory&&_fdmHistory.length>=2;
+  if(!hasTS&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
+    h+=`<div class="fdm-loading" style="padding:20px;">⏳ Loading price chart...</div>`;
+  }else if(hasTS||hasStored||(_fdmData&&!_fdmData.error&&_fdmData.chartData)){
     if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest bid price: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
+    // Calculate what will actually be shown (mirrors drawFdmChart priority)
+    const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825};
+    const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
+    let chartSrc=null,chartFmt="iso";
+    if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";}
+    else if(hasStored){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else{chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    const toMs=d=>chartFmt==="iso"?new Date(d.date).getTime():new Date(d.date.split("/").reverse().join("-")).getTime();
+    const inPeriod=chartSrc.filter(e=>toMs(e)>=cutoffMs);
+    const shown=inPeriod.length>=2?inPeriod:chartSrc;
+    const getDate=e=>e.date;
+    const oldest=getDate(shown[0]),newest=getDate(shown[shown.length-1]);
+    const insufficient=inPeriod.length<2;
     h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
-    h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">Price chart shows last 30 days from Income's website. Press ⟳ Fetch regularly to build long-term history.</div>`;
-  }else if(_fdmHistory&&_fdmHistory.length>=2){
-    // Build chart from stored history
-    h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
+    h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
+    if(hasTS){
+      h+=`📈 ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest}`;
+      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Showing all available — fund has less than ${_fdmPeriod} of history</span>`;
+    }else if(hasStored){
+      h+=`Showing: ${oldest} – ${newest}`;
+      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Not enough history for ${_fdmPeriod} — showing all ${_fdmHistory.length} stored points</span>`;
+    }else{
+      h+=`Showing last 30 days from Income's website.`;
+    }
+    h+=`</div>`;
   }else if(_fdmData&&_fdmData.error){
     h+=`<div class="fdm-err">⚠️ Chart unavailable: ${esc(_fdmData.error)}</div>`;
   }
@@ -2530,6 +2580,9 @@ function renderHoldingsData(h,sourceLabel){
     "United States":"#3b82f6","Asia - Developed":"#f59e0b","Asia - Emerging":"#06b6d4",
     "Eurozone":"#8b5cf6","Europe ex Euro":"#a855f7","Japan":"#22c55e","Canada":"#64748b",
     "United Kingdom":"#ec4899","China":"#ef4444","India":"#f97316",
+    "Australia":"#10b981","Germany":"#8b5cf6","European Union":"#7c3aed",
+    "Brazil":"#22c55e","South Africa":"#f59e0b","Mexico":"#ef4444",
+    "Peru":"#06b6d4","Colombia":"#a855f7","Singapore":"#3b82f6",
   };
   if(h.geoAlloc&&Object.keys(h.geoAlloc).length){
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🌍 Geographic Allocation</div>`;
@@ -2546,7 +2599,15 @@ function renderHoldingsData(h,sourceLabel){
   }
 
   // ── Sector Allocation ──
-  const sectorColors={"Technology":"#8b5cf6","Healthcare":"#10b981","Financial Services":"#3b82f6","Consumer Cyclical":"#f59e0b","Communication":"#06b6d4","Industrials":"#64748b","Consumer Defensive":"#22c55e","Energy":"#ef4444","Basic Materials":"#f97316","Real Estate":"#ec4899","Utilities":"#6366f1"};
+  const sectorColors={
+    "Technology":"#8b5cf6","Healthcare":"#10b981","Financial Services":"#3b82f6","Consumer Cyclical":"#f59e0b",
+    "Communication":"#06b6d4","Industrials":"#64748b","Consumer Defensive":"#22c55e","Energy":"#ef4444",
+    "Basic Materials":"#f97316","Real Estate":"#ec4899","Utilities":"#6366f1",
+    // Bond sector types (PIMCO Income Fund and other fixed income funds)
+    "Agency MBS":"#3b82f6","Government Related":"#22c55e","Investment Grade Credit":"#f59e0b",
+    "Cash & Equivalents":"#10b981","High Yield Credit":"#ef4444","Emerging Markets":"#f97316",
+    "CMBS":"#8b5cf6","ABS":"#06b6d4","Non-US RMBS":"#64748b","Non-Agency MBS":"#a855f7","Bank Loan":"#ec4899",
+  };
   if(h.sectorAlloc&&Object.keys(h.sectorAlloc).length){
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">📊 Sector Allocation</div>`;
     const sorted=Object.entries(h.sectorAlloc).sort((a,b)=>b[1]-a[1]);
@@ -2602,13 +2663,17 @@ function renderFdmHistory(){
 function drawFdmChart(period){
   const canvas=document.getElementById("fdmChartCanvas");
   if(!canvas)return;
-  // Use live chart data if available; fall back to stored Firestore history
-  if(_fdmData&&!_fdmData.error&&_fdmData.chartData)return _drawChart(canvas,_fdmData.chartData,period,"dmy");
+  // 1. Morningstar timeseries — 6 years daily, best source for period filtering
+  if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
+    return _drawChart(canvas,_fdmTimeseries.prices,period,"iso");
+  }
+  // 2. Stored Firestore history — accumulates over time
   if(_fdmHistory&&_fdmHistory.length>=2){
-    // Convert stored {date:"YYYY-MM-DD",price} to chart format, oldest first
     const hist=_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price}));
     return _drawChart(canvas,hist,period,"iso");
   }
+  // 3. Live 30-day data from Income's website
+  if(_fdmData&&!_fdmData.error&&_fdmData.chartData)return _drawChart(canvas,_fdmData.chartData,period,"dmy");
 }
 function _drawChart(canvas,chartData,period,fmt){
   if(!chartData||!chartData.length)return;
