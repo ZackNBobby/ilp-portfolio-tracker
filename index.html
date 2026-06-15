@@ -2460,6 +2460,65 @@ window.switchFdmTab=(tab)=>{
   renderFdmBody();
 };
 
+// ── Investment scenario calculator ──
+window._fdmCurrentPerf=null;
+window.updateScenario=function(){
+  const inp=document.getElementById("scenarioAmt");
+  const rowsEl=document.getElementById("scenarioRows");
+  if(!inp||!rowsEl||!window._fdmCurrentPerf)return;
+  const amount=Math.max(parseFloat(inp.value)||10000,0);
+  const perf=window._fdmCurrentPerf;
+
+  // 1Y = total 1-year return; 3Y and 5Y = annualized (from Morningstar ReturnM36/M60)
+  const periods=[
+    {lbl:"1 Year Ago",key:"1Y",years:1,annualized:false},
+    {lbl:"3 Years Ago",key:"3Y",years:3,annualized:true},
+    {lbl:"5 Years Ago",key:"5Y",years:5,annualized:true},
+  ];
+
+  const fmt=n=>"$"+Math.round(n).toLocaleString("en-SG");
+  const fmtDiff=(n,always)=>(n>=0?"+":"-")+"$"+Math.round(Math.abs(n)).toLocaleString("en-SG");
+
+  let html="";
+  for(const{lbl,key,years,annualized}of periods){
+    const v=perf[key];
+    if(v==null)continue;
+    const fundVal=annualized?amount*Math.pow(1+v/100,years):amount*(1+v/100);
+    const fundGain=fundVal-amount;
+    const bankVal=amount*Math.pow(1.0005,years);
+    const bankGain=bankVal-amount;
+    const inflVal=amount*Math.pow(1.03,years);
+    const inflNeed=inflVal-amount;
+    const beatInfl=fundGain>=inflNeed;
+    const fcol=beatInfl?"var(--green)":"#f97316";
+
+    html+=`<div style="margin-bottom:8px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;letter-spacing:0.5px;">${lbl}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:9px;color:var(--green);font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">THIS FUND</div>
+          <div style="font-size:15px;font-weight:700;color:#f1f5f9;">${fmt(fundVal)}</div>
+          <div style="font-size:11px;color:${fcol};">${fmtDiff(fundGain)}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;color:#475569;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">BANK 0.05%</div>
+          <div style="font-size:15px;font-weight:700;color:#475569;">${fmt(bankVal)}</div>
+          <div style="font-size:11px;color:#475569;">${fmtDiff(bankGain)}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;color:#f97316;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">INFLATION 3%</div>
+          <div style="font-size:15px;font-weight:700;color:#f97316;">${fmt(inflVal)}</div>
+          <div style="font-size:11px;color:#6b7280;">to break even</div>
+        </div>
+      </div>
+      <div style="margin-top:7px;font-size:11px;color:${beatInfl?"var(--green)":"#f97316"};">
+        ${beatInfl?`✅ Beat inflation by ${fmtDiff(fundGain-inflNeed)}`:`⚠️ Below inflation — real purchasing power loss of ${fmt(inflNeed-fundGain)}`}
+      </div>
+    </div>`;
+  }
+  rowsEl.innerHTML=html||`<div style="color:#64748b;font-size:12px;padding:8px 0;">No data available for scenario calculation.</div>`;
+};
+
 window.selectFdmPeriod=(period)=>{
   _fdmPeriod=period;
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
@@ -2496,6 +2555,7 @@ function renderFdmBody(){
     const hasStored=_fdmHistory&&_fdmHistory.length>=2;
     const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
     if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
+    setTimeout(()=>window.updateScenario&&window.updateScenario(),30);
   }
 }
 
@@ -2633,29 +2693,31 @@ function renderFdmPerformance(){
     h+=`<div class="fdm-err">⚠️ Chart unavailable: ${esc(_fdmData.error)}</div>`;
   }
 
-  // $10,000 scenario
+  // Investment scenario calculator (interactive amount + bank + inflation comparison)
   if(perf){
-    const scenarios=[];
-    [["1 Year Ago","1Y"],["3 Years Ago","3Y"],["5 Years Ago","5Y"]].forEach(([lbl,k])=>{
-      const v=perf[k];
-      if(v!==null&&v!==undefined)scenarios.push({lbl,v,worth:10000*(1+v/100)});
-    });
-    if(scenarios.length){
+    window._fdmCurrentPerf=perf;
+    const hasSomeData=[perf["1Y"],perf["3Y"],perf["5Y"]].some(v=>v!=null);
+    if(hasSomeData){
       h+=`<div class="fdm-scenario">
-        <div class="fdm-scenario-hd">💰 If You Had Invested SGD $10,000...</div>`;
-      scenarios.forEach(s=>{
-        const gain=s.worth-10000;
-        const col=gain>=0?"var(--green)":"var(--red)";
-        h+=`<div class="fdm-scenario-row">
-          <span style="color:#94a3b8;">${esc(s.lbl)}</span>
-          <span>
-            <strong style="color:#f1f5f9;">${$f(s.worth)}</strong>
-            <span style="color:${col};font-size:12px;margin-left:6px;">${gain>=0?"+":"-"}${$f(Math.abs(gain))}</span>
-          </span>
-        </div>`;
-      });
-      h+=`<div style="font-size:11px;color:#6b7280;margin-top:8px;">⚠️ Based on bid/NAV price movement only. Past performance does not guarantee future results.</div>`;
-      h+=`</div>`;
+        <div class="fdm-scenario-hd" style="margin-bottom:10px;">💰 Investment Scenario Calculator</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:#94a3b8;">If you had invested</span>
+          <div style="display:flex;align-items:center;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:5px 10px;gap:2px;">
+            <span style="color:#94a3b8;font-size:13px;">SGD $</span>
+            <input type="number" id="scenarioAmt" value="10000" min="100" step="1000"
+              style="background:transparent;border:none;outline:none;color:#f1f5f9;font-size:15px;font-weight:700;width:90px;"
+              oninput="window.updateScenario&&window.updateScenario()">
+          </div>
+          <span style="font-size:12px;color:#94a3b8;">in this fund:</span>
+        </div>
+        <div id="scenarioRows"></div>
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(239,68,68,0.06);border-left:3px solid rgba(239,68,68,0.5);border-radius:0 8px 8px 0;font-size:12px;color:#94a3b8;line-height:1.6;">
+          🏦 Singapore bank savings accounts offer just <strong style="color:#f1f5f9;">0.05% p.a.</strong> — that's $5 a year on $10,000.
+          Meanwhile, Singapore's inflation erodes purchasing power at around <strong style="color:#f1f5f9;">3% p.a.</strong>
+          Money sitting in a bank is quietly losing value every year.
+        </div>
+        <div style="font-size:10px;color:#4b5563;margin-top:8px;">⚠️ Past performance does not guarantee future results. 3Y and 5Y are annualised returns.</div>
+      </div>`;
     }
   }
 
