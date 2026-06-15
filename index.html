@@ -2340,7 +2340,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTimeseries=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTimeseries=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null,_fdmChartUnd=null,_fdmChartTab="income";
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2352,8 +2352,9 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";_fdmChartTab="income";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
   ov.style.display="flex";
@@ -2417,6 +2418,7 @@ window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   _fdmFund=null;_fdmData=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;
 };
 
@@ -2456,6 +2458,7 @@ function fetchFdmHoldings(name){
 window.switchFdmTab=(tab)=>{
   _fdmTab=tab;
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   renderFdmShell();
   renderFdmBody();
 };
@@ -2528,7 +2531,22 @@ window.updateScenario=function(){
 window.selectFdmPeriod=(period)=>{
   _fdmPeriod=period;
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   renderFdmBody();
+};
+
+window.selectFdmChartTab=(tab)=>{
+  _fdmChartTab=tab;
+  const wi=document.getElementById("fdmChartWrapIncome");
+  const wu=document.getElementById("fdmChartWrapUnd");
+  const bi=document.getElementById("fdmTabBtnIncome");
+  const bu=document.getElementById("fdmTabBtnUnd");
+  if(wi)wi.style.display=tab==="income"?"block":"none";
+  if(wu)wu.style.display=tab==="underlying"?"block":"none";
+  if(bi){bi.style.background=tab==="income"?"rgba(16,185,129,0.2)":"rgba(255,255,255,0.04)";bi.style.borderColor=tab==="income"?"rgba(16,185,129,0.5)":"rgba(255,255,255,0.12)";bi.style.color=tab==="income"?"#10b981":"#94a3b8";}
+  if(bu){bu.style.background=tab==="underlying"?"rgba(167,139,250,0.2)":"rgba(255,255,255,0.04)";bu.style.borderColor=tab==="underlying"?"rgba(167,139,250,0.5)":"rgba(255,255,255,0.12)";bu.style.color=tab==="underlying"?"#a78bfa":"#94a3b8";}
+  if(tab==="income"&&!_fdmChart)drawFdmChart(_fdmPeriod);
+  if(tab==="underlying"&&!_fdmChartUnd)drawFdmChart(_fdmPeriod);
 };
 
 function renderFdmShell(){
@@ -2685,14 +2703,29 @@ function renderFdmPerformance(){
     const inPeriod=chartSrc?chartSrc.filter(e=>toMs(e)>=cutoffMs):[];
     const shown=inPeriod.length>=2?inPeriod:(chartSrc||[]);
     const oldest=shown[0]?.date||"",newest=shown[shown.length-1]?.date||"";
-    h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
+    if(hasTS){
+      h+=`<div style="display:flex;gap:5px;margin-bottom:8px;">
+        <button id="fdmTabBtnIncome" onclick="selectFdmChartTab('income')"
+          style="padding:5px 13px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:${_fdmChartTab==='income'?'rgba(16,185,129,0.2)':'rgba(255,255,255,0.04)'};border-color:${_fdmChartTab==='income'?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)'};color:${_fdmChartTab==='income'?'#10b981':'#94a3b8'};">
+          Income Bid</button>
+        <button id="fdmTabBtnUnd" onclick="selectFdmChartTab('underlying')"
+          style="padding:5px 13px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:${_fdmChartTab==='underlying'?'rgba(167,139,250,0.2)':'rgba(255,255,255,0.04)'};border-color:${_fdmChartTab==='underlying'?'rgba(167,139,250,0.5)':'rgba(255,255,255,0.12)'};color:${_fdmChartTab==='underlying'?'#a78bfa':'#94a3b8'};">
+          Underlying Sub-Fund</button>
+      </div>`;
+    }
+    h+=`<div class="fdm-chart-wrap" id="fdmChartWrapIncome" style="display:${_fdmChartTab==='underlying'?'none':'block'};"><canvas id="fdmChartCanvas"></canvas></div>`;
+    if(hasTS){
+      h+=`<div class="fdm-chart-wrap" id="fdmChartWrapUnd" style="display:${_fdmChartTab==='underlying'?'block':'none'};"><canvas id="fdmChartCanvasUnd"></canvas></div>`;
+    }
     h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
-    if(storedCount2>=2&&storedCount2>=liveCount2){
-      h+=`📈 ${chartLabel} · ${storedCount2} stored prices · ${oldest} – ${newest}`;
+    if(_fdmChartTab==='underlying'&&hasTS){
+      h+=`📈 Underlying Sub-Fund · ${_fdmTimeseries.count} daily prices · ${_fdmTimeseries.from} – ${_fdmTimeseries.to}`;
+    }else if(storedCount2>=2&&storedCount2>=liveCount2){
+      h+=`📈 Income Bid · ${storedCount2} stored prices · ${oldest} – ${newest}`;
     }else if(liveCount2>=2){
-      h+=`📈 ${chartLabel} · Last ~${liveCount2} days from Income's website`;
+      h+=`📈 Income Bid · Last ~${liveCount2} days from Income's website`;
     }else if(hasTS){
-      h+=`📈 ${chartLabel} · ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest} <span style="color:#f59e0b;">(sub-fund, not Income unit price)</span>`;
+      h+=`📈 Income Bid · switch to "Underlying Sub-Fund" tab for historical sub-fund prices`;
     }
     h+=`</div>`;
   }else if(_fdmData&&_fdmData.error){
@@ -2882,34 +2915,33 @@ function renderFdmHistory(){
 }
 
 function drawFdmChart(period){
+  // === Income Bid chart ===
   const canvas=document.getElementById("fdmChartCanvas");
-  if(!canvas)return;
-  const storedCount=_fdmHistory?_fdmHistory.length:0;
-  const liveData=_fdmData&&!_fdmData.error&&_fdmData.chartData?_fdmData.chartData:null;
-  const liveCount=liveData?liveData.length:0;
-  const hist=storedCount>=2?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
-
-  // Use whichever Income source gives more data points.
-  // Stored Firestore wins only when it has substantially more points than the live 30-day feed.
-  if(storedCount>=2&&storedCount>=liveCount){
-    return _drawChart(canvas,hist,period,"iso","Income Bid");
+  if(canvas){
+    if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+    const storedCount=_fdmHistory?_fdmHistory.length:0;
+    const liveData=_fdmData&&!_fdmData.error&&_fdmData.chartData?_fdmData.chartData:null;
+    const liveCount=liveData?liveData.length:0;
+    const hist=storedCount>=2?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
+    let inData=null,inFmt="iso";
+    if(storedCount>=2&&storedCount>=liveCount){inData=hist;inFmt="iso";}
+    else if(liveCount>=2){inData=liveData;inFmt="dmy";}
+    else if(storedCount>=2){inData=hist;inFmt="iso";}
+    if(inData)_fdmChart=_buildChart(canvas,inData,period,inFmt,"Income Bid");
   }
-  if(liveCount>=2){
-    return _drawChart(canvas,liveData,period,"dmy","Income Bid");
-  }
-  if(storedCount>=2){
-    return _drawChart(canvas,hist,period,"iso","Income Bid");
-  }
-  // Last resort: Morningstar timeseries — underlying sub-fund, not the Income unit price
-  if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
-    return _drawChart(canvas,_fdmTimeseries.prices,period,"iso","Underlying Sub-Fund");
+  // === Underlying Sub-Fund chart (Morningstar timeseries) ===
+  const canvas2=document.getElementById("fdmChartCanvasUnd");
+  if(canvas2){
+    if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
+    if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
+      _fdmChartUnd=_buildChart(canvas2,_fdmTimeseries.prices,period,"iso","Underlying Sub-Fund","#a78bfa","rgba(167,139,250,0.1)");
+    }
   }
 }
-function _drawChart(canvas,chartData,period,fmt,label){
-  if(!chartData||!chartData.length)return;
+function _buildChart(canvas,chartData,period,fmt,label,forceCol,forceColBg){
+  if(!chartData||!chartData.length)return null;
   const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-  // Parse date depending on format: "DD/MM/YYYY" (dmy) or "YYYY-MM-DD" (iso)
   const toDate=d=>fmt==="iso"?new Date(d):new Date(d.split("/").reverse().join("-"));
   const filtered=chartData.filter(e=>toDate(e.date)>=cutoff);
   const data=filtered.length>=2?filtered:chartData;
@@ -2917,10 +2949,9 @@ function _drawChart(canvas,chartData,period,fmt,label){
   const labels=data.map(e=>toDate(e.date).toLocaleDateString("en-SG",{day:"numeric",month:"short",year:data.length>180?"2-digit":"numeric"}));
   const first=prices[0],last=prices[prices.length-1];
   const isUp=last>=first;
-  const col=isUp?"#10b981":"#ef4444";
-  const colBg=isUp?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)";
-  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
-  _fdmChart=new Chart(canvas,{
+  const col=forceCol||(isUp?"#10b981":"#ef4444");
+  const colBg=forceColBg||(isUp?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)");
+  return new Chart(canvas,{
     type:"line",
     data:{labels,datasets:[{data:prices,borderColor:col,backgroundColor:colBg,borderWidth:2,fill:true,
       pointRadius:data.length>120?0:3,pointHoverRadius:7,tension:0.3}]},
