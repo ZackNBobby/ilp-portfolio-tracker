@@ -2671,28 +2671,28 @@ function renderFdmPerformance(){
     h+=`<div class="fdm-loading" style="padding:20px;">⏳ Loading price chart...</div>`;
   }else if(hasStored||hasLive||hasTS){
     if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest Income Bid: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
-    // Mirror drawFdmChart priority: Stored Income → Live Income → Morningstar sub-fund
+    // Mirror drawFdmChart priority: biggest Income dataset wins; Morningstar sub-fund as last resort
+    const storedCount2=_fdmHistory?_fdmHistory.length:0;
+    const liveCount2=hasLive?_fdmData.chartData.length:0;
     const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825};
     const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
     let chartSrc=null,chartFmt="iso",chartLabel="Income Bid";
-    if(hasStored){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
-    else if(hasLive){chartSrc=_fdmData.chartData;chartFmt="dmy";}
-    else{chartSrc=_fdmTimeseries.prices;chartFmt="iso";chartLabel="Underlying Sub-Fund";}
+    if(storedCount2>=2&&storedCount2>=liveCount2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(liveCount2>=2){chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    else if(storedCount2>=2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";chartLabel="Underlying Sub-Fund";}
     const toMs=d=>chartFmt==="iso"?new Date(d.date).getTime():new Date(d.date.split("/").reverse().join("-")).getTime();
-    const inPeriod=chartSrc.filter(e=>toMs(e)>=cutoffMs);
-    const shown=inPeriod.length>=2?inPeriod:chartSrc;
-    const oldest=shown[0].date,newest=shown[shown.length-1].date;
-    const insufficient=inPeriod.length<2;
+    const inPeriod=chartSrc?chartSrc.filter(e=>toMs(e)>=cutoffMs):[];
+    const shown=inPeriod.length>=2?inPeriod:(chartSrc||[]);
+    const oldest=shown[0]?.date||"",newest=shown[shown.length-1]?.date||"";
     h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
     h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
-    if(hasStored){
-      h+=`📈 ${chartLabel} · ${_fdmHistory.length} stored prices · ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Not enough history for ${_fdmPeriod} view — showing all available</span>`;
-    }else if(hasLive){
-      h+=`📈 ${chartLabel} · Last 30 days from Income's website`;
-    }else{
-      h+=`📈 ${chartLabel} · ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Showing all available data</span>`;
+    if(storedCount2>=2&&storedCount2>=liveCount2){
+      h+=`📈 ${chartLabel} · ${storedCount2} stored prices · ${oldest} – ${newest}`;
+    }else if(liveCount2>=2){
+      h+=`📈 ${chartLabel} · Last ~${liveCount2} days from Income's website`;
+    }else if(hasTS){
+      h+=`📈 ${chartLabel} · ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest} <span style="color:#f59e0b;">(sub-fund, not Income unit price)</span>`;
     }
     h+=`</div>`;
   }else if(_fdmData&&_fdmData.error){
@@ -2884,17 +2884,23 @@ function renderFdmHistory(){
 function drawFdmChart(period){
   const canvas=document.getElementById("fdmChartCanvas");
   if(!canvas)return;
-  // Priority: Income bid price data first (stored or live), then Morningstar as fallback
-  // 1. Stored Firestore history — actual Income bid prices, builds up over time
-  if(_fdmHistory&&_fdmHistory.length>=2){
-    const hist=_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price}));
+  const storedCount=_fdmHistory?_fdmHistory.length:0;
+  const liveData=_fdmData&&!_fdmData.error&&_fdmData.chartData?_fdmData.chartData:null;
+  const liveCount=liveData?liveData.length:0;
+  const hist=storedCount>=2?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
+
+  // Use whichever Income source gives more data points.
+  // Stored Firestore wins only when it has substantially more points than the live 30-day feed.
+  if(storedCount>=2&&storedCount>=liveCount){
     return _drawChart(canvas,hist,period,"iso","Income Bid");
   }
-  // 2. Live 30-day data from Income's website — actual Income bid prices
-  if(_fdmData&&!_fdmData.error&&_fdmData.chartData){
-    return _drawChart(canvas,_fdmData.chartData,period,"dmy","Income Bid");
+  if(liveCount>=2){
+    return _drawChart(canvas,liveData,period,"dmy","Income Bid");
   }
-  // 3. Morningstar timeseries — underlying sub-fund price, NOT the Income unit price
+  if(storedCount>=2){
+    return _drawChart(canvas,hist,period,"iso","Income Bid");
+  }
+  // Last resort: Morningstar timeseries — underlying sub-fund, not the Income unit price
   if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
     return _drawChart(canvas,_fdmTimeseries.prices,period,"iso","Underlying Sub-Fund");
   }
