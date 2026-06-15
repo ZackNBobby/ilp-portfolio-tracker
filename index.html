@@ -2477,7 +2477,7 @@ window.updateScenario=function(){
   ];
 
   const fmt=n=>"$"+Math.round(n).toLocaleString("en-SG");
-  const fmtDiff=(n,always)=>(n>=0?"+":"-")+"$"+Math.round(Math.abs(n)).toLocaleString("en-SG");
+  const fmtPct=n=>(n>=0?"+":"")+n.toFixed(2)+"%";
 
   let html="";
   for(const{lbl,key,years,annualized}of periods){
@@ -2485,10 +2485,13 @@ window.updateScenario=function(){
     if(v==null)continue;
     const fundVal=annualized?amount*Math.pow(1+v/100,years):amount*(1+v/100);
     const fundGain=fundVal-amount;
+    const fundPct=annualized?(Math.pow(1+v/100,years)-1)*100:v;
     const bankVal=amount*Math.pow(1.0005,years);
     const bankGain=bankVal-amount;
+    const bankPct=(Math.pow(1.0005,years)-1)*100;
     const inflVal=amount*Math.pow(1.03,years);
     const inflNeed=inflVal-amount;
+    const inflPct=(Math.pow(1.03,years)-1)*100;
     const beatInfl=fundGain>=inflNeed;
     const fcol=beatInfl?"var(--green)":"#f97316";
 
@@ -2498,21 +2501,24 @@ window.updateScenario=function(){
         <div>
           <div style="font-size:9px;color:var(--green);font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">THIS FUND</div>
           <div style="font-size:15px;font-weight:700;color:#f1f5f9;">${fmt(fundVal)}</div>
-          <div style="font-size:11px;color:${fcol};">${fmtDiff(fundGain)}</div>
+          <div style="font-size:11px;color:${fcol};">${fundGain>=0?"+":""}${fmt(Math.abs(fundGain))}</div>
+          <div style="font-size:11px;color:${fcol};font-weight:600;">${fmtPct(fundPct)}</div>
         </div>
         <div>
           <div style="font-size:9px;color:#475569;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">BANK 0.05%</div>
           <div style="font-size:15px;font-weight:700;color:#475569;">${fmt(bankVal)}</div>
-          <div style="font-size:11px;color:#475569;">${fmtDiff(bankGain)}</div>
+          <div style="font-size:11px;color:#475569;">+${fmt(bankGain)}</div>
+          <div style="font-size:11px;color:#475569;">${fmtPct(bankPct)}</div>
         </div>
         <div>
           <div style="font-size:9px;color:#f97316;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">INFLATION 3%</div>
           <div style="font-size:15px;font-weight:700;color:#f97316;">${fmt(inflVal)}</div>
-          <div style="font-size:11px;color:#6b7280;">to break even</div>
+          <div style="font-size:11px;color:#6b7280;">need +${fmt(inflNeed)}</div>
+          <div style="font-size:11px;color:#f97316;">${fmtPct(inflPct)}</div>
         </div>
       </div>
       <div style="margin-top:7px;font-size:11px;color:${beatInfl?"var(--green)":"#f97316"};">
-        ${beatInfl?`✅ Beat inflation by ${fmtDiff(fundGain-inflNeed)}`:`⚠️ Below inflation — real purchasing power loss of ${fmt(inflNeed-fundGain)}`}
+        ${beatInfl?`✅ Beat inflation by ${fmt(fundGain-inflNeed)} (${fmtPct(fundPct-inflPct)})`:`⚠️ Below inflation — real loss of ${fmt(inflNeed-fundGain)}`}
       </div>
     </div>`;
   }
@@ -2657,36 +2663,36 @@ function renderFdmPerformance(){
     if(perfSource)h+=`<div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${perfSource}</div>`;
   }
 
-  // Price chart — priority: Morningstar timeseries > Firestore history > live 30-day
+  // Price chart — priority: Income bid prices first, Morningstar sub-fund as fallback
   const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
   const hasStored=_fdmHistory&&_fdmHistory.length>=2;
-  if(!hasTS&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
+  const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+  if(!hasStored&&!hasLive&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
     h+=`<div class="fdm-loading" style="padding:20px;">⏳ Loading price chart...</div>`;
-  }else if(hasTS||hasStored||(_fdmData&&!_fdmData.error&&_fdmData.chartData)){
-    if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest bid price: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
-    // Calculate what will actually be shown (mirrors drawFdmChart priority)
+  }else if(hasStored||hasLive||hasTS){
+    if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest Income Bid: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
+    // Mirror drawFdmChart priority: Stored Income → Live Income → Morningstar sub-fund
     const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825};
     const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
-    let chartSrc=null,chartFmt="iso";
-    if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";}
-    else if(hasStored){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
-    else{chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    let chartSrc=null,chartFmt="iso",chartLabel="Income Bid";
+    if(hasStored){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(hasLive){chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    else{chartSrc=_fdmTimeseries.prices;chartFmt="iso";chartLabel="Underlying Sub-Fund";}
     const toMs=d=>chartFmt==="iso"?new Date(d.date).getTime():new Date(d.date.split("/").reverse().join("-")).getTime();
     const inPeriod=chartSrc.filter(e=>toMs(e)>=cutoffMs);
     const shown=inPeriod.length>=2?inPeriod:chartSrc;
-    const getDate=e=>e.date;
-    const oldest=getDate(shown[0]),newest=getDate(shown[shown.length-1]);
+    const oldest=shown[0].date,newest=shown[shown.length-1].date;
     const insufficient=inPeriod.length<2;
     h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
     h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
-    if(hasTS){
-      h+=`📈 ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Showing all available — fund has less than ${_fdmPeriod} of history</span>`;
-    }else if(hasStored){
-      h+=`Showing: ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Not enough history for ${_fdmPeriod} — showing all ${_fdmHistory.length} stored points</span>`;
+    if(hasStored){
+      h+=`📈 ${chartLabel} · ${_fdmHistory.length} stored prices · ${oldest} – ${newest}`;
+      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Not enough history for ${_fdmPeriod} view — showing all available</span>`;
+    }else if(hasLive){
+      h+=`📈 ${chartLabel} · Last 30 days from Income's website`;
     }else{
-      h+=`Showing last 30 days from Income's website.`;
+      h+=`📈 ${chartLabel} · ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest}`;
+      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Showing all available data</span>`;
     }
     h+=`</div>`;
   }else if(_fdmData&&_fdmData.error){
@@ -2878,19 +2884,22 @@ function renderFdmHistory(){
 function drawFdmChart(period){
   const canvas=document.getElementById("fdmChartCanvas");
   if(!canvas)return;
-  // 1. Morningstar timeseries — 6 years daily, best source for period filtering
-  if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
-    return _drawChart(canvas,_fdmTimeseries.prices,period,"iso");
-  }
-  // 2. Stored Firestore history — accumulates over time
+  // Priority: Income bid price data first (stored or live), then Morningstar as fallback
+  // 1. Stored Firestore history — actual Income bid prices, builds up over time
   if(_fdmHistory&&_fdmHistory.length>=2){
     const hist=_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price}));
-    return _drawChart(canvas,hist,period,"iso");
+    return _drawChart(canvas,hist,period,"iso","Income Bid");
   }
-  // 3. Live 30-day data from Income's website
-  if(_fdmData&&!_fdmData.error&&_fdmData.chartData)return _drawChart(canvas,_fdmData.chartData,period,"dmy");
+  // 2. Live 30-day data from Income's website — actual Income bid prices
+  if(_fdmData&&!_fdmData.error&&_fdmData.chartData){
+    return _drawChart(canvas,_fdmData.chartData,period,"dmy","Income Bid");
+  }
+  // 3. Morningstar timeseries — underlying sub-fund price, NOT the Income unit price
+  if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
+    return _drawChart(canvas,_fdmTimeseries.prices,period,"iso","Underlying Sub-Fund");
+  }
 }
-function _drawChart(canvas,chartData,period,fmt){
+function _drawChart(canvas,chartData,period,fmt,label){
   if(!chartData||!chartData.length)return;
   const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
@@ -2916,7 +2925,7 @@ function _drawChart(canvas,chartData,period,fmt){
         legend:{display:false},
         tooltip:{callbacks:{
           title:items=>items[0]?.label||"",
-          label:c=>`Bid: $${c.raw.toFixed(6)}`
+          label:c=>`${label||"Bid"}: $${c.raw.toFixed(6)}`
         }}
       },
       scales:{
