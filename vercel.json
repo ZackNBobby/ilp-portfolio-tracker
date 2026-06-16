@@ -5,6 +5,7 @@
     "api/fund-detail.js": { "maxDuration": 30 },
     "api/fund-morningstar.js": { "maxDuration": 30 },
     "api/fund-holdings.js": { "maxDuration": 30 },
-    "api/fund-timeseries.js": { "maxDuration": 30 }
+    "api/fund-timeseries.js": { "maxDuration": 30 },
+    "api/sp500.js": { "maxDuration": 30 }
   }
 }

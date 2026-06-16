@@ -406,6 +406,13 @@ body{
 .chart-card:hover{border-color:var(--gold-border);}
 .chart-title{font-size:13px;font-weight:700;color:var(--gold);margin-bottom:14px;}
 .chart-wrap{position:relative;width:100%;}
+.growth-tabs{display:flex;gap:6px;flex-shrink:0;}
+.growth-tab{background:rgba(30,41,59,0.6);border:1px solid rgba(71,85,105,0.4);border-radius:6px;color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;transition:all 0.2s;white-space:nowrap;}
+.growth-tab:hover{border-color:rgba(245,158,11,0.5);color:var(--gold);}
+.growth-tab.active{background:rgba(245,158,11,0.12);border-color:rgba(245,158,11,0.5);color:var(--gold);}
+.sp500-legend{display:flex;gap:16px;margin-top:10px;font-size:11px;}
+.sp500-leg-item{display:flex;align-items:center;gap:5px;color:var(--muted);}
+.sp500-leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
 @media(max-width:660px){.charts-row{grid-template-columns:1fr;}}
 
@@ -1343,7 +1350,20 @@ function renderClientDetail(clientId){
       <div class="chart-card"><div class="chart-title">Fund Allocation by Value</div><div class="chart-wrap"><canvas id="donut-${clientId}" height="220"></canvas></div></div>
       <div class="chart-card"><div class="chart-title">Invested vs. Current Value</div><div class="chart-wrap"><canvas id="bar-${clientId}" height="220"></canvas></div></div>
     </div>
-    <div class="chart-card"><div class="chart-title">Portfolio Growth Over Time <span style="font-size:10px;color:var(--dim);font-weight:400;">(estimated from transaction prices)</span></div><div class="chart-wrap"><canvas id="line-${clientId}" height="130"></canvas></div></div>`;
+    <div class="chart-card">
+      <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span>Portfolio Growth Over Time <span style="font-size:10px;color:var(--dim);font-weight:400;">(estimated from transaction prices)</span></span>
+        <div class="growth-tabs" id="gtabs-${clientId}">
+          <button class="growth-tab active" onclick="switchGrowthTab('${clientId}','portfolio')">📈 Portfolio</button>
+          <button class="growth-tab" onclick="switchGrowthTab('${clientId}','sp500')">vs S&amp;P 500</button>
+        </div>
+      </div>
+      <div id="gwrap-portfolio-${clientId}" class="chart-wrap"><canvas id="line-${clientId}" height="130"></canvas></div>
+      <div id="gwrap-sp500-${clientId}" class="chart-wrap" style="display:none;position:relative;">
+        <div id="sp500-loading-${clientId}" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;">Loading S&amp;P 500 data…</div>
+        <canvas id="sp500-${clientId}" height="130"></canvas>
+      </div>
+    </div>`;
 
     // Fund breakdown
     html+=`<div class="sec-title">🏦 Fund Breakdown</div>`;
@@ -1975,6 +1995,186 @@ function initCharts(clientId){
     }
   }
 }
+
+// ── S&P 500 overlay ──
+const _sp500Cache={};  // keyed by startDate
+
+window.switchGrowthTab=async(clientId,view)=>{
+  // Update tab buttons
+  const tabsEl=document.getElementById(`gtabs-${clientId}`);
+  if(tabsEl){
+    tabsEl.querySelectorAll(".growth-tab").forEach(b=>{
+      b.classList.toggle("active",b.textContent.trim().includes(view==="portfolio"?"Portfolio":"S&P"));
+    });
+  }
+  const portWrap=document.getElementById(`gwrap-portfolio-${clientId}`);
+  const sp5Wrap=document.getElementById(`gwrap-sp500-${clientId}`);
+  if(view==="portfolio"){
+    if(portWrap)portWrap.style.display="";
+    if(sp5Wrap)sp5Wrap.style.display="none";
+    return;
+  }
+  // Show S&P 500 pane
+  if(portWrap)portWrap.style.display="none";
+  if(sp5Wrap)sp5Wrap.style.display="";
+
+  // If chart already drawn, just show it
+  if(charts[`sp500-${clientId}`])return;
+
+  // Get portfolio time series
+  const txs=clientTxs[clientId]||[];
+  const pts=calcTimeSeries(txs);
+  if(pts.length<2){
+    const ld=document.getElementById(`sp500-loading-${clientId}`);
+    if(ld)ld.textContent="Not enough portfolio data to compare.";
+    return;
+  }
+
+  // Use first portfolio data point as the normalization base date
+  const baseDate=pts[0].date;  // YYYY-MM-DD
+
+  // Show loading
+  const loadingEl=document.getElementById(`sp500-loading-${clientId}`);
+
+  let sp5Prices=_sp500Cache[baseDate];
+  if(!sp5Prices){
+    if(loadingEl)loadingEl.style.display="flex";
+    try{
+      const r=await fetch(`/api/sp500?from=${baseDate}`);
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      const d=await r.json();
+      if(d.error)throw new Error(d.error);
+      sp5Prices=d.prices||[];
+      _sp500Cache[baseDate]=sp5Prices;
+    }catch(e){
+      if(loadingEl){loadingEl.textContent="Could not load S&P 500 data: "+e.message;loadingEl.style.display="flex";}
+      return;
+    }
+  }
+  if(loadingEl)loadingEl.style.display="none";
+
+  if(!sp5Prices.length){
+    if(loadingEl){loadingEl.textContent="No S&P 500 data available for this period.";loadingEl.style.display="flex";}
+    return;
+  }
+
+  // Build a map of sp500 date → price for quick lookup
+  const sp5Map={};
+  for(const p of sp5Prices)sp5Map[p.date]=p.price;
+
+  // Find base values at the first available matching date
+  const basePortVal=pts[0].value;
+  const baseSp5Price=sp5Prices[0]?.price||1;
+
+  // Merge dates: use portfolio dates as the primary axis, interpolate S&P 500
+  // Also add all S&P 500 dates that fall within the portfolio range
+  const allDates=[...new Set([...pts.map(p=>p.date),...sp5Prices.map(p=>p.date)])].sort();
+  const portRange={min:pts[0].date,max:pts[pts.length-1].date};
+  const filteredDates=allDates.filter(d=>d>=portRange.min&&d<=portRange.max);
+
+  // Build portfolio indexed series (only on portfolio dates)
+  const portByDate={};
+  for(const p of pts)portByDate[p.date]=p.value;
+
+  // Indexed series — only points where we have BOTH values
+  const chartLabels=[],portIdx=[],sp5Idx=[];
+  let lastPortVal=null,lastSp5Price=null;
+
+  for(const d of filteredDates){
+    // Portfolio: carry forward last known value
+    if(portByDate[d]!==undefined)lastPortVal=portByDate[d];
+    // S&P 500: carry forward last known price
+    if(sp5Map[d]!==undefined)lastSp5Price=sp5Map[d];
+    if(lastPortVal===null||lastSp5Price===null)continue;
+
+    // Thin out points — include if more than 6 days since last or it's a portfolio point
+    if(chartLabels.length>0&&portByDate[d]===undefined&&sp5Map[d]===undefined)continue;
+    if(chartLabels.length>0){
+      const prev=chartLabels[chartLabels.length-1];
+      const daysDiff=(new Date(d)-new Date(prev))/(1000*86400);
+      if(daysDiff<5&&portByDate[d]===undefined)continue;
+    }
+
+    chartLabels.push(d);
+    portIdx.push(+((lastPortVal/basePortVal)*100).toFixed(2));
+    sp5Idx.push(+((lastSp5Price/baseSp5Price)*100).toFixed(2));
+  }
+
+  if(!chartLabels.length){
+    if(loadingEl){loadingEl.textContent="No overlapping dates between portfolio and S&P 500.";loadingEl.style.display="flex";}
+    return;
+  }
+
+  const lEl=document.getElementById(`sp500-${clientId}`);
+  if(!lEl)return;
+  destroyChart(`sp500-${clientId}`);
+  charts[`sp500-${clientId}`]=new Chart(lEl.getContext("2d"),{
+    type:"line",
+    data:{
+      labels:chartLabels.map(d=>{const[y,m,dd]=d.split("-");return`${dd}/${m}/${y.slice(2)}`;} ),
+      datasets:[
+        {
+          label:"Portfolio (indexed)",
+          data:portIdx,
+          borderColor:"#f59e0b",
+          backgroundColor:"rgba(245,158,11,0.06)",
+          borderWidth:2.5,fill:true,tension:0.35,
+          pointBackgroundColor:"#f59e0b",pointRadius:2,pointHoverRadius:6,
+          pointBorderColor:"#07101e",pointBorderWidth:1
+        },
+        {
+          label:"S&P 500 (indexed)",
+          data:sp5Idx,
+          borderColor:"#60a5fa",
+          backgroundColor:"rgba(96,165,250,0.04)",
+          borderWidth:2,fill:false,tension:0.35,
+          pointBackgroundColor:"#60a5fa",pointRadius:0,pointHoverRadius:5,
+          borderDash:[5,3]
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      interaction:{mode:"nearest",axis:"x",intersect:false},
+      scales:{
+        x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:9},grid:{color:"rgba(30,41,59,0.3)"}},
+        y:{
+          ticks:{color:"#64748b",font:{size:10},callback:v=>v.toFixed(0)},
+          grid:{color:"rgba(30,41,59,0.35)"},
+          title:{display:true,text:"Indexed (100 = start)",color:"#64748b",font:{size:10}}
+        }
+      },
+      plugins:{
+        legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:12,usePointStyle:true}},
+        tooltip:{
+          callbacks:{
+            label:ctx=>{
+              const diff=portIdx[ctx.dataIndex]-sp5Idx[ctx.dataIndex];
+              if(ctx.datasetIndex===0)return` Portfolio: ${ctx.parsed.y.toFixed(1)} (${diff>=0?"+":""}${diff.toFixed(1)} vs S&P 500)`;
+              return` S&P 500: ${ctx.parsed.y.toFixed(1)}`;
+            }
+          }
+        }
+      },
+      animation:{duration:1000,easing:"easeInOutQuart"}
+    },
+    plugins:[xhairPlugin]
+  });
+
+  // Append a small "outperform / underperform" badge below the chart
+  const lastPort=portIdx[portIdx.length-1];
+  const lastSp5=sp5Idx[sp5Idx.length-1];
+  const diff=(lastPort-lastSp5).toFixed(1);
+  const outperforms=lastPort>=lastSp5;
+  const existingBadge=document.getElementById(`sp500-badge-${clientId}`);
+  if(existingBadge)existingBadge.remove();
+  sp5Wrap.insertAdjacentHTML("beforeend",
+    `<div id="sp500-badge-${clientId}" style="margin-top:10px;text-align:center;font-size:12px;font-weight:700;color:${outperforms?"#4ade80":"#f87171"};">
+      ${outperforms?"🏆 Outperforming":"📉 Underperforming"} S&P 500 by <span style="font-size:14px;">${outperforms?"+":""}${diff}pts</span>
+      <span style="font-size:10px;font-weight:400;color:var(--dim);display:block;margin-top:2px;">Both indexed to 100 at policy start date (${baseDate})</span>
+    </div>`
+  );
+};
 
 // ── Navigation ──
 window.setTab=t=>{
