@@ -2981,22 +2981,27 @@ function renderFdmPerformance(){
   const tsPerf=calcPerfFromTimeseries(_fdmTimeseries);
   const staticAR=info.annualizedReturns;
   const livePerf=_fdmData&&!_fdmData.error?_fdmData.performance:null;
-  const msPerf=_fdmMStar&&_fdmMStar.performance?_fdmMStar.performance:null;
+  // msPerf kept as last resort — Morningstar screener SecId filter is unreliable and can return wrong fund data
+  const msPerf=_fdmMStar&&!_fdmMStar.noMapping&&_fdmMStar.performance?_fdmMStar.performance:null;
 
   let perf=null,perfSource="";
-  if(msPerf&&Object.values(msPerf).some(v=>v!==null)){
-    perf=msPerf;
-    const stars=_fdmMStar.starRating?`${"★".repeat(_fdmMStar.starRating)}${"☆".repeat(5-_fdmMStar.starRating)}`:"";
-    const aum=_fdmMStar.totalAssets?` · AUM SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M`:"";
-    perfSource=`⭐ Morningstar data for ${esc(_fdmMStar.morningstarName||"")}${aum}${stars?" · "+stars:""}`;
-  }else if(tsPerf){
+  // Priority 1: Timeseries (most reliable — fetched directly by SecId, not via broken screener filter)
+  if(tsPerf){
     perf=tsPerf;
     const tsFrom=_fdmTimeseries?.from||"";
     const tsTo=_fdmTimeseries?.to||"";
-    perfSource=`📈 Calculated from Morningstar sub-fund daily prices (${tsFrom} → ${tsTo})`;
+    const subFundName=_fdmMStar?.morningstarName||info.subFund||"";
+    perfSource=`📈 Based on <strong>underlying sub-fund</strong> daily prices${subFundName?` · ${esc(subFundName)}`:""} (${tsFrom} → ${tsTo})`;
+  // Priority 2: Morningstar screener (fallback — only used if timeseries unavailable)
+  }else if(msPerf&&Object.values(msPerf).some(v=>v!==null)){
+    perf=msPerf;
+    const stars=_fdmMStar.starRating?`${"★".repeat(_fdmMStar.starRating)}${"☆".repeat(5-_fdmMStar.starRating)}`:"";
+    const aum=_fdmMStar.totalAssets?` · AUM SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M`:"";
+    perfSource=`⭐ Morningstar · <strong>underlying sub-fund</strong> · ${esc(_fdmMStar.morningstarName||"")}${aum}${stars?" · "+stars:""}`;
+  // Priority 3: Stored Income bid prices
   }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
     perf=storedPerf;
-    perfSource=`📅 Calculated from ${_fdmHistory.length} stored price points (${_fdmHistory[_fdmHistory.length-1]?.date} – ${_fdmHistory[0]?.date})`;
+    perfSource=`📅 Based on <strong>Income bid price</strong> (SGD) · ${_fdmHistory.length} stored price points`;
   }else if(staticAR){
     perf=staticAR;
     perfSource=`📋 From fund factsheet as of ${staticAR.asOf} — press ⟳ Fetch to start building live history`;
