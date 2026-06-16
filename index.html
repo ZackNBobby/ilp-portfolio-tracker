@@ -2731,6 +2731,29 @@ function calcPerfFromStored(history){
   return{"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":pct(1095),"5Y":pct(1825)};
 }
 
+// Calculate performance from Morningstar timeseries prices (oldest-first [{date,price}])
+function calcPerfFromTimeseries(tsData){
+  const prices=tsData?.prices;
+  if(!prices||prices.length<2)return null;
+  const latest=prices[prices.length-1];
+  const latestPrice=latest.price;
+  const latestDate=new Date(latest.date);
+  const findPrice=(daysAgo)=>{
+    const t=new Date(latestDate);t.setDate(t.getDate()-daysAgo);
+    const ts=t.toISOString().split("T")[0];
+    // prices is oldest-first, scan backwards
+    for(let i=prices.length-2;i>=0;i--){if(prices[i].date<=ts)return prices[i].price;}
+    return null;
+  };
+  const pct=(daysAgo)=>{
+    const old=findPrice(daysAgo);
+    if(old===null||old<=0)return null;
+    return+((latestPrice-old)/old*100).toFixed(2);
+  };
+  const result={"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":pct(1095),"5Y":pct(1825)};
+  return Object.values(result).some(v=>v!==null)?result:null;
+}
+
 window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
@@ -2938,8 +2961,14 @@ function renderFdmPerformance(){
   const info=FUND_DB[_fdmFund]||{};
   let h="";
 
-  // Performance source priority: Morningstar → Firestore stored history → static factsheet → Vercel live API
+  // Performance source priority:
+  // 1. Morningstar screener (only if correct SecId matched — wrong-fund guard in API)
+  // 2. Morningstar timeseries prices (fund-specific, calculated here from daily NAV history)
+  // 3. Firestore stored Income bid prices
+  // 4. Static factsheet annualised returns
+  // 5. Income website live scrape (~30 days only)
   const storedPerf=calcPerfFromStored(_fdmHistory);
+  const tsPerf=calcPerfFromTimeseries(_fdmTimeseries);
   const staticAR=info.annualizedReturns;
   const livePerf=_fdmData&&!_fdmData.error?_fdmData.performance:null;
   const msPerf=_fdmMStar&&_fdmMStar.performance?_fdmMStar.performance:null;
@@ -2950,6 +2979,11 @@ function renderFdmPerformance(){
     const stars=_fdmMStar.starRating?`${"★".repeat(_fdmMStar.starRating)}${"☆".repeat(5-_fdmMStar.starRating)}`:"";
     const aum=_fdmMStar.totalAssets?` · AUM SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M`:"";
     perfSource=`⭐ Morningstar data for ${esc(_fdmMStar.morningstarName||"")}${aum}${stars?" · "+stars:""}`;
+  }else if(tsPerf){
+    perf=tsPerf;
+    const tsFrom=_fdmTimeseries?.from||"";
+    const tsTo=_fdmTimeseries?.to||"";
+    perfSource=`📈 Calculated from Morningstar sub-fund daily prices (${tsFrom} → ${tsTo})`;
   }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
     perf=storedPerf;
     perfSource=`📅 Calculated from ${_fdmHistory.length} stored price points (${_fdmHistory[_fdmHistory.length-1]?.date} – ${_fdmHistory[0]?.date})`;
@@ -2965,7 +2999,7 @@ function renderFdmPerformance(){
   const latest=_fdmData&&!_fdmData.error?_fdmData.latest:null;
 
   // Performance grid
-  if(!perf&&_fdmHistory===null&&!_fdmData&&!_fdmMStar){
+  if(!perf&&_fdmHistory===null&&!_fdmData&&!_fdmMStar&&_fdmTimeseries===null){
     h+=`<div class="fdm-loading">⏳ Loading performance data...</div>`;
     return h;
   }

@@ -130,16 +130,25 @@ module.exports = async function handler(req, res) {
       filters: encodeURIComponent(`SecId in (${secId})`),
     });
 
-    // Strategy 2: search by term and pick the matching SecId
+    // Strategy 2: search by term — only accept if the exact SecId is found
+    // Never take a "first result" guess; a wrong fund's numbers are worse than no data
     if (!rows.length) {
-      rows = await queryMorningstar({
+      const searchRows = await queryMorningstar({
         ...baseParams,
         term: encodeURIComponent(searchTerm),
       });
-      // Try to find the known SecId in results; otherwise take first
-      const exact = rows.find(r => r.SecId === secId);
+      const exact = searchRows.find(r => r.SecId === secId);
       if (exact) rows = [exact];
-      else if (rows.length > 0) rows = [rows[0]];
+    }
+
+    // Strategy 3: try querying by Id field instead of filters (API format may vary)
+    if (!rows.length) {
+      const idRows = await queryMorningstar({
+        ...baseParams,
+        filters: encodeURIComponent(`Id in (${secId})`),
+      });
+      const exact = idRows.find(r => r.SecId === secId);
+      if (exact) rows = [exact];
     }
 
     if (!rows.length) {
