@@ -101,8 +101,8 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
 
-  // Cache 24 hours — Morningstar performance data updates monthly
-  res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=172800");
+  // Short cache — Morningstar screener has been unreliable; keep fresh so fixes take effect quickly
+  res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
 
   const name = (req.query.name || "").trim();
   const mapping = FUND_MAP[name];
@@ -123,42 +123,49 @@ module.exports = async function handler(req, res) {
     universeIds: universe || UNIVERSE,
   };
 
-  try {
-    // Strategy 1: filter by exact SecId
-    let rows = await queryMorningstar({
-      ...baseParams,
-      filters: encodeURIComponent(`SecId in (${secId})`),
-    });
+  // Helper: find the row that exactly matches our target SecId
+  const findExact = (rows) => rows.find(r => r.SecId === secId) || null;
 
-    // Strategy 2: search by term — only accept if the exact SecId is found
-    // Never take a "first result" guess; a wrong fund's numbers are worse than no data
-    if (!rows.length) {
-      const searchRows = await queryMorningstar({
+  try {
+    let matchedRow = null;
+
+    // Strategy 1: filter by SecId — validate the returned row is actually the right fund
+    if (!matchedRow) {
+      const rows = await queryMorningstar({
+        ...baseParams,
+        filters: encodeURIComponent(`SecId in (${secId})`),
+      });
+      matchedRow = findExact(rows);
+    }
+
+    // Strategy 2: search by display name term
+    if (!matchedRow) {
+      const rows = await queryMorningstar({
         ...baseParams,
         term: encodeURIComponent(searchTerm),
       });
-      const exact = searchRows.find(r => r.SecId === secId);
-      if (exact) rows = [exact];
+      matchedRow = findExact(rows);
     }
 
-    // Strategy 3: try querying by Id field instead of filters (API format may vary)
-    if (!rows.length) {
-      const idRows = await queryMorningstar({
+    // Strategy 3: alternative Id filter format
+    if (!matchedRow) {
+      const rows = await queryMorningstar({
         ...baseParams,
         filters: encodeURIComponent(`Id in (${secId})`),
       });
-      const exact = idRows.find(r => r.SecId === secId);
-      if (exact) rows = [exact];
+      matchedRow = findExact(rows);
     }
 
-    if (!rows.length) {
+    if (!matchedRow) {
+      // Return a clean "not found" — the frontend will fall back to timeseries performance
       return res.status(200).json({
-        error: "Fund not found in Morningstar screener",
+        noMapping: true,
         name, secId,
+        message: "SecId not found in Morningstar screener — performance will be calculated from timeseries data",
       });
     }
 
-    const row = rows[0];
+    const row = matchedRow;
     const pct = v => (v === null || v === undefined) ? null : +v.toFixed(2);
 
     return res.status(200).json({
@@ -167,7 +174,7 @@ module.exports = async function handler(req, res) {
       morningstarName: row.Name,
       subFundNote: note,
       starRating: row.StarRatingM255 || null,
-      totalAssets: row.TotalAssets ? (row.TotalAssets / 1e6).toFixed(0) : null, // in millions
+      totalAssets: row.TotalAssets ? (row.TotalAssets / 1e6).toFixed(0) : null,
       categoryName: row.CategoryName || null,
       performance: {
         "YTD": pct(row.ReturnM0),
