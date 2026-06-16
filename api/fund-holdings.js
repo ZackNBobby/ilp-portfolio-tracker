@@ -205,8 +205,12 @@ module.exports = async function handler(req, res) {
         debug.push(`holdings ${hr.status}: ${url.slice(0,80)}`);
         if (!hr.ok) continue;
         const text = await hr.text();
+        // Log first 400 chars of body so we can see the actual structure
+        debug.push(`holdings body: ${text.slice(0,400)}`);
         if (!text.trim().startsWith("{") && !text.trim().startsWith("[")) continue;
         const hd = JSON.parse(text);
+        // Log top-level keys
+        debug.push(`holdings keys: ${Object.keys(hd).join(",")}`);
         // Try multiple response shape variants
         const list =
           hd?.Holding?.HoldingDetail ||
@@ -249,8 +253,10 @@ module.exports = async function handler(req, res) {
         debug.push(`alloc ${sr.status}: ${url.slice(0,80)}`);
         if (!sr.ok) continue;
         const text = await sr.text();
+        debug.push(`alloc body: ${text.slice(0,400)}`);
         if (!text.trim().startsWith("{")) continue;
         const sd = JSON.parse(text);
+        debug.push(`alloc keys: ${Object.keys(sd).join(",")}`);
 
         // Screener format: {rows:[{SecId, AssetAllocStock,...}]}
         if (sd.rows) {
