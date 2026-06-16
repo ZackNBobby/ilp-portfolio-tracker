@@ -2712,27 +2712,40 @@ async function loadFdmHistory(name){
   }catch(e){_fdmHistory=[];if(_fdmTab==="performance")renderFdmBody();}
 }
 
+// Return a YYYY-MM-DD string shifted by calendar months/years (avoids landing on volatile exact-day offsets)
+function _shiftDate(dateStr,months,years){
+  const d=new Date(dateStr);
+  if(months)d.setMonth(d.getMonth()-months);
+  if(years) d.setFullYear(d.getFullYear()-years);
+  return d.toISOString().split("T")[0];
+}
+function _annualize(cumPct,years){
+  if(cumPct===null)return null;
+  return+((Math.pow(1+cumPct/100,1/years)-1)*100).toFixed(2);
+}
+
 function calcPerfFromStored(history){
   if(!history||!history.length)return null;
   const latest=history[0];
-  const latestDate=new Date(latest.date);
   const latestPrice=latest.price;
-  const findPrice=(daysAgo)=>{
-    const t=new Date(latestDate);t.setDate(t.getDate()-daysAgo);
-    const ts=t.toISOString().split("T")[0];
-    for(const e of history){if(e.date<=ts)return e.price;}
+  const ref=latest.date;
+  const findPrice=(dateStr)=>{
+    for(const e of history){if(e.date<=dateStr)return e.price;}
     return null;
   };
-  const pct=(daysAgo)=>{
-    const old=findPrice(daysAgo);
+  const pct=(dateStr)=>{
+    const old=findPrice(dateStr);
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
-  const annualize=(cumPct,years)=>{
-    if(cumPct===null)return null;
-    return+((Math.pow(1+cumPct/100,1/years)-1)*100).toFixed(2);
+  return{
+    "1M":pct(_shiftDate(ref,1)),
+    "3M":pct(_shiftDate(ref,3)),
+    "6M":pct(_shiftDate(ref,6)),
+    "1Y":pct(_shiftDate(ref,0,1)),
+    "3Y":_annualize(pct(_shiftDate(ref,0,3)),3),
+    "5Y":_annualize(pct(_shiftDate(ref,0,5)),5),
   };
-  return{"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":annualize(pct(1095),3),"5Y":annualize(pct(1825),5)};
 }
 
 // Calculate performance from Morningstar timeseries prices (oldest-first [{date,price}])
@@ -2741,27 +2754,24 @@ function calcPerfFromTimeseries(tsData){
   if(!prices||prices.length<2)return null;
   const latest=prices[prices.length-1];
   const latestPrice=latest.price;
-  const latestDate=new Date(latest.date);
-  const findPrice=(daysAgo)=>{
-    const t=new Date(latestDate);t.setDate(t.getDate()-daysAgo);
-    const ts=t.toISOString().split("T")[0];
-    // prices is oldest-first, scan backwards
-    for(let i=prices.length-2;i>=0;i--){if(prices[i].date<=ts)return prices[i].price;}
+  const ref=latest.date;
+  // Scan backwards for price on or before a target date
+  const findPrice=(dateStr)=>{
+    for(let i=prices.length-2;i>=0;i--){if(prices[i].date<=dateStr)return prices[i].price;}
     return null;
   };
-  const pct=(daysAgo)=>{
-    const old=findPrice(daysAgo);
+  const pct=(dateStr)=>{
+    const old=findPrice(dateStr);
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
-  // 3Y and 5Y: annualize to match Morningstar/FT Markets convention (CAGR not cumulative)
-  const annualize=(cumPct,years)=>{
-    if(cumPct===null)return null;
-    return+((Math.pow(1+cumPct/100,1/years)-1)*100).toFixed(2);
-  };
   const result={
-    "1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),
-    "3Y":annualize(pct(1095),3),"5Y":annualize(pct(1825),5)
+    "1M":pct(_shiftDate(ref,1)),
+    "3M":pct(_shiftDate(ref,3)),
+    "6M":pct(_shiftDate(ref,6)),
+    "1Y":pct(_shiftDate(ref,0,1)),
+    "3Y":_annualize(pct(_shiftDate(ref,0,3)),3),
+    "5Y":_annualize(pct(_shiftDate(ref,0,5)),5),
   };
   return Object.values(result).some(v=>v!==null)?result:null;
 }
