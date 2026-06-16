@@ -1611,7 +1611,7 @@ function renderPrices(){
     const chgBadge=(v,lbl)=>v!=null?`<span style="font-size:10px;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'};">${v>=0?'+':''}${v.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> ${lbl}</span></span>`:'';
     return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance" style="flex-direction:column;align-items:stretch;gap:5px;">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-        <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;flex:1;">${esc(short)}</span>
+        <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;">${esc(short)}</span>
         ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.45);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#06b6d4;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#67e8f9;letter-spacing:0.5px;">LIVE</span></span>`:''}
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
