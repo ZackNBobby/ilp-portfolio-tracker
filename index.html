@@ -494,9 +494,11 @@ body{
 .calc-title{font-size:23px;font-weight:900;background:linear-gradient(135deg,var(--gold-l) 0%,var(--gold) 50%,#fde68a 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:5px;}
 .calc-subtitle{font-size:13px;color:var(--muted);line-height:1.5;}
 .calc-sub-tabs{display:flex;gap:2px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:26px;}
-.calc-sub-tab{padding:10px 22px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all 0.15s;letter-spacing:0.03em;}
-.calc-sub-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.calc-sub-tab{padding:10px 22px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all 0.15s;letter-spacing:0.03em;animation:calcTabPulse 3s ease-in-out infinite;}
+.calc-sub-tab.active{color:var(--gold);border-bottom-color:var(--gold);animation:calcTabGlow 2.4s ease-in-out infinite;}
 .calc-sub-tab:hover:not(.active){color:var(--muted);}
+@keyframes calcTabPulse{0%,100%{text-shadow:none;color:var(--dim);}50%{text-shadow:0 0 10px rgba(6,182,212,0.4);color:#64b5ca;}}
+@keyframes calcTabGlow{0%,100%{text-shadow:0 0 6px rgba(245,158,11,0.5);color:var(--gold);}50%{text-shadow:0 0 18px rgba(245,158,11,0.9),0 0 32px rgba(245,158,11,0.4);color:var(--gold-l);}}
 /* Chart + cards — full width chart, cards side by side below */
 .calc-chart-panel{background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px 20px 18px;height:380px;position:relative;margin-bottom:16px;}
 .calc-chart-title{font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;}
@@ -551,11 +553,18 @@ body{
 .calc-disclaimer{font-size:11px;color:var(--dim);line-height:1.6;padding:12px 16px;background:rgba(255,255,255,0.015);border-radius:8px;border:1px solid rgba(255,255,255,0.05);}
 /* Projection table */
 .calc-proj-wrap{overflow-x:auto;border-radius:14px;border:1px solid rgba(255,255,255,0.07);margin-bottom:24px;}
-.calc-proj-table{width:100%;border-collapse:collapse;font-size:13px;}
-.calc-proj-table thead tr{background:rgba(255,255,255,0.04);}
-.calc-proj-table th{padding:12px 14px;text-align:right;font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;}
+.calc-proj-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+.calc-proj-table col.col-yr{width:56px;}
+.calc-proj-table col.col-dep{width:90px;}
+.calc-proj-table col.col-val{width:100px;}
+.calc-proj-table col.col-pct{width:72px;}
+.calc-proj-table col.col-diff{width:100px;}
+.calc-proj-table thead tr.proj-group{background:rgba(255,255,255,0.06);}
+.calc-proj-table thead tr{background:rgba(255,255,255,0.03);}
+.calc-proj-table th{padding:9px 10px;text-align:right;font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .calc-proj-table th:first-child{text-align:left;}
-.calc-proj-table td{padding:9px 14px;text-align:right;border-top:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600;}
+.calc-proj-table th.group-hd{text-align:center;font-size:11px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.calc-proj-table td{padding:8px 10px;text-align:right;border-top:1px solid rgba(255,255,255,0.04);color:var(--muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;}
 .calc-proj-table td:first-child{text-align:left;font-weight:800;color:var(--dim);}
 .calc-proj-table tbody tr:hover{background:rgba(255,255,255,0.025);}
 .calc-proj-table tbody tr.proj-milestone{background:rgba(245,158,11,0.04);}
@@ -3026,8 +3035,8 @@ startListeners();
 // ══════════════════════════════════════════════════════════════════════════════
 let _calcSubTab="planner",_calcChart2=null;
 let _calcS=[
-  {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:0.05},
-  {name:"Investments",           startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:8.0}
+  {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:0.05},
+  {name:"Investments",           startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:8.0}
 ];
 
 function calcFV(s,yrsOverride){
@@ -3215,16 +3224,28 @@ function buildCalcProjection(s1,s2){
   }
   return`<div class="calc-proj-wrap">
     <table class="calc-proj-table">
+      <colgroup>
+        <col class="col-yr"/>
+        <col class="col-dep"/><col class="col-val"/><col class="col-pct"/>
+        <col class="col-dep"/><col class="col-val"/><col class="col-pct"/>
+        <col class="col-diff"/>
+      </colgroup>
       <thead>
+        <tr class="proj-group">
+          <th></th>
+          <th colspan="3" class="group-hd" style="color:#60a5fa;border-right:1px solid rgba(255,255,255,0.08);">S1 · ${esc(s1.name)}</th>
+          <th colspan="3" class="group-hd" style="color:var(--gold);border-right:1px solid rgba(255,255,255,0.08);">S2 · ${esc(s2.name)}</th>
+          <th></th>
+        </tr>
         <tr>
           <th>Year</th>
-          <th>${esc(s1.name)} — Deposits</th>
-          <th style="color:#60a5fa;">S1 Value</th>
-          <th style="color:var(--green);">S1 % Gain</th>
-          <th>${esc(s2.name)} — Deposits</th>
-          <th style="color:var(--gold);">S2 Value</th>
-          <th style="color:var(--green);">S2 % Gain</th>
-          <th>Difference</th>
+          <th>Deposits</th>
+          <th style="color:#60a5fa;">Value</th>
+          <th style="color:var(--green);">% Gain</th>
+          <th>Deposits</th>
+          <th style="color:var(--gold);">Value</th>
+          <th style="color:var(--green);">% Gain</th>
+          <th>Diff</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
