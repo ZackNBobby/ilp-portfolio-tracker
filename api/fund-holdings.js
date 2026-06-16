@@ -177,141 +177,54 @@ module.exports = async function handler(req, res) {
   const { secId, universe } = mapping;
   const pct = v => v != null && !isNaN(v) ? +parseFloat(v).toFixed(2) : null;
   const univ = universe || UNIVERSE;
-  const univDec = univ.replace(/%24%24/g, "$$$$");  // decoded for tools endpoint
-  const debug = [];
 
   try {
-    let row = {};
-    let holdings = [];
+    // Run holdings and allocation in parallel — max 4s each
+    const [holdings, row] = await Promise.all([
 
-    // ── HOLDINGS: tools.morningstar.co.uk (same domain that works for timeseries) ──
-    const holdingAttempts = [
-      // Format A — tools UK domain with bracket id format
-      `https://tools.morningstar.co.uk/api/rest.svc/portfolio_holdings/${TOKEN}`
-        + `?id=${secId}%5D2%5D0%5D${encodeURIComponent(univDec)}&languageId=en-SG&currencyId=SGD&outputType=json`,
-      // Format B — lt domain security_details with holding viewId
-      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
-        + `?viewId=holding&columnIds=HoldingRatioPortfolio%2CHoldingName%2CSectorName`
-        + `&languageId=en-SG&currencyId=SGD&iType=3&holdType=all`,
-      // Format C — lt domain with different column set
-      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
-        + `?viewId=holding&columnIds=weighting%2CsecurityName%2Csector`
-        + `&languageId=en-SG&currencyId=SGD&iType=3`,
-    ];
+      // ── HOLDINGS ──
+      (async () => {
+        const url = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
+          + `?viewId=holding&columnIds=HoldingRatioPortfolio%2CHoldingName%2CSectorName`
+          + `&languageId=en-SG&currencyId=SGD&iType=3&holdType=all`;
+        try {
+          const hr = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(4000) });
+          if (!hr.ok) return [];
+          const text = await hr.text();
+          if (!text.trim().startsWith("{") && !text.trim().startsWith("[")) return [];
+          const hd = JSON.parse(text);
+          const list = hd?.Holding?.HoldingDetail || hd?.holding?.holdingDetail ||
+            hd?.holdings || hd?.HoldingDetail || (Array.isArray(hd) ? hd : null) || [];
+          return list
+            .filter(h => (h.HoldingRatioPortfolio ?? h.weighting ?? h.weight) != null
+                      && (h.HoldingName ?? h.securityName ?? h.name))
+            .sort((a, b) => parseFloat(b.HoldingRatioPortfolio ?? b.weighting ?? b.weight ?? 0)
+                          - parseFloat(a.HoldingRatioPortfolio ?? a.weighting ?? a.weight ?? 0))
+            .slice(0, 10)
+            .map(h => ({
+              name: h.HoldingName ?? h.securityName ?? h.name ?? "",
+              pct:  +parseFloat(h.HoldingRatioPortfolio ?? h.weighting ?? h.weight ?? 0).toFixed(2),
+              sector: h.SectorName ?? h.sector ?? null,
+            }));
+        } catch { return []; }
+      })(),
 
-    for (const url of holdingAttempts) {
-      try {
-        const hr = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
-        debug.push(`holdings ${hr.status}: ${url.slice(0,80)}`);
-        if (!hr.ok) continue;
-        const text = await hr.text();
-        // Log first 400 chars of body so we can see the actual structure
-        debug.push(`holdings body: ${text.slice(0,400)}`);
-        if (!text.trim().startsWith("{") && !text.trim().startsWith("[")) continue;
-        const hd = JSON.parse(text);
-        // Log top-level keys
-        debug.push(`holdings keys: ${Object.keys(hd).join(",")}`);
-        // Try multiple response shape variants
-        const list =
-          hd?.Holding?.HoldingDetail ||
-          hd?.holding?.holdingDetail ||
-          hd?.holdings ||
-          hd?.HoldingDetail ||
-          (Array.isArray(hd) ? hd : null) || [];
-        const parsed = list
-          .filter(h => (h.HoldingRatioPortfolio ?? h.weighting ?? h.weight) != null && (h.HoldingName ?? h.securityName ?? h.name))
-          .sort((a, b) => parseFloat(b.HoldingRatioPortfolio ?? b.weighting ?? b.weight ?? 0) - parseFloat(a.HoldingRatioPortfolio ?? a.weighting ?? a.weight ?? 0))
-          .slice(0, 10)
-          .map(h => ({
-            name: h.HoldingName ?? h.securityName ?? h.name ?? "",
-            pct:  +parseFloat(h.HoldingRatioPortfolio ?? h.weighting ?? h.weight ?? 0).toFixed(2),
-            sector: h.SectorName ?? h.sector ?? null,
-          }));
-        if (parsed.length > 0) { holdings = parsed; break; }
-      } catch (e) { debug.push(`holdings err: ${e.message}`); }
-    }
+      // ── ALLOCATION: screener (fast ~1s, finds exact SecId when filter works) ──
+      (async () => {
+        const url = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
+          + `?outputType=json&languageId=en-SG`
+          + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
+          + `&universeIds=${univ}`
+          + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`;
+        try {
+          const sr = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(4000) });
+          if (!sr.ok) return {};
+          const sd = await sr.json();
+          return (sd.rows || []).find(r => r.SecId === secId) || {};
+        } catch { return {}; }
+      })(),
 
-    // ── ALLOCATION: tools.morningstar.co.uk snapshot + screener fallback ──
-    const allocAttempts = [
-      // Format A — tools UK domain snapshot (bracket id format, same as timeseries)
-      `https://tools.morningstar.co.uk/api/rest.svc/fund_snapshot/${TOKEN}`
-        + `?id=${secId}%5D2%5D0%5D${encodeURIComponent(univDec)}&languageId=en-SG&currencyId=SGD&outputType=json`,
-      // Format B — lt domain snapshot viewId
-      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
-        + `?viewId=snapshot&languageId=en-SG&currencyId=SGD&iType=3`,
-      // Format C — screener WITHOUT universeIds — universe param may be swallowing SecId filter
-      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
-        + `?outputType=json&languageId=en-SG`
-        + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
-        + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`,
-      // Format D — screener with id= direct param (no filters= syntax)
-      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
-        + `?outputType=json&languageId=en-SG`
-        + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
-        + `&universeIds=${univ}`
-        + `&id=${secId}`,
-    ];
-
-    for (const url of allocAttempts) {
-      try {
-        const sr = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
-        debug.push(`alloc ${sr.status}: ${url.slice(0,80)}`);
-        if (!sr.ok) continue;
-        const text = await sr.text();
-        // Log 1500 chars so we can see the full XML structure for snapshot
-        debug.push(`alloc body: ${text.slice(0,1500)}`);
-        if (!text.trim().startsWith("{") && !text.trim().startsWith("<")) continue;
-        let sd;
-        if (text.trim().startsWith("{")) {
-          sd = JSON.parse(text);
-          debug.push(`alloc keys: ${Object.keys(sd).join(",")}`);
-        } else {
-          // XML — log all tag names present so we know what fields to parse
-          const tagNames = [...new Set([...text.matchAll(/<([A-Za-z][A-Za-z0-9_]+)[\s/>]/g)].map(m=>m[1]))];
-          debug.push(`alloc xml tags: ${tagNames.join(",")}`);
-          sd = { _xml: text };
-        }
-
-        // Screener format: {rows:[{SecId, AssetAllocStock,...}]}
-        if (sd.rows) {
-          const matched = (sd.rows || []).find(r => r.SecId === secId);
-          if (matched) { row = matched; break; }
-          continue;
-        }
-        // Snapshot / fund_snapshot formats — try several shapes
-        const alloc =
-          sd?.Portfolios?.[0]?.PortfolioStatistics ||
-          sd?.portfolioStatistics ||
-          sd?.AssetAllocation ||
-          sd?.assetAllocation || {};
-        // Map known field names into our row shape
-        const fieldMap = {
-          AssetAllocEquity: ['AssetAllocEquity','AssetAllocStock','equity','Equity'],
-          AssetAllocBond:   ['AssetAllocBond','AssetAllocBondLong','bond','Bond','fixedIncome'],
-          AssetAllocCash:   ['AssetAllocCash','AssetAllocCashLong','cash','Cash'],
-          AssetAllocOther:  ['AssetAllocOther','other','Other'],
-        };
-        let found = false;
-        for (const [out, candidates] of Object.entries(fieldMap)) {
-          for (const c of candidates) {
-            if (alloc[c] != null) { row[out] = alloc[c]; found = true; break; }
-          }
-        }
-        // Also try sector from snapshot
-        const sectors = sd?.Portfolios?.[0]?.GlobalStockSector || sd?.GlobalStockSector || [];
-        if (Array.isArray(sectors) && sectors.length) {
-          const sMap = {SectorConsumerCyclical:'ConsumerCyclical',SectorFinancialServices:'FinancialServices',
-            SectorHealthcare:'Healthcare',SectorIndustrials:'Industrials',SectorTechnology:'Technology',
-            SectorCommunicationServices:'CommunicationServices',SectorConsumerDefensive:'ConsumerDefensive',
-            SectorEnergy:'Energy',SectorBasicMaterials:'BasicMaterials',SectorRealEstate:'RealEstate',SectorUtilities:'Utilities'};
-          for (const s of sectors) {
-            const key = Object.keys(sMap).find(k => sMap[k] === s.Type || sMap[k] === s.type);
-            if (key && (s.SectorWeighting ?? s.weighting) != null) row[key] = s.SectorWeighting ?? s.weighting;
-          }
-        }
-        if (found) break;
-      } catch (e) { debug.push(`alloc err: ${e.message}`); }
-    }
+    ]);
 
     return res.status(200).json({
       name, secId,
@@ -345,7 +258,6 @@ module.exports = async function handler(req, res) {
       holdings,
       source: "Morningstar",
       fetchedAt: new Date().toISOString(),
-      _debug: debug,  // remove once working
     });
   } catch (e) {
     return res.status(503).json({ error: e.message, name, secId });
