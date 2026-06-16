@@ -1997,7 +1997,8 @@ function initCharts(clientId){
 }
 
 // ── S&P 500 overlay ──
-const _sp500Cache={};  // keyed by startDate
+let _sp500AllPrices=null;   // single global cache — all 6 years, fetched once
+let _sp500Fetching=null;    // in-flight promise so concurrent callers share one request
 
 async function _loadSp500Chart(clientId){
   const sp5Wrap=document.getElementById(`gwrap-sp500-${clientId}`);
@@ -2026,24 +2027,35 @@ async function _loadSp500Chart(clientId){
 
   if(loadingEl){loadingEl.innerHTML="Loading S&P 500 data…";loadingEl.style.display="flex";}
 
-  let sp5Prices=_sp500Cache[baseDate];
-  if(!sp5Prices){
-    try{
-      const ctrl=new AbortController();
-      const timer=setTimeout(()=>ctrl.abort(),25000);
-      const r=await fetch(`/api/sp500?from=${baseDate}`,{signal:ctrl.signal});
-      clearTimeout(timer);
-      if(!r.ok)throw new Error(`Server error (HTTP ${r.status})`);
-      const d=await r.json();
-      if(d.error)throw new Error(d.error);
-      sp5Prices=d.prices||[];
-      _sp500Cache[baseDate]=sp5Prices;
-    }catch(e){
+  // Fetch the full 6-year dataset once; all clients share the same cache
+  if(!_sp500AllPrices){
+    if(!_sp500Fetching){
+      _sp500Fetching=(async()=>{
+        const ctrl=new AbortController();
+        const timer=setTimeout(()=>ctrl.abort(),25000);
+        try{
+          const r=await fetch("/api/sp500",{signal:ctrl.signal});
+          clearTimeout(timer);
+          if(!r.ok)throw new Error(`Server error (HTTP ${r.status})`);
+          const d=await r.json();
+          if(d.error)throw new Error(d.error);
+          _sp500AllPrices=d.prices||[];
+        }finally{
+          _sp500Fetching=null;
+        }
+      })();
+    }
+    try{await _sp500Fetching;}
+    catch(e){
       const msg=e.name==="AbortError"?"Request timed out. Yahoo Finance may be temporarily unavailable.":"Could not load S&P 500 data: "+e.message;
       showErr(msg);return;
     }
   }
-  if(!sp5Prices.length){showErr("No S&P 500 data available for this period.");return;}
+  if(!_sp500AllPrices||!_sp500AllPrices.length){showErr("No S&P 500 data available.");return;}
+
+  // Filter to dates on or after this client's start date
+  const sp5Prices=_sp500AllPrices.filter(p=>p.date>=baseDate);
+  if(!sp5Prices.length){showErr("No S&P 500 data available for this client's start date.");return;}
 
   if(loadingEl)loadingEl.style.display="none";
 
@@ -2184,7 +2196,9 @@ window.switchGrowthTab=async(clientId,view)=>{
   }
   if(portWrap)portWrap.style.display="none";
   if(sp5Wrap)sp5Wrap.style.display="";
-  if(charts[`sp500-${clientId}`])return;
+  // Only skip if chart is drawn AND its canvas is still in the DOM
+  const existingCanvas=document.getElementById(`sp500-${clientId}`);
+  if(charts[`sp500-${clientId}`]&&existingCanvas&&existingCanvas.closest("#app"))return;
   await _loadSp500Chart(clientId);
 };
 
