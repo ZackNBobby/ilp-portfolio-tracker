@@ -2921,6 +2921,7 @@ function renderFdmBody(){
     if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
     setTimeout(()=>window.updateScenario&&window.updateScenario(),30);
   }
+  if(_fdmTab==="holdings")setTimeout(drawHoldingsPieChart,30);
 }
 
 function renderFdmOverview(){
@@ -3099,6 +3100,51 @@ function renderFdmPerformance(){
   return h;
 }
 
+function drawHoldingsPieChart(){
+  const canvas=document.getElementById("fdm-asset-pie");
+  if(!canvas)return;
+  // Pick the data source: live API → FT fallback → static factsheet
+  const live=_fdmHoldings&&!_fdmHoldings.noMapping&&!_fdmHoldings.error?_fdmHoldings:null;
+  const ftFallback=_fdmHoldings?.ftHoldings||null;
+  const staticH=(FUND_DB[_fdmFund]||{}).staticHoldings||null;
+  const src=live||ftFallback||staticH;
+  if(!src?.assetAlloc||!Object.keys(src.assetAlloc).length)return;
+
+  const palette={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6",
+    "Stock":"#f59e0b","Convertible Securities":"#8b5cf6","High Yield Bonds":"#ef4444",
+    "Cash and Derivatives":"#10b981","Cash & Equivalents":"#10b981","Bonds & Cash":"#3b82f6"};
+  const extras=["#ec4899","#06b6d4","#22c55e","#f97316","#a855f7","#64748b"];
+  let ei=0;
+  const entries=Object.entries(src.assetAlloc).sort((a,b)=>b[1]-a[1]);
+  const labels=entries.map(([k])=>k);
+  const values=entries.map(([,v])=>v);
+  const colors=labels.map(l=>palette[l]||(extras[ei++%extras.length]));
+
+  destroyChart("fdm-asset-pie");
+  charts["fdm-asset-pie"]=new Chart(canvas,{
+    type:"doughnut",
+    data:{
+      labels,
+      datasets:[{data:values,backgroundColor:colors,borderWidth:2,borderColor:"#1e293b",hoverBorderColor:"#334155"}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,cutout:"62%",
+      plugins:{
+        legend:{
+          display:true,position:"right",
+          labels:{color:"#cbd5e1",font:{size:11},boxWidth:10,padding:8,
+            generateLabels:(chart)=>chart.data.labels.map((l,i)=>({
+              text:`${l}  ${values[i].toFixed(1)}%`,
+              fillStyle:colors[i],strokeStyle:colors[i],lineWidth:0,index:i,hidden:false
+            }))
+          }
+        },
+        tooltip:{callbacks:{label:(ctx)=>` ${ctx.label}: ${ctx.parsed.toFixed(1)}%`}}
+      }
+    }
+  });
+}
+
 function renderFdmHoldings(){
   if(!_fdmHoldings){
     return`<div class="fdm-loading">⏳ Loading holdings from Morningstar...</div>`;
@@ -3134,11 +3180,27 @@ function renderFdmHoldings(){
     return`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">⚠️ Could not load holdings data. Please try again later.</div>`;
   }
 
-  // If Morningstar data is incomplete (no sector or geo), fall back to static factsheet data
+  // If Morningstar data is incomplete, fall back to static factsheet data, then FT Markets link
   {
     const info=FUND_DB[_fdmFund]||{};
-    const msComplete=(h.sectorAlloc&&Object.keys(h.sectorAlloc).length>0)||(h.geoAlloc&&Object.keys(h.geoAlloc).length>0)||(h.holdings&&h.holdings.length>0);
-    if(!msComplete&&info.staticHoldings) return renderHoldingsData(info.staticHoldings,`📋 As of ${info.staticHoldings.asOf} · Source: ${info.staticHoldings.source}`);
+    const msComplete=(h.assetAlloc&&Object.keys(h.assetAlloc).length>0)||(h.sectorAlloc&&Object.keys(h.sectorAlloc).length>0)||(h.geoAlloc&&Object.keys(h.geoAlloc).length>0)||(h.holdings&&h.holdings.length>0);
+    if(!msComplete){
+      if(info.staticHoldings) return renderHoldingsData(info.staticHoldings,`📋 As of ${info.staticHoldings.asOf} · Source: ${info.staticHoldings.source}`);
+      const ftSym=FUND_UNDERLYING[_fdmFund];
+      const ftHoldUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
+      return`<div style="text-align:center;padding:30px 20px;">
+        <div style="font-size:36px;margin-bottom:12px;">📊</div>
+        <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Not Available via Data Feed</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.9;">
+          Portfolio data is not available for this share class.<br>
+          ${ftHoldUrl
+            ?`View live holdings on FT Markets:<br>
+              <a href="${ftHoldUrl}" target="_blank" rel="noopener noreferrer"
+                 style="color:var(--gold);text-decoration:underline;text-underline-offset:3px;font-size:12px;word-break:break-all;">${ftHoldUrl}</a>`
+            :`Please refer to the latest fund factsheet.`}
+        </div>
+      </div>`;
+    }
   }
 
   return renderHoldingsData(h,`📅 Portfolio data as of ${h.portfolioDate||"?"} · Source: Morningstar`);
@@ -3148,21 +3210,13 @@ function renderHoldingsData(h,sourceLabel){
   let out="";
   out+=`<div style="font-size:11px;color:#6b7280;margin-bottom:14px;">${sourceLabel}</div>`;
 
-  // ── Asset Allocation ──
+  // ── Asset Allocation ── donut chart
   const assetColors={"Equity":"#f59e0b","Bonds":"#3b82f6","Cash":"#10b981","Other":"#8b5cf6","Stock":"#f59e0b",
-    "Convertible Securities":"#8b5cf6","High Yield Bonds":"#ef4444","Cash and Derivatives":"#10b981"};
+    "Convertible Securities":"#8b5cf6","High Yield Bonds":"#ef4444","Cash and Derivatives":"#10b981",
+    "Cash & Equivalents":"#10b981","Bonds & Cash":"#3b82f6"};
   if(h.assetAlloc&&Object.keys(h.assetAlloc).length){
-    out+=`<div class="fdm-sec-hd">🏦 Asset Allocation</div>`;
-    const sorted=Object.entries(h.assetAlloc).sort((a,b)=>b[1]-a[1]);
-    const max=sorted[0]?.[1]||100;
-    sorted.forEach(([label,val])=>{
-      const col=assetColors[label]||"#6b7280";
-      out+=`<div class="fdm-alloc-row">
-        <div class="fdm-alloc-label">${esc(label)}</div>
-        <div class="fdm-alloc-bar-bg"><div class="fdm-alloc-bar" style="width:${(val/max*100).toFixed(1)}%;background:${col};"></div></div>
-        <div class="fdm-alloc-pct">${val.toFixed(1)}%</div>
-      </div>`;
-    });
+    out+=`<div class="fdm-sec-hd">🏦 Asset Allocation</div>
+    <div style="position:relative;height:160px;margin:6px 0 16px;"><canvas id="fdm-asset-pie"></canvas></div>`;
   }
 
   // ── Geographic Allocation ──
@@ -3219,22 +3273,26 @@ function renderHoldingsData(h,sourceLabel){
   }
 
   // ── Top Holdings ──
+  const holdColors=["#f59e0b","#3b82f6","#8b5cf6","#10b981","#ef4444","#f97316","#06b6d4","#ec4899","#22c55e","#64748b"];
   if(h.holdings&&h.holdings.length){
     const maxPct=h.holdings[0].pct;
     out+=`<div class="fdm-sec-hd" style="margin-top:16px;">🏆 Top ${h.holdings.length} Holdings</div>`;
     h.holdings.forEach((hld,i)=>{
-      out+=`<div class="fdm-hold-row">
-        <div class="fdm-hold-rank">${i+1}</div>
-        <div class="fdm-hold-name" title="${esc(hld.name)}">${esc(hld.name)}</div>
-        <div class="fdm-hold-bar-bg"><div class="fdm-hold-bar" style="width:${(hld.pct/maxPct*100).toFixed(1)}%;"></div></div>
-        <div class="fdm-hold-pct">${hld.pct.toFixed(2)}%</div>
+      const col=holdColors[i%holdColors.length];
+      out+=`<div class="fdm-hold-row" style="margin-bottom:7px;display:flex;align-items:center;gap:8px;">
+        <div style="min-width:18px;height:18px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">${i+1}</div>
+        <div class="fdm-hold-name" style="flex:1;font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(hld.name)}">${esc(hld.name)}</div>
+        <div style="width:80px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+          <div style="width:${(hld.pct/maxPct*100).toFixed(1)}%;height:100%;background:${col};border-radius:3px;"></div>
+        </div>
+        <div style="min-width:40px;text-align:right;font-size:12px;font-weight:600;color:${col};">${hld.pct.toFixed(2)}%</div>
       </div>`;
     });
   } else if(!h.assetAlloc||!Object.keys(h.assetAlloc).length){
     out+=`<div style="text-align:center;padding:20px;color:#94a3b8;font-size:13px;">No allocation data available. Please refer to the latest fund factsheet.</div>`;
   } else {
-    out+=`<div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:#94a3b8;line-height:1.6;">
-      ℹ️ Individual holdings not available from this data source. For full holdings list, refer to the latest fund factsheet.
+    out+=`<div style="margin-top:12px;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:12px;color:#94a3b8;">
+      ℹ️ Individual holdings not available from this data source.
     </div>`;
   }
 

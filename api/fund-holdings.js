@@ -239,12 +239,17 @@ module.exports = async function handler(req, res) {
       // Format B — lt domain snapshot viewId
       `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
         + `?viewId=snapshot&languageId=en-SG&currencyId=SGD&iType=3`,
-      // Format C — lt domain screener with SecId filter (validate match)
+      // Format C — screener WITHOUT universeIds — universe param may be swallowing SecId filter
+      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
+        + `?outputType=json&languageId=en-SG`
+        + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
+        + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`,
+      // Format D — screener with id= direct param (no filters= syntax)
       `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
         + `?outputType=json&languageId=en-SG`
         + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
         + `&universeIds=${univ}`
-        + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`,
+        + `&id=${secId}`,
     ];
 
     for (const url of allocAttempts) {
