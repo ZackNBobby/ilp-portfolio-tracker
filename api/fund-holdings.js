@@ -253,10 +253,19 @@ module.exports = async function handler(req, res) {
         debug.push(`alloc ${sr.status}: ${url.slice(0,80)}`);
         if (!sr.ok) continue;
         const text = await sr.text();
-        debug.push(`alloc body: ${text.slice(0,400)}`);
-        if (!text.trim().startsWith("{")) continue;
-        const sd = JSON.parse(text);
-        debug.push(`alloc keys: ${Object.keys(sd).join(",")}`);
+        // Log 1500 chars so we can see the full XML structure for snapshot
+        debug.push(`alloc body: ${text.slice(0,1500)}`);
+        if (!text.trim().startsWith("{") && !text.trim().startsWith("<")) continue;
+        let sd;
+        if (text.trim().startsWith("{")) {
+          sd = JSON.parse(text);
+          debug.push(`alloc keys: ${Object.keys(sd).join(",")}`);
+        } else {
+          // XML — log all tag names present so we know what fields to parse
+          const tagNames = [...new Set([...text.matchAll(/<([A-Za-z][A-Za-z0-9_]+)[\s/>]/g)].map(m=>m[1]))];
+          debug.push(`alloc xml tags: ${tagNames.join(",")}`);
+          sd = { _xml: text };
+        }
 
         // Screener format: {rows:[{SecId, AssetAllocStock,...}]}
         if (sd.rows) {
