@@ -156,7 +156,7 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   if (req.method === "OPTIONS") { res.status(200).end(); return; }
-  res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=172800");
+  res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
 
   const name = (req.query.name || "").trim();
   const mapping = FUND_SECIDS[name];
@@ -175,21 +175,57 @@ module.exports = async function handler(req, res) {
   }
 
   const { secId, universe } = mapping;
+  const pct = v => v != null && !isNaN(v) ? +parseFloat(v).toFixed(2) : null;
 
   try {
-    // — Screener call: allocation data points —
-    const screenerUrl = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
-      + `?outputType=json&languageId=en-SG`
-      + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
-      + `&universeIds=${universe || UNIVERSE}`
-      + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`;
+    // — Screener call: allocation data — validate SecId so wrong-fund data is rejected —
+    let row = {};
+    const screenerAttempts = [
+      // Strategy 1: SecId filter
+      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
+        + `?outputType=json&languageId=en-SG`
+        + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
+        + `&universeIds=${universe || UNIVERSE}`
+        + `&filters=${encodeURIComponent(`SecId in (${secId})`)}`,
+      // Strategy 2: Id filter (alternative field name)
+      `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security/screener`
+        + `?outputType=json&languageId=en-SG`
+        + `&securityDataPoints=${encodeURIComponent(SCREENER_POINTS)}`
+        + `&universeIds=${universe || UNIVERSE}`
+        + `&filters=${encodeURIComponent(`Id in (${secId})`)}`,
+    ];
+    for (const url of screenerAttempts) {
+      try {
+        const sr = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+        if (!sr.ok) continue;
+        const sd = await sr.json();
+        // Only accept if the returned row actually matches our target SecId
+        const matched = (sd.rows || []).find(r => r.SecId === secId);
+        if (matched) { row = matched; break; }
+      } catch (_) {}
+    }
 
-    const sr = await fetch(screenerUrl, { headers: HEADERS, signal: AbortSignal.timeout(12000) });
-    if (!sr.ok) throw new Error(`Screener HTTP ${sr.status}`);
-    const sd = await sr.json();
-    const row = sd.rows?.[0] || {};
+    // — Snapshot endpoint: another source of allocation data per SecId —
+    if (!row.AssetAllocStock && !row.AssetAllocEquity) {
+      try {
+        const snapUrl = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
+          + `?viewId=snapshot&languageId=en-SG&currencyId=SGD&iType=3`;
+        const sr = await fetch(snapUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
+        if (sr.ok) {
+          const text = await sr.text();
+          if (text.trim().startsWith("{")) {
+            const snap = JSON.parse(text);
+            // Merge any allocation fields found into row
+            const alloc = snap?.Portfolios?.[0]?.PortfolioStatistics || snap?.portfolioStatistics || {};
+            if (alloc.AssetAllocEquity != null) row.AssetAllocEquity = alloc.AssetAllocEquity;
+            if (alloc.AssetAllocBond   != null) row.AssetAllocBond   = alloc.AssetAllocBond;
+            if (alloc.AssetAllocCash   != null) row.AssetAllocCash   = alloc.AssetAllocCash;
+          }
+        }
+      } catch (_) {}
+    }
 
-    // — Portfolio holdings call (may return empty if Morningstar blocks it) —
+    // — Top holdings via security_details (SecId is in the URL — always the right fund) —
     let holdings = [];
     try {
       const holdUrl = `https://lt.morningstar.com/api/rest.svc/${TOKEN}/security_details/${secId}`
@@ -198,7 +234,6 @@ module.exports = async function handler(req, res) {
       const hr = await fetch(holdUrl, { headers: HEADERS, signal: AbortSignal.timeout(10000) });
       if (hr.ok) {
         const text = await hr.text();
-        // Morningstar sometimes returns XML-like or JSON
         if (text.trim().startsWith("{")) {
           const hd = JSON.parse(text);
           const list = hd?.Holding?.HoldingDetail || hd?.holding?.holdingDetail || [];
@@ -209,9 +244,7 @@ module.exports = async function handler(req, res) {
             .map(h => ({ name: h.HoldingName, pct: +parseFloat(h.HoldingRatioPortfolio).toFixed(2), sector: h.SectorName || null }));
         }
       }
-    } catch (_) { /* holdings endpoint blocked or unavailable */ }
-
-    const pct = v => v != null && !isNaN(v) ? +parseFloat(v).toFixed(2) : null;
+    } catch (_) {}
 
     return res.status(200).json({
       name, secId,
