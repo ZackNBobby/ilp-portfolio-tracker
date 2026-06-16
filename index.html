@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -658,7 +658,7 @@ const STARTUP_BONUS={
 };
 
 // ── State ──
-let clients=[],fundPrices={},clientTxs={};
+let clients=[],fundPrices={},underlyingPrices={},clientTxs={};
 let tab="dashboard",currentClientId=null;
 let unsubs=[],charts={};
 
@@ -938,6 +938,13 @@ async function saveFundPriceDB(name,price){
     name,price:parseFloat(price),updatedAt:new Date().toISOString()
   },{merge:true});
 }
+async function saveUnderlyingPriceDB(ftSymbol,price){
+  const id=ftSymbol.replace(/[^a-zA-Z0-9]/g,"_");
+  await setDoc(doc(db,"underlyingPrices",id),{
+    ftSymbol,price:parseFloat(price),updatedAt:new Date().toISOString()
+  },{merge:true});
+  underlyingPrices[ftSymbol]=parseFloat(price);
+}
 
 function startListeners(){
   unsubs.forEach(u=>u());unsubs=[];
@@ -957,6 +964,10 @@ function startListeners(){
     fundPrices={};snap.forEach(d=>{const fd=d.data();fundPrices[fd.name]=fd.price;});
     renderAll();
   },err=>console.error("fundPrices listener error:",err)));
+  unsubs.push(onSnapshot(collection(db,"underlyingPrices"),snap=>{
+    underlyingPrices={};snap.forEach(d=>{const ud=d.data();underlyingPrices[ud.ftSymbol]=ud.price;});
+    renderAll();
+  },err=>console.error("underlyingPrices listener error:",err)));
 }
 
 // ── Rendering ──
@@ -1546,43 +1557,69 @@ function renderPrices(){
   html+=allFunds.map(f=>{
     const p=fundPrices[f]||0;
     const short=f.replace("Income ","").replace(" Fund","");
-    return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance">
-      <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;">${esc(short)}</div>
-      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
-        <div class="price-val">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
-        <button onclick="event.stopPropagation();editPrice(this.dataset.fund)" data-fund="${esc(f)}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="Edit price manually">✏️</button>
+    const ftSym=FUND_UNDERLYING[f]||null;
+    const up=ftSym?(underlyingPrices[ftSym]||0):0;
+    const editBtn=(onclick,title)=>`<button onclick="${onclick}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="${title}">✏️</button>`;
+    return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance" style="flex-direction:column;align-items:stretch;gap:5px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:2px;">${esc(short)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
+        <span style="font-size:10px;color:var(--dim);min-width:70px;">Income Bid</span>
+        <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+          <div class="price-val" style="font-size:15px;">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
+          ${editBtn(`event.stopPropagation();editPrice(${JSON.stringify(f)})`,"Edit Income Bid price manually")}
+        </div>
       </div>
+      ${ftSym?`<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
+        <span style="font-size:10px;color:var(--dim);min-width:70px;">Underlying</span>
+        <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+          <div style="font-size:14px;font-weight:600;color:#a78bfa;">${up?`$${up.toFixed(4)}`:`<span style="color:var(--dim);font-size:11px;">Not fetched</span>`}</div>
+          ${editBtn(`event.stopPropagation();editUnderlyingPrice(${JSON.stringify(ftSym)})`,"Edit underlying fund price manually")}
+        </div>
+      </div>`:""}
     </div>`;
   }).join("");
   html+=`</div>`;
   return html;
 }
 
-let _editingFund=null;
-window.editPrice=(fundName)=>{
-  _editingFund=fundName;
+let _editingFund=null,_editingFTSym=null;
+
+function _openPriceEditor(title,currentValue){
   const el=document.getElementById("priceEditorOverlay");
   const nameEl=document.getElementById("editorFundName");
   const inp=document.getElementById("editorPriceInp");
   if(!el||!nameEl||!inp)return;
-  nameEl.textContent=fundName;
-  inp.value=fundPrices[fundName]?fundPrices[fundName].toFixed(6):"";
+  nameEl.textContent=title;
+  inp.value=currentValue||"";
   el.style.display="flex";
   setTimeout(()=>inp.focus(),60);
   inp.onkeydown=e=>{if(e.key==="Enter")window.saveEditedPrice();if(e.key==="Escape")window.closeEditor();};
+}
+window.editPrice=(fundName)=>{
+  _editingFund=fundName;_editingFTSym=null;
+  _openPriceEditor(`${fundName} — Income Bid`,fundPrices[fundName]?fundPrices[fundName].toFixed(6):"");
+};
+window.editUnderlyingPrice=(ftSymbol)=>{
+  _editingFTSym=ftSymbol;_editingFund=null;
+  _openPriceEditor(`Underlying Fund (${ftSymbol})`,underlyingPrices[ftSymbol]?underlyingPrices[ftSymbol].toFixed(4):"");
 };
 window.saveEditedPrice=async()=>{
   const inp=document.getElementById("editorPriceInp");
   const price=parseFloat(inp?.value||"");
-  if(!_editingFund||isNaN(price)||price<=0){showToast("⚠️ Enter a valid price.");return;}
-  await saveFundPriceDB(_editingFund,price);
-  showToast(`✅ Price saved for ${_editingFund.replace("Income ","")}`);
+  if(isNaN(price)||price<=0){showToast("⚠️ Enter a valid price.");return;}
+  if(_editingFTSym){
+    await saveUnderlyingPriceDB(_editingFTSym,price);
+    showToast(`✅ Underlying price saved`);
+  }else if(_editingFund){
+    await saveFundPriceDB(_editingFund,price);
+    showToast(`✅ Price saved for ${_editingFund.replace("Income ","")}`);
+  }
   window.closeEditor();
 };
 window.closeEditor=()=>{
   const el=document.getElementById("priceEditorOverlay");
   if(el)el.style.display="none";
-  _editingFund=null;
+  _editingFund=null;_editingFTSym=null;
 };
 
 // ── Income fund slug map ──
@@ -1605,6 +1642,25 @@ const INCOME_SLUGS={
   "Money Market Fund":"money-market-fund",
   "Takaful Fund":"takaful-fund",
 };
+
+// ── Underlying sub-fund map (Income fund → FT.com ISIN:currency) ──
+// The underlying institutional fund that Income invests client premiums into.
+// Its price shows in Income's own fund detail chart but differs from the Income bid/NAV unit price.
+const FUND_UNDERLYING={
+  "Income Global Absolute Alpha Fund":"LU2264538146:SGD",
+  // Add more as ISINs are confirmed. Find them at markets.ft.com → fund search.
+};
+
+// Fetch latest price of an underlying sub-fund via the server-side /api/underlying-price endpoint
+async function fetchUnderlyingPrice(ftSymbol){
+  try{
+    const enc=encodeURIComponent(ftSymbol);
+    const resp=await fetch(`/api/underlying-price?symbol=${enc}`,{signal:AbortSignal.timeout(15000)});
+    if(!resp.ok)return null;
+    const data=await resp.json();
+    return(data.price&&data.price>0)?data.price:null;
+  }catch(e){return null;}
+}
 
 // ── Price fetch engine (Vercel serverless) ──
 // Calls /api/fund-prices which runs server-side — no CORS proxies needed.
@@ -1637,14 +1693,28 @@ window.doFetchPrices=async()=>{
     }
     await hb.commit().catch(e=>console.warn("History save error:",e));
 
+    // Also fetch underlying sub-fund prices from FT.com (server-side, no CORS issues)
+    const underlyingEntries=Object.entries(FUND_UNDERLYING);
+    let underlyingFound=0;
+    if(underlyingEntries.length>0){
+      setStatus(`✅ Income: ${found} prices · fetching ${underlyingEntries.length} underlying fund price${underlyingEntries.length>1?"s":""}...`);
+      const uResults=await Promise.all(underlyingEntries.map(([,ftSym])=>
+        fetchUnderlyingPrice(ftSym).then(p=>({ftSym,p}))
+      ));
+      for(const{ftSym,p}of uResults){
+        if(p){await saveUnderlyingPriceDB(ftSym,p);underlyingFound++;}
+      }
+    }
+
     reset();
     const missing=data.missing||[];
     const srcLabel=data.source==='monthly'?' (end-of-month prices)':'';
+    const uNote=underlyingEntries.length>0?` · ${underlyingFound}/${underlyingEntries.length} underlying`:"";
     if(missing.length===0){
-      setStatus(`✅ All ${found} fund prices updated${srcLabel}!`,"var(--green)","rgba(34,197,94,0.1)","rgba(34,197,94,0.3)");
+      setStatus(`✅ All ${found} fund prices updated${srcLabel}${uNote}!`,"var(--green)","rgba(34,197,94,0.1)","rgba(34,197,94,0.3)");
       showToast(`✅ All ${found} fund prices updated!`);
     }else{
-      setStatus(`✅ ${found} prices updated${srcLabel}. Missing: ${missing.map(n=>n.replace('Income ','').replace(' Fund','')).join(', ')} — use ✏️ to enter manually.`,"var(--gold-l)","rgba(245,158,11,0.08)","var(--gold-border)");
+      setStatus(`✅ ${found} prices updated${srcLabel}${uNote}. Missing: ${missing.map(n=>n.replace('Income ','').replace(' Fund','')).join(', ')} — use ✏️ to enter manually.`,"var(--gold-l)","rgba(245,158,11,0.08)","var(--gold-border)");
       showToast(`✅ ${found} fund prices updated!`);
     }
     renderPage();
@@ -2333,7 +2403,7 @@ const FUND_DB={
 };
 
 // ── Fund Detail Modal ─────────────────────────────────────────────────────────
-let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTimeseries=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null;
+let _fdmFund=null,_fdmPeriod="1Y",_fdmData=null,_fdmHistory=null,_fdmTimeseries=null,_fdmMStar=null,_fdmHoldings=null,_fdmTab="overview",_fdmChart=null,_fdmChartUnd=null,_fdmChartTab="income";
 
 function riskPips(level){
   return`<div class="risk-row">${[1,2,3,4,5,6,7].map(i=>`<div class="risk-pip${i<=level?" on"+(i>=6?" r"+i:""):""}"></div>`).join("")}</div>`;
@@ -2345,8 +2415,9 @@ function colorPct(v){
 }
 
 window.openFundDetail=(name)=>{
-  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";
+  _fdmFund=name;_fdmPeriod="1Y";_fdmData=null;_fdmHistory=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;_fdmTab="overview";_fdmChartTab="income";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   const ov=document.getElementById("fdmOverlay");
   if(!ov)return;
   ov.style.display="flex";
@@ -2410,6 +2481,7 @@ window.closeFundDetail=()=>{
   const ov=document.getElementById("fdmOverlay");
   if(ov)ov.style.display="none";
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   _fdmFund=null;_fdmData=null;_fdmTimeseries=null;_fdmMStar=null;_fdmHoldings=null;
 };
 
@@ -2449,14 +2521,95 @@ function fetchFdmHoldings(name){
 window.switchFdmTab=(tab)=>{
   _fdmTab=tab;
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   renderFdmShell();
   renderFdmBody();
+};
+
+// ── Investment scenario calculator ──
+window._fdmCurrentPerf=null;
+window.updateScenario=function(){
+  const inp=document.getElementById("scenarioAmt");
+  const rowsEl=document.getElementById("scenarioRows");
+  if(!inp||!rowsEl||!window._fdmCurrentPerf)return;
+  const amount=Math.max(parseFloat(inp.value)||10000,0);
+  const perf=window._fdmCurrentPerf;
+
+  // 1Y = total 1-year return; 3Y and 5Y = annualized (from Morningstar ReturnM36/M60)
+  const periods=[
+    {lbl:"1 Year Ago",key:"1Y",years:1,annualized:false},
+    {lbl:"3 Years Ago",key:"3Y",years:3,annualized:true},
+    {lbl:"5 Years Ago",key:"5Y",years:5,annualized:true},
+  ];
+
+  const fmt=n=>"$"+Math.round(n).toLocaleString("en-SG");
+  const fmtPct=n=>(n>=0?"+":"")+n.toFixed(2)+"%";
+
+  let html="";
+  for(const{lbl,key,years,annualized}of periods){
+    const v=perf[key];
+    if(v==null)continue;
+    const fundVal=annualized?amount*Math.pow(1+v/100,years):amount*(1+v/100);
+    const fundGain=fundVal-amount;
+    const fundPct=annualized?(Math.pow(1+v/100,years)-1)*100:v;
+    const bankVal=amount*Math.pow(1.0005,years);
+    const bankGain=bankVal-amount;
+    const bankPct=(Math.pow(1.0005,years)-1)*100;
+    const inflVal=amount*Math.pow(1.03,years);
+    const inflNeed=inflVal-amount;
+    const inflPct=(Math.pow(1.03,years)-1)*100;
+    const beatInfl=fundGain>=inflNeed;
+    const fcol=beatInfl?"var(--green)":"#f97316";
+
+    html+=`<div style="margin-bottom:8px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;">
+      <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;letter-spacing:0.5px;">${lbl}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:9px;color:var(--green);font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">THIS FUND</div>
+          <div style="font-size:15px;font-weight:700;color:#f1f5f9;">${fmt(fundVal)}</div>
+          <div style="font-size:11px;color:${fcol};">${fundGain>=0?"+":""}${fmt(Math.abs(fundGain))}</div>
+          <div style="font-size:11px;color:${fcol};font-weight:600;">${fmtPct(fundPct)}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;color:#475569;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">BANK 0.05%</div>
+          <div style="font-size:15px;font-weight:700;color:#475569;">${fmt(bankVal)}</div>
+          <div style="font-size:11px;color:#475569;">+${fmt(bankGain)}</div>
+          <div style="font-size:11px;color:#475569;">${fmtPct(bankPct)}</div>
+        </div>
+        <div>
+          <div style="font-size:9px;color:#f97316;font-weight:700;margin-bottom:3px;letter-spacing:0.5px;">INFLATION 3%</div>
+          <div style="font-size:15px;font-weight:700;color:#f97316;">${fmt(inflVal)}</div>
+          <div style="font-size:11px;color:#6b7280;">need +${fmt(inflNeed)}</div>
+          <div style="font-size:11px;color:#f97316;">${fmtPct(inflPct)}</div>
+        </div>
+      </div>
+      <div style="margin-top:7px;font-size:11px;color:${beatInfl?"var(--green)":"#f97316"};">
+        ${beatInfl?`✅ Beat inflation by ${fmt(fundGain-inflNeed)} (${fmtPct(fundPct-inflPct)})`:`⚠️ Below inflation — real loss of ${fmt(inflNeed-fundGain)}`}
+      </div>
+    </div>`;
+  }
+  rowsEl.innerHTML=html||`<div style="color:#64748b;font-size:12px;padding:8px 0;">No data available for scenario calculation.</div>`;
 };
 
 window.selectFdmPeriod=(period)=>{
   _fdmPeriod=period;
   if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+  if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
   renderFdmBody();
+};
+
+window.selectFdmChartTab=(tab)=>{
+  _fdmChartTab=tab;
+  const wi=document.getElementById("fdmChartWrapIncome");
+  const wu=document.getElementById("fdmChartWrapUnd");
+  const bi=document.getElementById("fdmTabBtnIncome");
+  const bu=document.getElementById("fdmTabBtnUnd");
+  if(wi)wi.style.display=tab==="income"?"block":"none";
+  if(wu)wu.style.display=tab==="underlying"?"block":"none";
+  if(bi){bi.style.background=tab==="income"?"rgba(16,185,129,0.2)":"rgba(255,255,255,0.04)";bi.style.borderColor=tab==="income"?"rgba(16,185,129,0.5)":"rgba(255,255,255,0.12)";bi.style.color=tab==="income"?"#10b981":"#94a3b8";}
+  if(bu){bu.style.background=tab==="underlying"?"rgba(167,139,250,0.2)":"rgba(255,255,255,0.04)";bu.style.borderColor=tab==="underlying"?"rgba(167,139,250,0.5)":"rgba(255,255,255,0.12)";bu.style.color=tab==="underlying"?"#a78bfa":"#94a3b8";}
+  if(tab==="income"&&!_fdmChart)drawFdmChart(_fdmPeriod);
+  if(tab==="underlying"&&!_fdmChartUnd)drawFdmChart(_fdmPeriod);
 };
 
 function renderFdmShell(){
@@ -2489,6 +2642,7 @@ function renderFdmBody(){
     const hasStored=_fdmHistory&&_fdmHistory.length>=2;
     const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
     if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
+    setTimeout(()=>window.updateScenario&&window.updateScenario(),30);
   }
 }
 
@@ -2590,36 +2744,51 @@ function renderFdmPerformance(){
     if(perfSource)h+=`<div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${perfSource}</div>`;
   }
 
-  // Price chart — priority: Morningstar timeseries > Firestore history > live 30-day
+  // Price chart — priority: Income bid prices first, Morningstar sub-fund as fallback
   const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
   const hasStored=_fdmHistory&&_fdmHistory.length>=2;
-  if(!hasTS&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
+  const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+  if(!hasStored&&!hasLive&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
     h+=`<div class="fdm-loading" style="padding:20px;">⏳ Loading price chart...</div>`;
-  }else if(hasTS||hasStored||(_fdmData&&!_fdmData.error&&_fdmData.chartData)){
-    if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest bid price: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
-    // Calculate what will actually be shown (mirrors drawFdmChart priority)
+  }else if(hasStored||hasLive||hasTS){
+    if(latest)h+=`<div style="font-size:12px;color:#94a3b8;margin-bottom:6px;">Latest Income Bid: <strong style="color:#f1f5f9;">$${latest.price.toFixed(6)}</strong> as of ${latest.date}</div>`;
+    // Mirror drawFdmChart priority: biggest Income dataset wins; Morningstar sub-fund as last resort
+    const storedCount2=_fdmHistory?_fdmHistory.length:0;
+    const liveCount2=hasLive?_fdmData.chartData.length:0;
     const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825};
     const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
-    let chartSrc=null,chartFmt="iso";
-    if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";}
-    else if(hasStored){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
-    else{chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    let chartSrc=null,chartFmt="iso",chartLabel="Income Bid";
+    if(storedCount2>=2&&storedCount2>=liveCount2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(liveCount2>=2){chartSrc=_fdmData.chartData;chartFmt="dmy";}
+    else if(storedCount2>=2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";chartLabel="Underlying Sub-Fund";}
     const toMs=d=>chartFmt==="iso"?new Date(d.date).getTime():new Date(d.date.split("/").reverse().join("-")).getTime();
-    const inPeriod=chartSrc.filter(e=>toMs(e)>=cutoffMs);
-    const shown=inPeriod.length>=2?inPeriod:chartSrc;
-    const getDate=e=>e.date;
-    const oldest=getDate(shown[0]),newest=getDate(shown[shown.length-1]);
-    const insufficient=inPeriod.length<2;
-    h+=`<div class="fdm-chart-wrap"><canvas id="fdmChartCanvas"></canvas></div>`;
-    h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
+    const inPeriod=chartSrc?chartSrc.filter(e=>toMs(e)>=cutoffMs):[];
+    const shown=inPeriod.length>=2?inPeriod:(chartSrc||[]);
+    const oldest=shown[0]?.date||"",newest=shown[shown.length-1]?.date||"";
     if(hasTS){
-      h+=`📈 ${_fdmTimeseries.count} daily prices · ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Showing all available — fund has less than ${_fdmPeriod} of history</span>`;
-    }else if(hasStored){
-      h+=`Showing: ${oldest} – ${newest}`;
-      if(insufficient)h+=` &nbsp;·&nbsp; <span style="color:#f59e0b;">Not enough history for ${_fdmPeriod} — showing all ${_fdmHistory.length} stored points</span>`;
-    }else{
-      h+=`Showing last 30 days from Income's website.`;
+      h+=`<div style="display:flex;gap:5px;margin-bottom:8px;">
+        <button id="fdmTabBtnIncome" onclick="selectFdmChartTab('income')"
+          style="padding:5px 13px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:${_fdmChartTab==='income'?'rgba(16,185,129,0.2)':'rgba(255,255,255,0.04)'};border-color:${_fdmChartTab==='income'?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)'};color:${_fdmChartTab==='income'?'#10b981':'#94a3b8'};">
+          Income Bid</button>
+        <button id="fdmTabBtnUnd" onclick="selectFdmChartTab('underlying')"
+          style="padding:5px 13px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer;background:${_fdmChartTab==='underlying'?'rgba(167,139,250,0.2)':'rgba(255,255,255,0.04)'};border-color:${_fdmChartTab==='underlying'?'rgba(167,139,250,0.5)':'rgba(255,255,255,0.12)'};color:${_fdmChartTab==='underlying'?'#a78bfa':'#94a3b8'};">
+          Underlying Sub-Fund</button>
+      </div>`;
+    }
+    h+=`<div class="fdm-chart-wrap" id="fdmChartWrapIncome" style="display:${_fdmChartTab==='underlying'?'none':'block'};"><canvas id="fdmChartCanvas"></canvas></div>`;
+    if(hasTS){
+      h+=`<div class="fdm-chart-wrap" id="fdmChartWrapUnd" style="display:${_fdmChartTab==='underlying'?'block':'none'};"><canvas id="fdmChartCanvasUnd"></canvas></div>`;
+    }
+    h+=`<div style="font-size:11px;color:#6b7280;margin-top:4px;margin-bottom:12px;">`;
+    if(_fdmChartTab==='underlying'&&hasTS){
+      h+=`📈 Underlying Sub-Fund · ${_fdmTimeseries.count} daily prices · ${_fdmTimeseries.from} – ${_fdmTimeseries.to}`;
+    }else if(storedCount2>=2&&storedCount2>=liveCount2){
+      h+=`📈 Income Bid · ${storedCount2} stored prices · ${oldest} – ${newest}`;
+    }else if(liveCount2>=2){
+      h+=`📈 Income Bid · Last ~${liveCount2} days from Income's website`;
+    }else if(hasTS){
+      h+=`📈 Income Bid · switch to "Underlying Sub-Fund" tab for historical sub-fund prices`;
     }
     h+=`</div>`;
   }else if(_fdmData&&_fdmData.error){
@@ -2781,25 +2950,33 @@ function renderFdmHistory(){
 }
 
 function drawFdmChart(period){
+  // === Income Bid chart ===
   const canvas=document.getElementById("fdmChartCanvas");
-  if(!canvas)return;
-  // 1. Morningstar timeseries — 6 years daily, best source for period filtering
-  if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
-    return _drawChart(canvas,_fdmTimeseries.prices,period,"iso");
+  if(canvas){
+    if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
+    const storedCount=_fdmHistory?_fdmHistory.length:0;
+    const liveData=_fdmData&&!_fdmData.error&&_fdmData.chartData?_fdmData.chartData:null;
+    const liveCount=liveData?liveData.length:0;
+    const hist=storedCount>=2?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
+    let inData=null,inFmt="iso";
+    if(storedCount>=2&&storedCount>=liveCount){inData=hist;inFmt="iso";}
+    else if(liveCount>=2){inData=liveData;inFmt="dmy";}
+    else if(storedCount>=2){inData=hist;inFmt="iso";}
+    if(inData)_fdmChart=_buildChart(canvas,inData,period,inFmt,"Income Bid");
   }
-  // 2. Stored Firestore history — accumulates over time
-  if(_fdmHistory&&_fdmHistory.length>=2){
-    const hist=_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price}));
-    return _drawChart(canvas,hist,period,"iso");
+  // === Underlying Sub-Fund chart (Morningstar timeseries) ===
+  const canvas2=document.getElementById("fdmChartCanvasUnd");
+  if(canvas2){
+    if(_fdmChartUnd){_fdmChartUnd.destroy();_fdmChartUnd=null;}
+    if(_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2){
+      _fdmChartUnd=_buildChart(canvas2,_fdmTimeseries.prices,period,"iso","Underlying Sub-Fund","#a78bfa","rgba(167,139,250,0.1)");
+    }
   }
-  // 3. Live 30-day data from Income's website
-  if(_fdmData&&!_fdmData.error&&_fdmData.chartData)return _drawChart(canvas,_fdmData.chartData,period,"dmy");
 }
-function _drawChart(canvas,chartData,period,fmt){
-  if(!chartData||!chartData.length)return;
+function _buildChart(canvas,chartData,period,fmt,label,forceCol,forceColBg){
+  if(!chartData||!chartData.length)return null;
   const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
-  // Parse date depending on format: "DD/MM/YYYY" (dmy) or "YYYY-MM-DD" (iso)
   const toDate=d=>fmt==="iso"?new Date(d):new Date(d.split("/").reverse().join("-"));
   const filtered=chartData.filter(e=>toDate(e.date)>=cutoff);
   const data=filtered.length>=2?filtered:chartData;
@@ -2807,10 +2984,9 @@ function _drawChart(canvas,chartData,period,fmt){
   const labels=data.map(e=>toDate(e.date).toLocaleDateString("en-SG",{day:"numeric",month:"short",year:data.length>180?"2-digit":"numeric"}));
   const first=prices[0],last=prices[prices.length-1];
   const isUp=last>=first;
-  const col=isUp?"#10b981":"#ef4444";
-  const colBg=isUp?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)";
-  if(_fdmChart){_fdmChart.destroy();_fdmChart=null;}
-  _fdmChart=new Chart(canvas,{
+  const col=forceCol||(isUp?"#10b981":"#ef4444");
+  const colBg=forceColBg||(isUp?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)");
+  return new Chart(canvas,{
     type:"line",
     data:{labels,datasets:[{data:prices,borderColor:col,backgroundColor:colBg,borderWidth:2,fill:true,
       pointRadius:data.length>120?0:3,pointHoverRadius:7,tension:0.3}]},
@@ -2821,7 +2997,7 @@ function _drawChart(canvas,chartData,period,fmt){
         legend:{display:false},
         tooltip:{callbacks:{
           title:items=>items[0]?.label||"",
-          label:c=>`Bid: $${c.raw.toFixed(6)}`
+          label:c=>`${label||"Bid"}: $${c.raw.toFixed(6)}`
         }}
       },
       scales:{
