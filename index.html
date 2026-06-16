@@ -497,10 +497,10 @@ body{
 .calc-sub-tab{padding:10px 22px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all 0.15s;letter-spacing:0.03em;}
 .calc-sub-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 .calc-sub-tab:hover:not(.active){color:var(--muted);}
-/* Results area: chart left, result cards right */
-.calc-results-area{display:grid;grid-template-columns:1.1fr 0.9fr;gap:20px;margin-bottom:20px;align-items:start;}
-.calc-chart-panel{background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px 20px 18px;height:340px;position:relative;}
+/* Chart + cards — full width chart, cards side by side below */
+.calc-chart-panel{background:rgba(255,255,255,0.018);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:22px 20px 18px;height:380px;position:relative;margin-bottom:16px;}
 .calc-chart-title{font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;}
+.calc-bottom-cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
 .calc-result-cards{display:flex;flex-direction:column;gap:14px;}
 /* Individual result card */
 .calc-rc{background:linear-gradient(135deg,rgba(255,255,255,0.025),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px 18px;transition:border-color 0.2s;}
@@ -511,11 +511,21 @@ body{
 .calc-rc-stat{background:rgba(255,255,255,0.03);border-radius:8px;padding:7px 10px;}
 .calc-rc-stat-lbl{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;}
 .calc-rc-stat-val{font-size:13px;font-weight:800;color:var(--text);}
-/* Difference banner */
-.calc-diff-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(245,158,11,0.07),rgba(6,182,212,0.05));border:1px solid rgba(245,158,11,0.22);border-radius:14px;padding:16px 22px;margin-bottom:22px;animation:glow 3s ease infinite;}
-.calc-diff-ico{font-size:30px;flex-shrink:0;}
-.calc-diff-main{font-size:15px;font-weight:800;color:var(--text);margin-bottom:3px;}
-.calc-diff-sub{font-size:12px;color:var(--muted);line-height:1.5;}
+/* Difference banner — glowing */
+.calc-diff-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(245,158,11,0.09),rgba(6,182,212,0.06));border:1px solid rgba(245,158,11,0.35);border-radius:14px;padding:18px 24px;margin-bottom:22px;box-shadow:0 0 24px rgba(245,158,11,0.15),0 0 60px rgba(245,158,11,0.06),inset 0 1px 0 rgba(245,158,11,0.1);animation:glow 3s ease infinite;}
+.calc-diff-ico{font-size:32px;flex-shrink:0;}
+.calc-diff-main{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;}
+.calc-diff-sub{font-size:13px;color:var(--muted);line-height:1.55;}
+/* Rule of 72 popup */
+.rule72-link{color:var(--muted);text-decoration:underline;text-decoration-style:dotted;cursor:pointer;font-size:inherit;font-weight:inherit;}
+.rule72-link:hover{color:var(--gold);}
+.calc-popup-overlay{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;}
+.calc-popup{background:var(--bg2);border:1px solid rgba(245,158,11,0.3);border-radius:16px;padding:28px 28px 22px;max-width:440px;width:100%;box-shadow:0 20px 80px rgba(0,0,0,0.8),0 0 40px rgba(245,158,11,0.12);position:relative;}
+.calc-popup-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;line-height:1;}
+.calc-popup-close:hover{color:var(--text);}
+.calc-popup-title{font-size:16px;font-weight:900;color:var(--gold);margin-bottom:12px;}
+.calc-popup-body{font-size:14px;color:#cbd5e1;line-height:1.7;}
+.calc-popup-example{background:rgba(245,158,11,0.07);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--muted);line-height:1.6;}
 /* Input panels */
 .calc-inputs-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}
 .calc-input-panel{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:20px 22px;}
@@ -3016,8 +3026,8 @@ startListeners();
 // ══════════════════════════════════════════════════════════════════════════════
 let _calcSubTab="planner",_calcChart2=null;
 let _calcS=[
-  {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:2.5},
-  {name:"Investment Fund",        startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:8.0}
+  {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:0.05},
+  {name:"Investments",           startAge:30,endAge:65,mode:"monthly",amount:500,lump:0,rate:8.0}
 ];
 
 function calcFV(s,yrsOverride){
@@ -3057,44 +3067,42 @@ function buildCalcPlanner(s1,s2,r1,r2){
   const diff=r2.fv-r1.fv,diffPct=r1.fv>0?diff/r1.fv*100:0;
   const winCol=diff>=0?"var(--gold)":"#06b6d4";
   const winName=diff>=0?esc(s2.name):esc(s1.name);
+  const mult=r1.fv>0?(r2.fv/r1.fv).toFixed(1):"—";
   let h=``;
 
-  // ── Results area: chart + cards ──
-  h+=`<div class="calc-results-area">
-    <div class="calc-chart-panel">
-      <div class="calc-chart-title">Total Value Comparison</div>
-      <canvas id="calcChartCanvas" style="position:absolute;inset:44px 18px 18px;width:calc(100% - 36px)!important;height:calc(100% - 62px)!important;"></canvas>
-    </div>
-    <div class="calc-result-cards">
-      <div class="calc-rc" id="calc-rc-0" style="border-left:3px solid #06b6d4;">
-        ${buildCalcCard(s1,r1,"#06b6d4",1)}
-      </div>
-      <div class="calc-rc" id="calc-rc-1" style="border-left:3px solid var(--gold);">
-        ${buildCalcCard(s2,r2,"var(--gold)",2)}
+  // ── TOP: Input panels ──
+  h+=`<div class="calc-inputs-row">
+    ${buildCalcInput(0,s1,"#06b6d4")}
+    ${buildCalcInput(1,s2,"var(--gold)")}
+  </div>`;
+
+  // ── MIDDLE: Glowing difference banner ──
+  h+=`<div class="calc-diff-banner" id="calc-diff">
+    <div class="calc-diff-ico">${diff>=0?"🏆":"📊"}</div>
+    <div>
+      <div class="calc-diff-main">${winName} creates <span style="color:${winCol};">${$fc(Math.abs(diff))} more wealth</span> over ${Math.max(r1.yrs,r2.yrs)} years</div>
+      <div class="calc-diff-sub">
+        That's <strong style="color:${winCol};">${Math.abs(diffPct).toFixed(1)}% more total value</strong>
+        ${diff>=0&&+mult>0?` — Scenario 2 ends up <strong style="color:var(--gold);">${mult}× larger</strong>`:""}
+        &nbsp;·&nbsp; Same deposits, dramatically different outcomes — the power of compounding.
       </div>
     </div>
   </div>`;
 
-  // ── Difference banner ──
-  if(r1.fv>0&&r2.fv>0){
-    const mult=(r2.fv/r1.fv).toFixed(1);
-    h+=`<div class="calc-diff-banner" id="calc-diff">
-      <div class="calc-diff-ico">${diff>=0?"🏆":"📊"}</div>
-      <div>
-        <div class="calc-diff-main">${winName} creates <span style="color:${winCol};">${$fc(Math.abs(diff))} more wealth</span> over ${Math.max(r1.yrs,r2.yrs)} years</div>
-        <div class="calc-diff-sub">
-          That's <strong style="color:${winCol};">${Math.abs(diffPct).toFixed(1)}% more total value</strong>
-          ${diff>=0?` · Scenario 2 is <strong style="color:var(--gold);">${mult}× larger</strong> than Scenario 1`:""}
-          &nbsp;·&nbsp; Same deposits, dramatically different outcomes — the power of compounding.
-        </div>
-      </div>
-    </div>`;
-  }
+  // ── BOTTOM: Full-width chart ──
+  h+=`<div class="calc-chart-panel">
+    <div class="calc-chart-title">Total Value Comparison — Deposits vs Growth</div>
+    <canvas id="calcChartCanvas" style="position:absolute;inset:44px 18px 18px;width:calc(100% - 36px)!important;height:calc(100% - 62px)!important;"></canvas>
+  </div>`;
 
-  // ── Input panels ──
-  h+=`<div class="calc-inputs-row">
-    ${buildCalcInput(0,s1,"#06b6d4")}
-    ${buildCalcInput(1,s2,"var(--gold)")}
+  // ── BOTTOM: Result cards side by side (S1 left, S2 right) ──
+  h+=`<div class="calc-bottom-cards">
+    <div class="calc-rc" id="calc-rc-0" style="border-left:3px solid #06b6d4;">
+      ${buildCalcCard(s1,r1,"#06b6d4",1)}
+    </div>
+    <div class="calc-rc" id="calc-rc-1" style="border-left:3px solid var(--gold);">
+      ${buildCalcCard(s2,r2,"var(--gold)",2)}
+    </div>
   </div>`;
 
   h+=`<div class="calc-disclaimer">* Est. Monthly Passive Income uses the 4% annual withdrawal rule (FV × 4% ÷ 12). Illustrations are hypothetical and do not guarantee future returns. Compound interest formula assumes end-of-period contributions. Does not account for fees, taxes, inflation, or policy charges. Not financial advice — for illustration purposes only.</div>`;
@@ -3129,8 +3137,8 @@ function buildCalcCard(s,r,col,num){
         <div class="calc-rc-stat-val" style="color:${col};">${$fc(r.passiveMo)}/mo</div>
       </div>
       ${r.rule72?`<div class="calc-rc-stat" style="grid-column:span 2;">
-        <div class="calc-rc-stat-lbl">Rule of 72 — Money Doubles Every</div>
-        <div class="calc-rc-stat-val">${r.rule72.toFixed(1)} years at ${s.rate}% p.a.</div>
+        <div class="calc-rc-stat-lbl"><span class="rule72-link" onclick="showRule72Popup(${+s.rate})">Rule of 72</span> — Money Doubles Every</div>
+        <div class="calc-rc-stat-val">${r.rule72.toFixed(1)} yrs at ${s.rate}% p.a.</div>
       </div>`:""}
     </div>`;
 }
@@ -3269,31 +3277,27 @@ function updateCalcUI(){
   // Update diff banner
   const diff=r2.fv-r1.fv,diffPct=r1.fv>0?diff/r1.fv*100:0;
   const db=document.getElementById("calc-diff");
-  if(db&&r1.fv>0&&r2.fv>0){
+  if(db){
     const winCol=diff>=0?"var(--gold)":"#06b6d4";
     const winName=diff>=0?esc(s2.name):esc(s1.name);
-    const mult=(r2.fv/r1.fv).toFixed(1);
+    const mult=r1.fv>0?(r2.fv/r1.fv).toFixed(1):"—";
     db.innerHTML=`<div class="calc-diff-ico">${diff>=0?"🏆":"📊"}</div>
       <div>
         <div class="calc-diff-main">${winName} creates <span style="color:${winCol};">${$fc(Math.abs(diff))} more wealth</span> over ${Math.max(r1.yrs,r2.yrs)} years</div>
         <div class="calc-diff-sub">
           That's <strong style="color:${winCol};">${Math.abs(diffPct).toFixed(1)}% more total value</strong>
-          ${diff>=0?` · Scenario 2 is <strong style="color:var(--gold);">${mult}× larger</strong> than Scenario 1`:""}
-          &nbsp;·&nbsp; Same deposits, dramatically different outcomes.
+          ${diff>=0&&+mult>0?` — Scenario 2 ends up <strong style="color:var(--gold);">${mult}× larger</strong>`:""}
+          &nbsp;·&nbsp; Same deposits, dramatically different outcomes — the power of compounding.
         </div>
       </div>`;
   }
-  // Update deposit hints
+  // Update deposit hints + labels
   [0,1].forEach(i=>{
     const s=_calcS[i];
     const hint=document.getElementById(`calc-hint-${i}`);
     if(hint){const alt=s.mode==="monthly"?s.amount*12:s.amount/12;hint.textContent=`≈ ${$fc(alt)} ${s.mode==="monthly"?"annual":"monthly"}`;}
     const lbl=document.getElementById(`calc-dep-lbl-${i}`);
     if(lbl)lbl.textContent=`${s.mode==="monthly"?"Monthly":"Annual"} Deposit Amount`;
-    // Update mode buttons
-    document.querySelectorAll(`.calc-mode-btn`).forEach(btn=>{
-      // buttons are in pairs per panel; handled by re-render on mode change
-    });
   });
   drawCalcChart();
 }
@@ -3306,7 +3310,6 @@ window.switchCalcTab=k=>{
 
 window.calcSet=(idx,field,val)=>{
   _calcS[idx][field]=val;
-  // Mode toggle needs full input panel re-render (label + button states change)
   if(field==="mode"){
     document.getElementById("app").innerHTML=renderCalculator();
     setTimeout(drawCalcChart,60);
@@ -3314,6 +3317,30 @@ window.calcSet=(idx,field,val)=>{
     updateCalcUI();
   }
 };
+
+window.showRule72Popup=rate=>{
+  const years=rate>0?(72/rate).toFixed(1):"∞";
+  const ex=rate>0?Math.round(72/rate):null;
+  document.body.insertAdjacentHTML("beforeend",`
+    <div class="calc-popup-overlay" id="r72overlay" onclick="if(event.target===this)closeRule72()">
+      <div class="calc-popup">
+        <button class="calc-popup-close" onclick="closeRule72()">✕</button>
+        <div class="calc-popup-title">📐 What is the Rule of 72?</div>
+        <div class="calc-popup-body">
+          The Rule of 72 is a <strong style="color:var(--text);">simple mental shortcut</strong> to estimate how long it takes your money to double — without a calculator.<br><br>
+          Just <strong style="color:var(--gold);">divide 72 by your annual return rate</strong> and you get the approximate number of years it takes to double.
+          <div class="calc-popup-example">
+            <strong style="color:var(--gold);">Your scenario at ${rate}% p.a.:</strong><br>
+            72 ÷ ${rate} = <strong style="color:var(--text);">${years} years</strong> to double your money${ex?`<br><br>
+            So if you start with $10,000 today, it becomes roughly <strong style="color:var(--green);">$20,000 in ${years} years</strong> — and <strong style="color:var(--green);">$40,000 in ${ex*2} years</strong> — purely from compound interest.`:""}
+          </div>
+          <br>
+          <span style="font-size:12px;color:var(--dim);">It's an approximation — accurate for rates between 1–15%. The lower the rate, the longer it takes to double. This is why a 0.05% bank account takes <em>over 1,400 years</em> to double.</span>
+        </div>
+      </div>
+    </div>`);
+};
+window.closeRule72=()=>document.getElementById("r72overlay")?.remove();
 
 autoFetchPricesOnStartup();
 </script>
