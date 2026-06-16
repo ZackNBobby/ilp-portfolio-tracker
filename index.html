@@ -1999,8 +1999,176 @@ function initCharts(clientId){
 // ── S&P 500 overlay ──
 const _sp500Cache={};  // keyed by startDate
 
+async function _loadSp500Chart(clientId){
+  const sp5Wrap=document.getElementById(`gwrap-sp500-${clientId}`);
+  const loadingEl=document.getElementById(`sp500-loading-${clientId}`);
+
+  const showErr=(msg)=>{
+    if(loadingEl){
+      loadingEl.innerHTML=`<div style="text-align:center;">
+        <div style="color:var(--muted);font-size:13px;margin-bottom:10px;">${msg}</div>
+        <button onclick="_loadSp500Chart('${clientId}')" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--gold);border-radius:6px;padding:5px 14px;font-size:12px;cursor:pointer;">🔄 Retry</button>
+      </div>`;
+      loadingEl.style.display="flex";
+    }
+  };
+
+  const txs=clientTxs[clientId]||[];
+  const pts=calcTimeSeries(txs);
+  if(pts.length<2){showErr("Not enough transaction data to compare.");return;}
+
+  const baseDate=pts[0].date;
+
+  // Destroy stale chart if retrying
+  destroyChart(`sp500-${clientId}`);
+  const existingBadge=document.getElementById(`sp500-badge-${clientId}`);
+  if(existingBadge)existingBadge.remove();
+
+  if(loadingEl){loadingEl.innerHTML="Loading S&P 500 data…";loadingEl.style.display="flex";}
+
+  let sp5Prices=_sp500Cache[baseDate];
+  if(!sp5Prices){
+    try{
+      const ctrl=new AbortController();
+      const timer=setTimeout(()=>ctrl.abort(),25000);
+      const r=await fetch(`/api/sp500?from=${baseDate}`,{signal:ctrl.signal});
+      clearTimeout(timer);
+      if(!r.ok)throw new Error(`Server error (HTTP ${r.status})`);
+      const d=await r.json();
+      if(d.error)throw new Error(d.error);
+      sp5Prices=d.prices||[];
+      _sp500Cache[baseDate]=sp5Prices;
+    }catch(e){
+      const msg=e.name==="AbortError"?"Request timed out. Yahoo Finance may be temporarily unavailable.":"Could not load S&P 500 data: "+e.message;
+      showErr(msg);return;
+    }
+  }
+  if(!sp5Prices.length){showErr("No S&P 500 data available for this period.");return;}
+
+  if(loadingEl)loadingEl.style.display="none";
+
+  const sp5Map={};
+  for(const p of sp5Prices)sp5Map[p.date]=p.price;
+
+  const basePortVal=pts[0].value;
+  const baseSp5Price=sp5Prices[0]?.price||1;
+
+  const allDates=[...new Set([...pts.map(p=>p.date),...sp5Prices.map(p=>p.date)])].sort();
+  const portRange={min:pts[0].date,max:pts[pts.length-1].date};
+  const filteredDates=allDates.filter(d=>d>=portRange.min&&d<=portRange.max);
+
+  const portByDate={};
+  for(const p of pts)portByDate[p.date]=p.value;
+
+  const chartLabels=[],portIdx=[],sp5Idx=[];
+  let lastPortVal=null,lastSp5Price=null;
+  for(const d of filteredDates){
+    if(portByDate[d]!==undefined)lastPortVal=portByDate[d];
+    if(sp5Map[d]!==undefined)lastSp5Price=sp5Map[d];
+    if(lastPortVal===null||lastSp5Price===null)continue;
+    if(chartLabels.length>0&&portByDate[d]===undefined&&sp5Map[d]===undefined)continue;
+    if(chartLabels.length>0){
+      const prev=chartLabels[chartLabels.length-1];
+      const daysDiff=(new Date(d)-new Date(prev))/(1000*86400);
+      if(daysDiff<5&&portByDate[d]===undefined)continue;
+    }
+    chartLabels.push(d);
+    portIdx.push(+((lastPortVal/basePortVal)*100).toFixed(2));
+    sp5Idx.push(+((lastSp5Price/baseSp5Price)*100).toFixed(2));
+  }
+
+  if(!chartLabels.length){showErr("No overlapping dates between portfolio and S&P 500.");return;}
+
+  const lEl=document.getElementById(`sp500-${clientId}`);
+  if(!lEl)return;
+
+  charts[`sp500-${clientId}`]=new Chart(lEl.getContext("2d"),{
+    type:"line",
+    data:{
+      labels:chartLabels.map(d=>{const[y,m,dd]=d.split("-");return`${dd}/${m}/${y.slice(2)}`;}),
+      datasets:[
+        {
+          label:"My Portfolio",
+          data:portIdx,
+          borderColor:"#f59e0b",
+          backgroundColor:"rgba(245,158,11,0.07)",
+          borderWidth:2.5,fill:true,tension:0.35,
+          pointBackgroundColor:"#f59e0b",pointRadius:2,pointHoverRadius:6,
+          pointBorderColor:"#07101e",pointBorderWidth:1
+        },
+        {
+          label:"S&P 500",
+          data:sp5Idx,
+          borderColor:"#60a5fa",
+          backgroundColor:"rgba(96,165,250,0.03)",
+          borderWidth:2,fill:false,tension:0.35,
+          pointBackgroundColor:"#60a5fa",pointRadius:0,pointHoverRadius:5,
+          borderDash:[5,3]
+        }
+      ]
+    },
+    options:{
+      responsive:true,
+      interaction:{mode:"nearest",axis:"x",intersect:false},
+      scales:{
+        x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:9},grid:{color:"rgba(30,41,59,0.3)"}},
+        y:{
+          ticks:{color:"#64748b",font:{size:10},callback:v=>`${(v-100).toFixed(0)}%`},
+          grid:{color:"rgba(30,41,59,0.35)"},
+          title:{display:true,text:"Return since policy start",color:"#64748b",font:{size:10}}
+        }
+      },
+      plugins:{
+        legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:12,usePointStyle:true}},
+        tooltip:{
+          callbacks:{
+            title:items=>`📅 ${items[0].label}`,
+            label:ctx=>{
+              const ret=(ctx.parsed.y-100).toFixed(1);
+              const portRet=(portIdx[ctx.dataIndex]-100).toFixed(1);
+              const sp5Ret=(sp5Idx[ctx.dataIndex]-100).toFixed(1);
+              const diff=(portIdx[ctx.dataIndex]-sp5Idx[ctx.dataIndex]).toFixed(1);
+              if(ctx.datasetIndex===0)return[` Portfolio: ${ret>=0?"+":""}${ret}%`,` vs S&P 500: ${diff>=0?"+":" "}${diff}%`];
+              return` S&P 500: ${sp5Ret>=0?"+":""}${sp5Ret}%`;
+            }
+          }
+        }
+      },
+      animation:{duration:1000,easing:"easeInOutQuart"}
+    },
+    plugins:[xhairPlugin]
+  });
+
+  // Outperformance badge — shown as %
+  const lastPort=portIdx[portIdx.length-1];
+  const lastSp5=sp5Idx[sp5Idx.length-1];
+  const portReturn=(lastPort-100).toFixed(1);
+  const sp5Return=(lastSp5-100).toFixed(1);
+  const diffPct=(lastPort-lastSp5).toFixed(1);
+  const outperforms=lastPort>=lastSp5;
+  sp5Wrap.insertAdjacentHTML("beforeend",
+    `<div id="sp500-badge-${clientId}" style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:8px 16px;text-align:center;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">MY PORTFOLIO</div>
+        <div style="font-size:18px;font-weight:900;color:${portReturn>=0?"#4ade80":"#f87171"};">${portReturn>=0?"+":""}${portReturn}%</div>
+        <div style="font-size:10px;color:var(--dim);">since policy start</div>
+      </div>
+      <div style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);border-radius:8px;padding:8px 16px;text-align:center;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">S&amp;P 500</div>
+        <div style="font-size:18px;font-weight:900;color:${sp5Return>=0?"#60a5fa":"#f87171"};">${sp5Return>=0?"+":""}${sp5Return}%</div>
+        <div style="font-size:10px;color:var(--dim);">since policy start</div>
+      </div>
+      <div style="background:${outperforms?"rgba(74,222,128,0.1)":"rgba(248,113,113,0.1)"};border:1px solid ${outperforms?"rgba(74,222,128,0.3)":"rgba(248,113,113,0.3)"};border-radius:8px;padding:8px 16px;text-align:center;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:3px;">${outperforms?"OUTPERFORMING":"UNDERPERFORMING"}</div>
+        <div style="font-size:18px;font-weight:900;color:${outperforms?"#4ade80":"#f87171"};">${outperforms?"+":""}${diffPct}%</div>
+        <div style="font-size:10px;color:var(--dim);">vs S&amp;P 500</div>
+      </div>
+    </div>`
+  );
+}
+window._loadSp500Chart=_loadSp500Chart;
+
 window.switchGrowthTab=async(clientId,view)=>{
-  // Update tab buttons
   const tabsEl=document.getElementById(`gtabs-${clientId}`);
   if(tabsEl){
     tabsEl.querySelectorAll(".growth-tab").forEach(b=>{
@@ -2014,166 +2182,10 @@ window.switchGrowthTab=async(clientId,view)=>{
     if(sp5Wrap)sp5Wrap.style.display="none";
     return;
   }
-  // Show S&P 500 pane
   if(portWrap)portWrap.style.display="none";
   if(sp5Wrap)sp5Wrap.style.display="";
-
-  // If chart already drawn, just show it
   if(charts[`sp500-${clientId}`])return;
-
-  // Get portfolio time series
-  const txs=clientTxs[clientId]||[];
-  const pts=calcTimeSeries(txs);
-  if(pts.length<2){
-    const ld=document.getElementById(`sp500-loading-${clientId}`);
-    if(ld)ld.textContent="Not enough portfolio data to compare.";
-    return;
-  }
-
-  // Use first portfolio data point as the normalization base date
-  const baseDate=pts[0].date;  // YYYY-MM-DD
-
-  // Show loading
-  const loadingEl=document.getElementById(`sp500-loading-${clientId}`);
-
-  let sp5Prices=_sp500Cache[baseDate];
-  if(!sp5Prices){
-    if(loadingEl)loadingEl.style.display="flex";
-    try{
-      const r=await fetch(`/api/sp500?from=${baseDate}`);
-      if(!r.ok)throw new Error(`HTTP ${r.status}`);
-      const d=await r.json();
-      if(d.error)throw new Error(d.error);
-      sp5Prices=d.prices||[];
-      _sp500Cache[baseDate]=sp5Prices;
-    }catch(e){
-      if(loadingEl){loadingEl.textContent="Could not load S&P 500 data: "+e.message;loadingEl.style.display="flex";}
-      return;
-    }
-  }
-  if(loadingEl)loadingEl.style.display="none";
-
-  if(!sp5Prices.length){
-    if(loadingEl){loadingEl.textContent="No S&P 500 data available for this period.";loadingEl.style.display="flex";}
-    return;
-  }
-
-  // Build a map of sp500 date → price for quick lookup
-  const sp5Map={};
-  for(const p of sp5Prices)sp5Map[p.date]=p.price;
-
-  // Find base values at the first available matching date
-  const basePortVal=pts[0].value;
-  const baseSp5Price=sp5Prices[0]?.price||1;
-
-  // Merge dates: use portfolio dates as the primary axis, interpolate S&P 500
-  // Also add all S&P 500 dates that fall within the portfolio range
-  const allDates=[...new Set([...pts.map(p=>p.date),...sp5Prices.map(p=>p.date)])].sort();
-  const portRange={min:pts[0].date,max:pts[pts.length-1].date};
-  const filteredDates=allDates.filter(d=>d>=portRange.min&&d<=portRange.max);
-
-  // Build portfolio indexed series (only on portfolio dates)
-  const portByDate={};
-  for(const p of pts)portByDate[p.date]=p.value;
-
-  // Indexed series — only points where we have BOTH values
-  const chartLabels=[],portIdx=[],sp5Idx=[];
-  let lastPortVal=null,lastSp5Price=null;
-
-  for(const d of filteredDates){
-    // Portfolio: carry forward last known value
-    if(portByDate[d]!==undefined)lastPortVal=portByDate[d];
-    // S&P 500: carry forward last known price
-    if(sp5Map[d]!==undefined)lastSp5Price=sp5Map[d];
-    if(lastPortVal===null||lastSp5Price===null)continue;
-
-    // Thin out points — include if more than 6 days since last or it's a portfolio point
-    if(chartLabels.length>0&&portByDate[d]===undefined&&sp5Map[d]===undefined)continue;
-    if(chartLabels.length>0){
-      const prev=chartLabels[chartLabels.length-1];
-      const daysDiff=(new Date(d)-new Date(prev))/(1000*86400);
-      if(daysDiff<5&&portByDate[d]===undefined)continue;
-    }
-
-    chartLabels.push(d);
-    portIdx.push(+((lastPortVal/basePortVal)*100).toFixed(2));
-    sp5Idx.push(+((lastSp5Price/baseSp5Price)*100).toFixed(2));
-  }
-
-  if(!chartLabels.length){
-    if(loadingEl){loadingEl.textContent="No overlapping dates between portfolio and S&P 500.";loadingEl.style.display="flex";}
-    return;
-  }
-
-  const lEl=document.getElementById(`sp500-${clientId}`);
-  if(!lEl)return;
-  destroyChart(`sp500-${clientId}`);
-  charts[`sp500-${clientId}`]=new Chart(lEl.getContext("2d"),{
-    type:"line",
-    data:{
-      labels:chartLabels.map(d=>{const[y,m,dd]=d.split("-");return`${dd}/${m}/${y.slice(2)}`;} ),
-      datasets:[
-        {
-          label:"Portfolio (indexed)",
-          data:portIdx,
-          borderColor:"#f59e0b",
-          backgroundColor:"rgba(245,158,11,0.06)",
-          borderWidth:2.5,fill:true,tension:0.35,
-          pointBackgroundColor:"#f59e0b",pointRadius:2,pointHoverRadius:6,
-          pointBorderColor:"#07101e",pointBorderWidth:1
-        },
-        {
-          label:"S&P 500 (indexed)",
-          data:sp5Idx,
-          borderColor:"#60a5fa",
-          backgroundColor:"rgba(96,165,250,0.04)",
-          borderWidth:2,fill:false,tension:0.35,
-          pointBackgroundColor:"#60a5fa",pointRadius:0,pointHoverRadius:5,
-          borderDash:[5,3]
-        }
-      ]
-    },
-    options:{
-      responsive:true,
-      interaction:{mode:"nearest",axis:"x",intersect:false},
-      scales:{
-        x:{ticks:{color:"#64748b",font:{size:9},maxTicksLimit:9},grid:{color:"rgba(30,41,59,0.3)"}},
-        y:{
-          ticks:{color:"#64748b",font:{size:10},callback:v=>v.toFixed(0)},
-          grid:{color:"rgba(30,41,59,0.35)"},
-          title:{display:true,text:"Indexed (100 = start)",color:"#64748b",font:{size:10}}
-        }
-      },
-      plugins:{
-        legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:12,usePointStyle:true}},
-        tooltip:{
-          callbacks:{
-            label:ctx=>{
-              const diff=portIdx[ctx.dataIndex]-sp5Idx[ctx.dataIndex];
-              if(ctx.datasetIndex===0)return` Portfolio: ${ctx.parsed.y.toFixed(1)} (${diff>=0?"+":""}${diff.toFixed(1)} vs S&P 500)`;
-              return` S&P 500: ${ctx.parsed.y.toFixed(1)}`;
-            }
-          }
-        }
-      },
-      animation:{duration:1000,easing:"easeInOutQuart"}
-    },
-    plugins:[xhairPlugin]
-  });
-
-  // Append a small "outperform / underperform" badge below the chart
-  const lastPort=portIdx[portIdx.length-1];
-  const lastSp5=sp5Idx[sp5Idx.length-1];
-  const diff=(lastPort-lastSp5).toFixed(1);
-  const outperforms=lastPort>=lastSp5;
-  const existingBadge=document.getElementById(`sp500-badge-${clientId}`);
-  if(existingBadge)existingBadge.remove();
-  sp5Wrap.insertAdjacentHTML("beforeend",
-    `<div id="sp500-badge-${clientId}" style="margin-top:10px;text-align:center;font-size:12px;font-weight:700;color:${outperforms?"#4ade80":"#f87171"};">
-      ${outperforms?"🏆 Outperforming":"📉 Underperforming"} S&P 500 by <span style="font-size:14px;">${outperforms?"+":""}${diff}pts</span>
-      <span style="font-size:10px;font-weight:400;color:var(--dim);display:block;margin-top:2px;">Both indexed to 100 at policy start date (${baseDate})</span>
-    </div>`
-  );
+  await _loadSp500Chart(clientId);
 };
 
 // ── Navigation ──
