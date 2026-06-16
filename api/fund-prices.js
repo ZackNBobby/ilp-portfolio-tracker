@@ -28,32 +28,46 @@ const HEADERS = {
   "Cache-Control": "no-cache",
 };
 
-// Extract the most recent bid price from a fund page HTML.
+// Extract the most recent bid price + 1D/7D % changes from a fund page HTML.
 // Pages embed price history as HTML-encoded JSON:
 //   {&quot;day&quot;:&quot;11/06/2026&quot;,&quot;bid_price&quot;:&quot;0.974000&quot;,...}
-function extractLatestBidPrice(html) {
-  // HTML-decode &quot; → "  so we can parse the JSON entries
+function extractPriceData(html) {
   const decoded = html.replace(/&quot;/g, '"');
-
-  // Find all daily price entries: {"day":"DD/MM/YYYY","bid_price":"X.XXXXXX",...}
   const entries = [];
   const re = /"day"\s*:\s*"(\d{2}\/\d{2}\/\d{4})"\s*,\s*"bid_price"\s*:\s*"([0-9.]+)"/g;
   let m;
   while ((m = re.exec(decoded)) !== null) {
-    entries.push({ day: m[1], price: parseFloat(m[2]) });
+    const price = parseFloat(m[2]);
+    if (price > 0.001 && price < 500) entries.push({ day: m[1], price });
   }
+  if (!entries.length) return null;
 
-  if (entries.length === 0) return null;
-
-  // Sort by date descending (DD/MM/YYYY → compare as YYYY-MM-DD)
+  // Sort descending — newest first
   entries.sort((a, b) => {
     const toIso = d => d.split("/").reverse().join("-");
     return toIso(b.day).localeCompare(toIso(a.day));
   });
 
   const latest = entries[0];
-  if (latest.price > 0.01 && latest.price < 500) return { price: latest.price, date: latest.day };
-  return null;
+  if (latest.price <= 0.01 || latest.price >= 500) return null;
+
+  const latestDate = new Date(latest.day.split("/").reverse().join("-"));
+  const pctChange = (daysAgo) => {
+    const target = new Date(latestDate);
+    target.setDate(target.getDate() - daysAgo);
+    for (const e of entries) {
+      const d = new Date(e.day.split("/").reverse().join("-"));
+      if (d <= target) return +((latest.price - e.price) / e.price * 100).toFixed(2);
+    }
+    return null;
+  };
+
+  return {
+    price: latest.price,
+    date: latest.day,
+    change1D: pctChange(1),
+    change7D: pctChange(7),
+  };
 }
 
 // ── Strategy 1: individual fund pages (live data in HTML) ────────────────────
@@ -64,7 +78,7 @@ async function fetchFundPagePrice(slug) {
       signal: AbortSignal.timeout(15000),
     });
     if (!r.ok) return null;
-    return extractLatestBidPrice(await r.text());
+    return extractPriceData(await r.text());
   } catch { return null; }
 }
 
@@ -113,15 +127,19 @@ module.exports = async function handler(req, res) {
   const prices = {};
   const sourceMap = {};
   const asOfMap = {};
+  const change1DMap = {};
+  const change7DMap = {};
 
   // Step 1: fetch all fund pages in parallel for live prices
   await Promise.allSettled(
     Object.entries(FUND_SLUGS).map(async ([name, slug]) => {
       const result = await fetchFundPagePrice(slug);
-      if (result) {
+      if (result && result.price) {
         prices[name] = result.price;
         sourceMap[name] = "live";
         asOfMap[name] = result.date;
+        if (result.change1D !== null) change1DMap[name] = result.change1D;
+        if (result.change7D !== null) change7DMap[name] = result.change7D;
       }
     })
   );
@@ -145,6 +163,8 @@ module.exports = async function handler(req, res) {
 
   res.status(200).json({
     prices,
+    change1D: change1DMap,
+    change7D: change7DMap,
     source: hasLive && !hasHist ? "live" : hasLive ? "mixed" : "historical",
     sourceDetail: sourceMap,
     asOf: asOfMap,

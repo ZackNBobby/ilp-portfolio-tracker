@@ -35,6 +35,7 @@ button,input,select,textarea{font-family:inherit;}
   66%{transform:translate(-20px,15px) scale(0.97);}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,0.5);}50%{opacity:0.85;box-shadow:0 0 0 4px rgba(34,197,94,0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
 @keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
 @keyframes countUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -684,7 +685,7 @@ const STARTUP_BONUS={
 };
 
 // ── State ──
-let clients=[],fundPrices={},underlyingPrices={},clientTxs={};
+let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPrices={},clientTxs={};
 let tab="dashboard",currentClientId=null;
 let unsubs=[],charts={};
 
@@ -959,9 +960,9 @@ async function saveTransactions(clientId,txs){
   }
   await batch.commit();
 }
-async function saveFundPriceDB(name,price){
+async function saveFundPriceDB(name,price,change1D=null,change7D=null,source=null){
   await setDoc(doc(db,"fundPrices",name.replace(/\s+/g,"_")),{
-    name,price:parseFloat(price),updatedAt:new Date().toISOString()
+    name,price:parseFloat(price),change1D,change7D,source,updatedAt:new Date().toISOString()
   },{merge:true});
 }
 async function saveUnderlyingPriceDB(ftSymbol,price){
@@ -987,7 +988,13 @@ function startListeners(){
     }
   },err=>console.error("clients listener error:",err)));
   unsubs.push(onSnapshot(collection(db,"fundPrices"),snap=>{
-    fundPrices={};snap.forEach(d=>{const fd=d.data();fundPrices[fd.name]=fd.price;});
+    fundPrices={};fundPriceChanges={};fundPriceSource={};
+    snap.forEach(d=>{
+      const fd=d.data();
+      fundPrices[fd.name]=fd.price;
+      if(fd.change1D!=null||fd.change7D!=null)fundPriceChanges[fd.name]={change1D:fd.change1D??null,change7D:fd.change7D??null};
+      if(fd.source)fundPriceSource[fd.name]=fd.source;
+    });
     renderAll();
   },err=>console.error("fundPrices listener error:",err)));
   unsubs.push(onSnapshot(collection(db,"underlyingPrices"),snap=>{
@@ -1599,12 +1606,19 @@ function renderPrices(){
     const ftSym=FUND_UNDERLYING[f]||null;
     const up=ftSym?(underlyingPrices[ftSym]||0):0;
     const editBtn=(onclick,title)=>`<button onclick="${onclick}" style="background:rgba(245,158,11,0.1);border:1px solid var(--gold-border);border-radius:6px;padding:3px 8px;color:var(--gold);font-size:11px;cursor:pointer;" title="${title}">✏️</button>`;
+    const ch=fundPriceChanges[f]||{};
+    const isLive=fundPriceSource[f]==="live";
+    const chgBadge=(v,lbl)=>v!=null?`<span style="font-size:10px;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'};">${v>=0?'+':''}${v.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> ${lbl}</span></span>`:'';
     return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance" style="flex-direction:column;align-items:stretch;gap:5px;">
-      <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;margin-bottom:2px;">${esc(short)}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+        <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;flex:1;">${esc(short)}</span>
+        ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#4ade80;letter-spacing:0.5px;">LIVE</span></span>`:''}
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
         <span style="font-size:10px;color:var(--dim);min-width:70px;">Income Bid</span>
         <div style="display:flex;align-items:center;gap:5px;margin-left:auto;">
-          <div class="price-val" style="font-size:15px;">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
+          ${chgBadge(ch.change1D,'1D')}${chgBadge(ch.change7D,'7D')}
+          <div class="price-val" style="font-size:18px;">${p?`$${p.toFixed(6)}`:`<span style="color:var(--dim);font-size:12px;">Not set</span>`}</div>
           ${editBtn(`event.stopPropagation();editPrice(${JSON.stringify(f)})`,"Edit Income Bid price manually")}
         </div>
       </div>
@@ -1727,7 +1741,10 @@ window.doFetchPrices=async()=>{
     if(!data.prices||Object.keys(data.prices).length===0)throw new Error(data.error||'No prices returned');
 
     let found=0;
-    for(const[name,price]of Object.entries(data.prices)){await saveFundPriceDB(name,price);found++;}
+    for(const[name,price]of Object.entries(data.prices)){
+      await saveFundPriceDB(name,price,data.change1D?.[name]??null,data.change7D?.[name]??null,data.sourceDetail?.[name]??null);
+      found++;
+    }
 
     // Save each price to history so long-term performance can be calculated over time
     const today=new Date().toISOString().split("T")[0];
@@ -2725,7 +2742,7 @@ function _annualize(cumPct,years){
 }
 
 function calcPerfFromStored(history){
-  if(!history||!history.length)return null;
+  if(!history||history.length<2)return null;
   const latest=history[0];
   const latestPrice=latest.price;
   const ref=latest.date;
@@ -2738,6 +2755,10 @@ function calcPerfFromStored(history){
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
+  // SI — since earliest stored price
+  const oldest=history[history.length-1];
+  const siYears=(new Date(ref)-new Date(oldest.date))/(365.25*86400000);
+  const siCum=+(( latestPrice-oldest.price)/oldest.price*100).toFixed(2);
   return{
     "1M":pct(_shiftDate(ref,1)),
     "3M":pct(_shiftDate(ref,3)),
@@ -2745,6 +2766,9 @@ function calcPerfFromStored(history){
     "1Y":pct(_shiftDate(ref,0,1)),
     "3Y":_annualize(pct(_shiftDate(ref,0,3)),3),
     "5Y":_annualize(pct(_shiftDate(ref,0,5)),5),
+    "SI":siYears>=1?_annualize(siCum,siYears):siCum,
+    _siFrom:oldest.date,
+    _siAnnualized:siYears>=1,
   };
 }
 
@@ -2765,6 +2789,10 @@ function calcPerfFromTimeseries(tsData){
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
+  // SI — since earliest price in timeseries
+  const first=prices[0];
+  const siYears=(new Date(ref)-new Date(first.date))/(365.25*86400000);
+  const siCum=+(( latestPrice-first.price)/first.price*100).toFixed(2);
   const result={
     "1M":pct(_shiftDate(ref,1)),
     "3M":pct(_shiftDate(ref,3)),
@@ -2772,8 +2800,11 @@ function calcPerfFromTimeseries(tsData){
     "1Y":pct(_shiftDate(ref,0,1)),
     "3Y":_annualize(pct(_shiftDate(ref,0,3)),3),
     "5Y":_annualize(pct(_shiftDate(ref,0,5)),5),
+    "SI":siYears>=1?_annualize(siCum,siYears):siCum,
+    _siFrom:first.date,
+    _siAnnualized:siYears>=1,
   };
-  return Object.values(result).some(v=>v!==null)?result:null;
+  return(result["1M"]!==null||result["3M"]!==null||result["6M"]!==null||result["1Y"]!==null||result["SI"]!==null)?result:null;
 }
 
 window.closeFundDetail=()=>{
@@ -2993,7 +3024,7 @@ function renderFdmOverview(){
 }
 
 function renderFdmPerformance(){
-  const PERIODS=["1M","3M","6M","1Y","3Y","5Y"];
+  const PERIODS=["1M","3M","6M","1Y","3Y","5Y","SI"];
   const info=FUND_DB[_fdmFund]||{};
   let h="";
 
@@ -3064,12 +3095,17 @@ function renderFdmPerformance(){
       const v=perf[p];
       const col=v===null||v===undefined?"#6b7280":v>=0?"var(--green)":"var(--red)";
       const txt=v===null||v===undefined?"N/A":`${v>=0?"+":""}${v.toFixed(2)}%`;
+      const siLabel=p==="SI"&&perf._siAnnualized?"SI†":"SI";
       h+=`<div class="fdm-perf-cell${_fdmPeriod===p?" active":""}" onclick="selectFdmPeriod('${p}')">
-        <div class="fdm-perf-period">${p}</div>
+        <div class="fdm-perf-period">${p==="SI"?siLabel:p}</div>
         <div class="fdm-perf-pct" style="color:${col};">${txt}</div>
       </div>`;
     });
     h+=`</div>`;
+    if(perf._siFrom){
+      const siNote=perf._siAnnualized?"annualized CAGR":"cumulative";
+      h+=`<div style="font-size:10px;color:#6b7280;margin-top:-6px;margin-bottom:6px;">†SI = Since ${perf._siFrom} (${siNote} — earliest data available)</div>`;
+    }
     if(perfSource)h+=`<div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">${perfSource}</div>`;
   }
 
@@ -3084,7 +3120,7 @@ function renderFdmPerformance(){
     // Mirror drawFdmChart priority: biggest Income dataset wins; Morningstar sub-fund as last resort
     const storedCount2=_fdmHistory?_fdmHistory.length:0;
     const liveCount2=hasLive?_fdmData.chartData.length:0;
-    const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825};
+    const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825,"SI":36500};
     const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
     let chartSrc=null,chartFmt="iso",chartLabel="Income Bid";
     if(storedCount2>=2&&storedCount2>=liveCount2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
@@ -3371,7 +3407,7 @@ function drawFdmChart(period){
 }
 function _buildChart(canvas,chartData,period,fmt,label,forceCol,forceColBg){
   if(!chartData||!chartData.length)return null;
-  const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825}[period]||365;
+  const days={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825,"SI":36500}[period]||365;
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);
   const toDate=d=>fmt==="iso"?new Date(d):new Date(d.split("/").reverse().join("-"));
   const filtered=chartData.filter(e=>toDate(e.date)>=cutoff);

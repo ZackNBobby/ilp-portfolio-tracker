@@ -33,14 +33,49 @@ function parseDMY(dmy) {
 }
 
 function extractAllPrices(html) {
-  const decoded = html.replace(/&quot;/g, '"');
   const entries = [];
+  const seen = new Set();
+
+  // Strategy 1: parse __NEXT_DATA__ JSON embedded in <script> tag — may contain full price history
+  const ndMatch = html.match(/<script id="__NEXT_DATA__"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/);
+  if (ndMatch) {
+    try {
+      const nd = JSON.parse(ndMatch[1]);
+      // Walk all values looking for arrays with day+bid_price shape
+      const walk = (obj) => {
+        if (!obj || typeof obj !== "object") return;
+        if (Array.isArray(obj)) {
+          if (obj.length > 0 && obj[0]?.day && obj[0]?.bid_price) {
+            for (const e of obj) {
+              const price = parseFloat(e.bid_price);
+              if (e.day && price > 0.001 && price < 500 && !seen.has(e.day)) {
+                seen.add(e.day);
+                entries.push({ date: e.day, price });
+              }
+            }
+            return;
+          }
+          obj.forEach(walk);
+        } else {
+          Object.values(obj).forEach(walk);
+        }
+      };
+      walk(nd);
+    } catch {}
+  }
+
+  // Strategy 2: HTML-encoded JSON in page body (catches any prices not in __NEXT_DATA__)
+  const decoded = html.replace(/&quot;/g, '"');
   const re = /"day"\s*:\s*"(\d{2}\/\d{2}\/\d{4})"\s*,\s*"bid_price"\s*:\s*"([0-9.]+)"/g;
   let m;
   while ((m = re.exec(decoded)) !== null) {
     const price = parseFloat(m[2]);
-    if (price > 0.001 && price < 500) entries.push({ date: m[1], price });
+    if (price > 0.001 && price < 500 && !seen.has(m[1])) {
+      seen.add(m[1]);
+      entries.push({ date: m[1], price });
+    }
   }
+
   // Sort descending — newest first
   entries.sort((a, b) => {
     const iso = d => d.split("/").reverse().join("-");
