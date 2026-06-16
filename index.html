@@ -35,7 +35,7 @@ button,input,select,textarea{font-family:inherit;}
   66%{transform:translate(-20px,15px) scale(0.97);}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
-@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,0.5);}50%{opacity:0.85;box-shadow:0 0 0 4px rgba(34,197,94,0);}}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(6,182,212,0.6);}50%{opacity:0.85;box-shadow:0 0 0 5px rgba(6,182,212,0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
 @keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
 @keyframes countUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -1612,7 +1612,7 @@ function renderPrices(){
     return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance" style="flex-direction:column;align-items:stretch;gap:5px;">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
         <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;flex:1;">${esc(short)}</span>
-        ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#4ade80;letter-spacing:0.5px;">LIVE</span></span>`:''}
+        ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.45);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#06b6d4;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#67e8f9;letter-spacing:0.5px;">LIVE</span></span>`:''}
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
         <span style="font-size:10px;color:var(--dim);min-width:70px;">Income Bid</span>
