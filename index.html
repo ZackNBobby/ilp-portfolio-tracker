@@ -2934,7 +2934,16 @@ function renderFdmOverview(){
     h+=`</div>`;
   }
   h+=`<div class="fdm-sec-hd">📋 Fund Facts</div>`;
-  h+=`<div class="fdm-kv"><span class="k">Sub-Fund</span><span class="v">${esc(info.subFund||"—")}</span></div>`;
+  // Sub-Fund row — hyperlink to FT Markets if an underlying symbol is mapped
+  {
+    const ftSym=FUND_UNDERLYING[_fdmFund];
+    const ftUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(ftSym)}`:null;
+    const subFundLabel=info.subFund||"—";
+    const subFundHtml=ftUrl
+      ?`<a href="${ftUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;text-underline-offset:3px;word-break:break-word;">${esc(subFundLabel)}</a> <span style="font-size:10px;color:var(--dim);">↗ FT Markets</span>`
+      :esc(subFundLabel);
+    h+=`<div class="fdm-kv"><span class="k">Sub-Fund</span><span class="v">${subFundHtml}</span></div>`;
+  }
   h+=`<div class="fdm-kv"><span class="k">Sub-Advisor</span><span class="v">${esc(info.subAdvisor||"—")}</span></div>`;
   h+=`<div class="fdm-kv"><span class="k">Asset Class</span><span class="v">${esc(info.assetClass||"—")}</span></div>`;
   h+=`<div class="fdm-kv"><span class="k">Geography</span><span class="v">${esc(info.geography||"—")}</span></div>`;
@@ -3099,12 +3108,22 @@ function renderFdmHoldings(){
 
   if(h.noMapping){
     const info=FUND_DB[_fdmFund]||{};
+    // If we got FT holdings data back from the API, show them
+    if(h.ftHoldings){
+      return renderHoldingsData(h.ftHoldings, `📡 Holdings from FT Markets · ${h.ftHoldings.asOf||"latest"}`);
+    }
+    // Otherwise show a helpful message with direct FT Markets link
+    const ftSym=FUND_UNDERLYING[_fdmFund];
+    const ftHoldUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
     return`<div style="text-align:center;padding:30px 20px;">
       <div style="font-size:32px;margin-bottom:12px;">📋</div>
-      <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Data Not Available via Morningstar</div>
+      <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Not Available via Morningstar</div>
       <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
         ${info.subFund&&!info.subFund.startsWith("Refer")?`Sub-fund: <strong style="color:#e2e8f0;">${esc(info.subFund)}</strong><br><br>`:""}
-        This fund's sub-fund is not indexed in Morningstar's Singapore fund database.<br>Please refer to the latest fund factsheet for current holdings and allocations.
+        ${ftHoldUrl
+          ?`View live holdings on FT Markets:<br><a href="${ftHoldUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;text-underline-offset:3px;font-size:12px;">${ftHoldUrl}</a>`
+          :`Please refer to the latest fund factsheet for current holdings.`
+        }
       </div>
     </div>`;
   }

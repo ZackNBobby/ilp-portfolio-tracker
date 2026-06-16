@@ -1,8 +1,112 @@
-// Vercel function — fetches fund holdings, asset/sector/geo allocation from Morningstar screener.
-// Top 10 holdings attempted via portfolio endpoint (may be blocked; allocation always available).
+// Vercel function — fetches fund holdings, asset/sector/geo allocation.
+// Primary: Morningstar screener. Fallback: FT Markets tearsheet HTML scraping.
 
 const TOKEN = "klr5zyak8x";
 const UNIVERSE = "FOSGP%24%24ALL";
+
+// FT Markets symbols for funds with known underlying ISINs
+// Used as fallback when Morningstar has no data for a fund
+const FUND_FT_SYMBOLS = {
+  "Income Global Absolute Alpha Fund":          "LU2264538146:SGD",
+  "Income World Healthscience Fund":            "LU1057294990:SGD",
+  "Income India Equity Fund":                   "LU0536402901:SGD",
+  "Income Regional China Fund":                 "IE0031814852:USD",
+  "Income Global Growth Equity Fund":           "LU0690374615:EUR",
+  "Income Global Emerging Markets Equity Fund": "LU0890818403:SGD",
+  "Income Global Sustainable Fund":             "LU2279689827:SGD",
+  "Income Global Dynamic Bond Fund":            "IE00B9HH6X13:SGD",
+};
+
+const FT_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,*/*",
+  "Accept-Language": "en-GB,en;q=0.9",
+  "Referer": "https://markets.ft.com/",
+};
+
+// Parse holdings and allocations from the FT Markets tearsheet HTML
+async function fetchFTHoldings(ftSymbol) {
+  try {
+    const url = `https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSymbol)}`;
+    const r = await fetch(url, { headers: FT_HEADERS, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    // ── Top Holdings ──
+    // FT embeds holdings in a table: each row has security name and weighting %
+    const holdings = [];
+    const tableMatch = html.match(/<table[^>]*class="[^"]*mod-tearsheet-holdings[^"]*"[^>]*>([\s\S]*?)<\/table>/i)
+                    || html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+    if (tableMatch) {
+      const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      let rowM;
+      while ((rowM = rowRe.exec(tableMatch[1])) !== null) {
+        const cells = (rowM[1].match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [])
+          .map(c => c.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').trim())
+          .filter(c => c.length > 0);
+        if (cells.length < 2) continue;
+        // Last numeric cell is usually the weighting %
+        const pctStr = cells[cells.length - 1].replace('%','').trim();
+        const pct = parseFloat(pctStr);
+        const name = cells[0];
+        if (!isNaN(pct) && pct > 0 && pct < 60 && name.length > 2 && !/^[\d.%]+$/.test(name)) {
+          holdings.push({ name, pct: +pct.toFixed(2) });
+        }
+      }
+    }
+
+    // ── Asset Allocation via summary page ──
+    let assetAlloc = {};
+    try {
+      const sumUrl = `https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(ftSymbol)}`;
+      const sr = await fetch(sumUrl, { headers: FT_HEADERS, signal: AbortSignal.timeout(12000) });
+      if (sr.ok) {
+        const sumHtml = await sr.text();
+        // FT often has allocation in JSON embedded in <script> tags
+        const jsonRe = /\{[^{}]*"(?:equity|bonds?|cash|fixed.?income)"[^{}]*\}/gi;
+        let jm;
+        while ((jm = jsonRe.exec(sumHtml)) !== null) {
+          try {
+            const obj = JSON.parse(jm[0]);
+            for (const [k, v] of Object.entries(obj)) {
+              const pv = parseFloat(v);
+              if (!isNaN(pv) && pv > 0) {
+                const key = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g,' ');
+                assetAlloc[key] = +pv.toFixed(2);
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Also try parsing allocation from summary table text
+        const allocRe = /(?:equity|bonds?|fixed income|cash|alternatives?)[^\d]*([0-9]+\.?[0-9]*)\s*%/gi;
+        let am;
+        while ((am = allocRe.exec(sumHtml)) !== null) {
+          const key = am[0].split('%')[0].replace(/[^a-zA-Z ]/g,'').trim();
+          const pv = parseFloat(am[1]);
+          if (!isNaN(pv) && pv > 0 && key.length > 2) {
+            const label = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+            if (!assetAlloc[label]) assetAlloc[label] = +pv.toFixed(2);
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (!holdings.length && !Object.keys(assetAlloc).length) return null;
+
+    return {
+      holdings: holdings.slice(0, 10),
+      assetAlloc,
+      sectorAlloc: {},
+      geoAlloc: {},
+      source: "FT Markets",
+      asOf: new Date().toISOString().split("T")[0],
+      ftSymbol,
+    };
+  } catch (e) {
+    return null;
+  }
+}
 
 // Mirrors fund-morningstar.js — update both when adding new SecIds
 // secId → { secId, universe? } — universe defaults to UNIVERSE if not set
@@ -58,6 +162,14 @@ module.exports = async function handler(req, res) {
   const mapping = FUND_SECIDS[name];
 
   if (!mapping) {
+    // Try FT Markets as a fallback before giving up
+    const ftSym = FUND_FT_SYMBOLS[name];
+    if (ftSym) {
+      const ftData = await fetchFTHoldings(ftSym);
+      if (ftData) {
+        return res.status(200).json({ noMapping: true, name, ftHoldings: ftData });
+      }
+    }
     return res.status(200).json({ noMapping: true, name,
       message: "Sub-fund not yet mapped. Add SecId in api/fund-holdings.js." });
   }
