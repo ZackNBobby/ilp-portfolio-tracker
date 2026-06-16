@@ -3277,6 +3277,8 @@ function calcFV(s,yrsOverride){
 }
 
 function $fc(v){return"$"+Math.round(Math.max(0,v)).toLocaleString("en-SG");}
+// Show enough decimal places so tiny % values like 0.05% don't show as 0%
+function fmtPct(v){if(v===0)return"0%";if(Math.abs(v)<0.1)return v.toFixed(2)+"%";if(Math.abs(v)<1)return v.toFixed(1)+"%";return Math.round(v)+"%";}
 
 function renderCalculator(){
   const [s1,s2]=_calcS,r1=calcFV(s1),r2=calcFV(s2);
@@ -3441,10 +3443,10 @@ function buildCalcProjection(s1,s2){
       <td>${y}${isMile?` <span style="color:var(--gold);font-size:10px;">●</span>`:""}</td>
       <td>${v1?$fc(v1.totalDep):"—"}</td>
       <td style="color:#60a5fa;">${v1?$fc(v1.fv):"—"}</td>
-      <td style="color:var(--green);">${v1&&v1.pctGained>0?"+"+v1.pctGained.toFixed(0)+"%":"—"}</td>
+      <td style="color:var(--green);">${v1&&v1.pctGained>0?"+"+fmtPct(v1.pctGained):"—"}</td>
       <td>${v2?$fc(v2.totalDep):"—"}</td>
       <td style="color:var(--gold);">${v2?$fc(v2.fv):"—"}</td>
-      <td style="color:var(--green);">${v2&&v2.pctGained>0?"+"+v2.pctGained.toFixed(0)+"%":"—"}</td>
+      <td style="color:var(--green);">${v2&&v2.pctGained>0?"+"+fmtPct(v2.pctGained):"—"}</td>
       <td style="color:${diff===null?"var(--dim)":diff>=0?"var(--gold)":"var(--red)"};font-weight:800;">${diff===null?"—":diff>=0?"+"+$fc(diff):"-"+$fc(Math.abs(diff))}</td>
     </tr>`;
   }
