@@ -2728,7 +2728,11 @@ function calcPerfFromStored(history){
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
-  return{"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":pct(1095),"5Y":pct(1825)};
+  const annualize=(cumPct,years)=>{
+    if(cumPct===null)return null;
+    return+((Math.pow(1+cumPct/100,1/years)-1)*100).toFixed(2);
+  };
+  return{"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":annualize(pct(1095),3),"5Y":annualize(pct(1825),5)};
 }
 
 // Calculate performance from Morningstar timeseries prices (oldest-first [{date,price}])
@@ -2750,7 +2754,15 @@ function calcPerfFromTimeseries(tsData){
     if(old===null||old<=0)return null;
     return+((latestPrice-old)/old*100).toFixed(2);
   };
-  const result={"1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),"3Y":pct(1095),"5Y":pct(1825)};
+  // 3Y and 5Y: annualize to match Morningstar/FT Markets convention (CAGR not cumulative)
+  const annualize=(cumPct,years)=>{
+    if(cumPct===null)return null;
+    return+((Math.pow(1+cumPct/100,1/years)-1)*100).toFixed(2);
+  };
+  const result={
+    "1M":pct(30),"3M":pct(91),"6M":pct(182),"1Y":pct(365),
+    "3Y":annualize(pct(1095),3),"5Y":annualize(pct(1825),5)
+  };
   return Object.values(result).some(v=>v!==null)?result:null;
 }
 
