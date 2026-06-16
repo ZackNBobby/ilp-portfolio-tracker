@@ -2940,6 +2940,10 @@ function renderFdmBody(){
     const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
     const hasStored=_fdmHistory&&_fdmHistory.length>=2;
     const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
+    // Auto-switch to underlying sub-fund chart when bid price history is too short (<20 points)
+    if(hasTS&&_fdmChartTab==="income"&&(!hasStored||(_fdmHistory&&_fdmHistory.length<20))){
+      _fdmChartTab="underlying";
+    }
     if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
     setTimeout(()=>window.updateScenario&&window.updateScenario(),30);
   }
