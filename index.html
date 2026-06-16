@@ -1903,6 +1903,11 @@ function initCharts(clientId){
   if(!names.length)return;
   const shortName=n=>n.replace("Income ","").replace(" Fund","");
 
+  // Clean up sp500 overlay so it redraws correctly on revisit
+  // Data stays in _sp500AllPrices so no re-fetch is needed — just a redraw
+  destroyChart(`sp500-${clientId}`);
+  document.getElementById(`sp500-badge-${clientId}`)?.remove();
+
   // Donut — fund allocation by total value
   const dEl=document.getElementById(`donut-${clientId}`);
   if(dEl){
@@ -2196,9 +2201,7 @@ window.switchGrowthTab=async(clientId,view)=>{
   }
   if(portWrap)portWrap.style.display="none";
   if(sp5Wrap)sp5Wrap.style.display="";
-  // Only skip if chart is drawn AND its canvas is still in the DOM
-  const existingCanvas=document.getElementById(`sp500-${clientId}`);
-  if(charts[`sp500-${clientId}`]&&existingCanvas&&existingCanvas.closest("#app"))return;
+  if(charts[`sp500-${clientId}`])return;  // already drawn on this page load
   await _loadSp500Chart(clientId);
 };
 
