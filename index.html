@@ -1044,6 +1044,10 @@ function buildClientList(list){
     const fundData=hasTxs?calcPortfolio(txs):{};
     const totals=hasTxs?portfolioTotals(fundData):{};
     const hasPrice=Object.keys(fundPrices).length>0;
+    const _cb=getStartupBonus(c.product,c.term,c.annualPremium);
+    const _bGrant=_cb?c.annualPremium*_cb.pct/100:0;
+    const _adjGain=hasTxs?totals.totalValue-totals.totalInvested-_bGrant:0;
+    const _adjPct=hasTxs&&totals.totalInvested>0?_adjGain/totals.totalInvested*100:0;
     return`<div class="client-card" style="animation-delay:${i*0.05}s" onclick="viewClient('${c.fid}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div>
@@ -1055,7 +1059,7 @@ function buildClientList(list){
         ${hasTxs&&hasPrice?`<div style="text-align:right;">
           <div style="font-size:11px;color:var(--dim);">Portfolio Value</div>
           <div style="font-size:20px;font-weight:900;color:var(--gold-l);">${$f(totals.totalValue)}</div>
-          <div style="font-size:12px;font-weight:700;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)} excl. bonus</div>
+          <div style="font-size:12px;font-weight:700;color:${_adjGain>=0?"var(--green)":"var(--red)"};">${$pct(_adjPct)} true gain</div>
         </div>`:""}
       </div>
       <div style="display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;">
@@ -1273,6 +1277,10 @@ function renderClientDetail(clientId){
   const fundData=hasTxs?calcPortfolio(txs):{};
   const totals=hasTxs?portfolioTotals(fundData):{};
   const strategy=getStrategy(c.product);
+  const _sb=getStartupBonus(c.product,c.term,c.annualPremium);
+  const bonusGrant=_sb?c.annualPremium*_sb.pct/100:0;
+  const adjTrueGain=totals.totalValue-totals.totalInvested-bonusGrant;
+  const adjTrueGainPct=totals.totalInvested>0?adjTrueGain/totals.totalInvested*100:0;
   const hasPrices=hasTxs&&Object.keys(fundData).some(n=>(fundPrices[n]||0)>0);
   const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>(fundPrices[n]||0)>0).length:0;
   const allFundsPriced=hasTxs&&pricedFundCount>0&&pricedFundCount===Object.keys(fundData).length;
@@ -1330,10 +1338,10 @@ function renderClientDetail(clientId){
         <div class="stat-val muted">${$f(totals.totalInvested)}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-lbl">True Gain (Excl. Bonus)</div>
+        <div class="stat-lbl">True Gain</div>
         ${allFundsPriced
-          ?`<div class="stat-val ${totals.trueGain>=0?"green":"red"}">${$f(totals.trueGain)}</div>
-             <div style="font-size:11px;margin-top:2px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)}</div>`
+          ?`<div class="stat-val ${adjTrueGain>=0?"green":"red"}">${$f(adjTrueGain)}</div>
+             <div style="font-size:11px;margin-top:2px;color:${adjTrueGain>=0?"var(--green)":"var(--red)"};">${$pct(adjTrueGainPct)}</div>`
           :`<div class="stat-val muted">N/A</div>
              <div style="font-size:11px;margin-top:2px;color:var(--dim);">${pricedFundCount}/${Object.keys(fundData).length} funds priced</div>`
         }
@@ -1847,6 +1855,10 @@ window.openPresent=async(clientId)=>{
   const txs=clientTxs[clientId]||[];
   const fundData=txs.length>0?calcPortfolio(txs):{};
   const totals=txs.length>0?portfolioTotals(fundData):{};
+  const _psb=getStartupBonus(c.product,c.term,c.annualPremium);
+  const pBonusGrant=_psb?c.annualPremium*_psb.pct/100:0;
+  const pAdjGain=totals.totalValue-totals.totalInvested-pBonusGrant;
+  const pAdjPct=totals.totalInvested>0?pAdjGain/totals.totalInvested*100:0;
   const today=new Date().toLocaleDateString("en-SG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
   const hasPrices=Object.keys(fundPrices).length>0;
   const strategy=getStrategy(c.product);
@@ -1861,7 +1873,7 @@ window.openPresent=async(clientId)=>{
     html+=`<div style="text-align:center;margin-bottom:32px;">
       <div style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Total Portfolio Value</div>
       <div class="present-big">${$f(totals.totalValue)}</div>
-      <div style="font-size:16px;font-weight:700;margin-top:8px;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$pct(totals.trueGainPct)} true return (excluding startup bonus)</div>
+      <div style="font-size:16px;font-weight:700;margin-top:8px;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$pct(pAdjPct)} true return</div>
     </div>`;
 
     html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px;">
@@ -1869,9 +1881,9 @@ window.openPresent=async(clientId)=>{
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">You Invested</div>
         <div style="font-size:22px;font-weight:900;color:var(--muted);">${$f(totals.totalInvested)}</div>
       </div>
-      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid ${totals.trueGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
+      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid ${pAdjGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">True Gain</div>
-        <div style="font-size:22px;font-weight:900;color:${totals.trueGain>=0?"var(--green)":"var(--red)"};">${$f(totals.trueGain)}</div>
+        <div style="font-size:22px;font-weight:900;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$f(pAdjGain)}</div>
       </div>
       <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid var(--gold-border);">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Startup Bonus</div>
