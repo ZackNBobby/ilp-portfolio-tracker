@@ -2211,30 +2211,46 @@ async function _loadSp500Chart(clientId){
   const sp5Map={};
   for(const p of sp5Prices)sp5Map[p.date]=p.price;
 
-  const basePortVal=pts[0].value;
   const baseSp5Price=sp5Prices[0]?.price||1;
+
+  // Build Time-Weighted Return (TWR) factors for the portfolio.
+  // Between each pair of transaction dates, the sub-period return is computed
+  // AFTER stripping out premium cash inflows so advance premiums don't distort
+  // the chart as fake gains.
+  const _premCash={};
+  for(const tx of txs){
+    if(tx.category==="premium")
+      _premCash[tx.txDate]=(_premCash[tx.txDate]||0)+Math.abs(tx.amount);
+  }
+  let _twrFactor=1.0;
+  const twrByDate={};
+  twrByDate[pts[0].date]=1.0;
+  for(let i=1;i<pts.length;i++){
+    const prevVal=pts[i-1].value;
+    const cashIn=_premCash[pts[i].date]||0;
+    const organic=pts[i].value-cashIn;
+    if(prevVal>0)_twrFactor*=(organic/prevVal);
+    twrByDate[pts[i].date]=_twrFactor;
+  }
 
   const allDates=[...new Set([...pts.map(p=>p.date),...sp5Prices.map(p=>p.date)])].sort();
   const portRange={min:pts[0].date,max:pts[pts.length-1].date};
   const filteredDates=allDates.filter(d=>d>=portRange.min&&d<=portRange.max);
 
-  const portByDate={};
-  for(const p of pts)portByDate[p.date]=p.value;
-
   const chartLabels=[],portIdx=[],sp5Idx=[];
-  let lastPortVal=null,lastSp5Price=null;
+  let lastTWR=null,lastSp5Price=null;
   for(const d of filteredDates){
-    if(portByDate[d]!==undefined)lastPortVal=portByDate[d];
+    if(twrByDate[d]!==undefined)lastTWR=twrByDate[d];
     if(sp5Map[d]!==undefined)lastSp5Price=sp5Map[d];
-    if(lastPortVal===null||lastSp5Price===null)continue;
-    if(chartLabels.length>0&&portByDate[d]===undefined&&sp5Map[d]===undefined)continue;
+    if(lastTWR===null||lastSp5Price===null)continue;
+    if(chartLabels.length>0&&twrByDate[d]===undefined&&sp5Map[d]===undefined)continue;
     if(chartLabels.length>0){
       const prev=chartLabels[chartLabels.length-1];
       const daysDiff=(new Date(d)-new Date(prev))/(1000*86400);
-      if(daysDiff<5&&portByDate[d]===undefined)continue;
+      if(daysDiff<5&&twrByDate[d]===undefined)continue;
     }
     chartLabels.push(d);
-    portIdx.push(+((lastPortVal/basePortVal)*100).toFixed(2));
+    portIdx.push(+(lastTWR*100).toFixed(2));
     sp5Idx.push(+((lastSp5Price/baseSp5Price)*100).toFixed(2));
   }
 
