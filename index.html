@@ -807,6 +807,16 @@ function calcTimeSeries(txs){
     for(const[fund,units]of Object.entries(holdings))total+=Math.max(0,units)*(lastPrice[fund]||0);
     byDate[tx.txDate]={date:tx.txDate,value:total};
   }
+  // Always add today using live fund prices so the chart reflects current market value,
+  // not just the price from the last transaction (critical for advance-premium clients
+  // who have very few transactions after the initial deposit).
+  const todayStr=new Date().toISOString().split("T")[0];
+  if(Object.keys(fundPrices||{}).length>0){
+    let todayTotal=0;
+    for(const[fund,units]of Object.entries(holdings))
+      todayTotal+=Math.max(0,units)*(fundPrices[fund]||lastPrice[fund]||0);
+    if(todayTotal>0)byDate[todayStr]={date:todayStr,value:todayTotal};
+  }
   return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
 }
 
