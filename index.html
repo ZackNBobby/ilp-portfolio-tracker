@@ -810,6 +810,33 @@ function calcTimeSeries(txs){
   return Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
 }
 
+// Approximate period returns (1M / 3M / 6M) using the transaction-based time series.
+// Uses simplified Modified Dietz: (endValue - beginValue - cashFlows) / beginValue.
+// Historical values use the prices embedded in the time series (last known price at each tx date).
+function calcPeriodReturns(txs, currentValue){
+  const result={};
+  if(!txs||txs.length<2||currentValue<=0)return result;
+  const ts=calcTimeSeries(txs);
+  if(!ts.length)return result;
+  const sorted=[...txs].sort((a,b)=>a.txDate.localeCompare(b.txDate));
+  const nowMs=Date.now();
+  for(const[months,key]of[[1,"1M"],[3,"3M"],[6,"6M"]]){
+    const cutoff=new Date(nowMs);
+    cutoff.setMonth(cutoff.getMonth()-months);
+    const cutoffStr=cutoff.toISOString().split("T")[0];
+    let past=null;
+    for(const entry of ts){if(entry.date<=cutoffStr)past=entry;else break;}
+    if(!past||past.value<=0)continue;
+    if((cutoff-new Date(past.date))/86400000>45)continue; // no data within 45 days of target
+    const cashIn=sorted
+      .filter(tx=>tx.category==="premium"&&tx.txDate>past.date)
+      .reduce((s,tx)=>s+Math.abs(tx.amount),0);
+    const r=(currentValue-past.value-cashIn)/past.value;
+    result[key]={pct:r*100, annPct:(Math.pow(1+r,12/months)-1)*100};
+  }
+  return result;
+}
+
 function portfolioTotals(fundData){
   let totalInvested=0,totalValue=0,bonusValue=0,trueGain=0,dividendPaid=0;
   for(const fd of Object.values(fundData)){
@@ -1284,6 +1311,11 @@ function renderClientDetail(clientId){
   const hasPrices=hasTxs&&Object.keys(fundData).some(n=>(fundPrices[n]||0)>0);
   const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>(fundPrices[n]||0)>0).length:0;
   const allFundsPriced=hasTxs&&pricedFundCount>0&&pricedFundCount===Object.keys(fundData).length;
+  const _startMs=c.startDate?new Date(c.startDate).getTime():0;
+  const _nowMs=Date.now();
+  const _monthsElapsed=_startMs>0?Math.round((_nowMs-_startMs)/(1000*60*60*24*30.44)):0;
+  const sinceInceptAnn=allFundsPriced&&_monthsElapsed>=1?(Math.pow(1+adjTrueGainPct/100,12/_monthsElapsed)-1)*100:null;
+  const periodRets=allFundsPriced?calcPeriodReturns(txs,totals.totalValue):{};
 
   // Back + actions
   let html=`<button class="btn-back" onclick="goBack()">← Back to Clients</button>`;
@@ -1358,6 +1390,40 @@ function renderClientDetail(clientId){
         <div style="font-size:28px;font-weight:900;color:#d8b4fe;margin-top:4px;">${$f(totals.dividendPaid)}</div>
       </div>`;
     }
+
+    // Annualised Returns
+    html+=`<div class="sec-title">📅 Annualised Returns</div>
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:14px;">
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,0.07);">
+        <span>Period</span><span style="text-align:right;">Cumulative</span><span style="text-align:right;">Annualised p.a.</span>
+      </div>
+      ${["1M","3M","6M"].map(p=>{
+        const r=periodRets[p];
+        if(!r)return`<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="color:var(--dim);">${p}</span>
+          <span style="text-align:right;color:var(--dim);">—</span>
+          <span style="text-align:right;color:var(--dim);">—</span>
+        </div>`;
+        const c1=r.pct>=0?"var(--green)":"var(--red)";
+        const c2=r.annPct>=0?"var(--green)":"var(--red)";
+        return`<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-weight:600;">${p}</span>
+          <span style="text-align:right;font-weight:700;color:${c1};">${$pct(r.pct)}</span>
+          <span style="text-align:right;font-weight:700;color:${c2};">${$pct(r.annPct)}/yr</span>
+        </div>`;
+      }).join("")}
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:9px 14px;font-size:13px;">
+        <span style="font-weight:600;">Since Start <span style="font-size:10px;color:var(--dim);">(${_monthsElapsed}mo)</span></span>
+        ${allFundsPriced
+          ?`<span style="text-align:right;font-weight:700;color:${adjTrueGain>=0?"var(--green)":"var(--red)"};">${$pct(adjTrueGainPct)}</span>
+             <span style="text-align:right;font-weight:700;color:${sinceInceptAnn!=null&&sinceInceptAnn>=0?"var(--green)":"var(--red)"};">${sinceInceptAnn!=null?$pct(sinceInceptAnn)+"/yr":"—"}</span>`
+          :`<span style="text-align:right;color:var(--dim);">N/A</span><span style="text-align:right;color:var(--dim);">—</span>`
+        }
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin-bottom:18px;line-height:1.5;">
+      ⓘ Period returns are estimated from transaction history. Annualised rate compounds the period return to a per-year equivalent — not a simple multiplication. Past performance is not indicative of future results.
+    </div>`;
 
     // Charts
     html+=`<div class="sec-title">📊 Portfolio Visualisation</div>
@@ -1861,6 +1927,11 @@ window.openPresent=async(clientId)=>{
   const pAdjPct=totals.totalInvested>0?pAdjGain/totals.totalInvested*100:0;
   const today=new Date().toLocaleDateString("en-SG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
   const hasPrices=Object.keys(fundPrices).length>0;
+  const _pStartMs=c.startDate?new Date(c.startDate).getTime():0;
+  const _pNowMs=Date.now();
+  const _pMonths=_pStartMs>0?Math.round((_pNowMs-_pStartMs)/(1000*60*60*24*30.44)):0;
+  const pSinceInceptAnn=hasPrices&&_pMonths>=1?(Math.pow(1+pAdjPct/100,12/_pMonths)-1)*100:null;
+  const pPeriodRets=hasPrices&&txs.length>0?calcPeriodReturns(txs,totals.totalValue):{};
   const strategy=getStrategy(c.product);
 
   let html=`<div style="max-width:700px;margin:0 auto;padding-top:20px;">
@@ -1897,6 +1968,34 @@ window.openPresent=async(clientId)=>{
         <div style="font-size:28px;font-weight:900;color:#d8b4fe;">${$f(totals.dividendPaid)}</div>
       </div>`;
     }
+
+    // Annualised Returns in presentation mode
+    html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Annualised Returns</div>
+    <div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">
+        <span>Period</span><span style="text-align:right;">Cumulative</span><span style="text-align:right;">Annualised p.a.</span>
+      </div>
+      ${["1M","3M","6M"].map(p=>{
+        const r=pPeriodRets[p];
+        if(!r)return`<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:10px 18px;font-size:14px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="color:var(--dim);">${p}</span>
+          <span style="text-align:right;color:var(--dim);">—</span>
+          <span style="text-align:right;color:var(--dim);">—</span>
+        </div>`;
+        const c1=r.pct>=0?"var(--green)":"var(--red)";
+        const c2=r.annPct>=0?"var(--green)":"var(--red)";
+        return`<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:10px 18px;font-size:14px;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-weight:600;">${p}</span>
+          <span style="text-align:right;font-weight:800;color:${c1};">${$pct(r.pct)}</span>
+          <span style="text-align:right;font-weight:800;color:${c2};">${$pct(r.annPct)}/yr</span>
+        </div>`;
+      }).join("")}
+      <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:10px 18px;font-size:14px;">
+        <span style="font-weight:600;">Since Start <span style="font-size:10px;color:var(--dim);">(${_pMonths}mo)</span></span>
+        <span style="text-align:right;font-weight:800;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$pct(pAdjPct)}</span>
+        <span style="text-align:right;font-weight:800;color:${pSinceInceptAnn!=null&&pSinceInceptAnn>=0?"var(--green)":"var(--red)"};">${pSinceInceptAnn!=null?$pct(pSinceInceptAnn)+"/yr":"—"}</span>
+      </div>
+    </div>`;
 
     html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Fund Breakdown</div>`;
     for(const[fname,fd]of Object.entries(fundData)){
