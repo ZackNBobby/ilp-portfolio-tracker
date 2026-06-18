@@ -1397,7 +1397,7 @@ function renderClientDetail(clientId){
   const adjTrueGain=totals.totalValue-totals.totalInvested-bonusGrant;
   const adjTrueGainPct=totals.totalInvested>0?adjTrueGain/totals.totalInvested*100:0;
   const hasPrices=hasTxs&&Object.keys(fundData).some(n=>(fundPrices[n]||0)>0);
-  const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>(fundPrices[n]||0)>0).length:0;
+  const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>lookupFundPrice(n)>0).length:0;
   const allFundsPriced=hasTxs&&pricedFundCount>0&&pricedFundCount===Object.keys(fundData).length;
   const _startMs=c.startDate?new Date(c.startDate).getTime():0;
   const _nowMs=Date.now();
@@ -1707,21 +1707,29 @@ function renderClientDetail(clientId){
   </div>
   <div class="upload-status" id="uploadStatus-${clientId}"></div>`;
 
-  // Transaction history
+  // Transaction history — collapsed by default
   if(hasTxs){
+    const txCount=txs.filter(t=>t.category!=="fee").length;
+    const txBodyId="txBody-"+clientId;
     html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px;margin-bottom:8px;">
-      <span class="sec-title" style="margin:0;">📋 Transaction History (${txs.filter(t=>t.category!=="fee").length})</span>
+      <button onclick="(function(){var b=document.getElementById('${txBodyId}');var open=b.style.display!=='none';b.style.display=open?'none':'block';this.querySelector('.tx-arrow').textContent=open?'▾':'▴';}).call(this)"
+        style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:0;">
+        <span class="sec-title" style="margin:0;">📋 Transaction History (${txCount})</span>
+        <span class="tx-arrow" style="font-size:13px;color:var(--dim);">▾</span>
+      </button>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--dim);user-select:none;">
         <input type="checkbox" id="showFees-${clientId}" onchange="toggleFees('${clientId}')" style="accent-color:var(--gold);width:14px;height:14px;">
         Show policy charges
       </label>
     </div>`;
+    html+=`<div id="${txBodyId}" style="display:none;">`;
     html+=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;" id="txFilters-${clientId}">
       ${["all","premium","bonus","reinvestment","switch_in","switch_out","dividend"].map(f=>
         `<button class="btn-sm" onclick="filterTx('${clientId}','${f}')" id="txf-${clientId}-${f}" style="${f==="all"?"background:var(--gold-glow);border-color:var(--gold);":""}">${f==="switch_in"?"Switch In":f==="switch_out"?"Switch Out":f.charAt(0).toUpperCase()+f.slice(1)}</button>`
       ).join("")}
     </div>`;
     html+=`<div style="overflow-x:auto;" id="txTable-${clientId}">${buildTxTable(txs,"all",false)}</div>`;
+    html+=`</div>`;
   }
 
   return html;
@@ -2257,7 +2265,7 @@ window.openPresent=async(clientId)=>{
         const chg=dispChg===null?"N/A":arrow+" "+Math.abs(dispChg).toFixed(2)+"%";
         const border=i<epPresentFunds.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
         const nowPrice=f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—";
-        epRows+='<div style="display:grid;grid-template-columns:2fr auto 1fr 1fr 1fr;padding:12px 18px;font-size:13px;align-items:center;'+border+'">'
+        epRows+='<div style="display:grid;grid-template-columns:2fr 50px 90px 90px 90px;padding:12px 18px;font-size:13px;align-items:center;'+border+'">'
           +'<span style="font-weight:600;color:var(--text);">'+esc(fname.replace("Income ",""))+'</span>'
           +'<span style="font-size:10px;color:var(--dim);padding:2px 6px;background:rgba(255,255,255,0.06);border-radius:4px;margin-right:4px;">'+dispLabelShort+'</span>'
           +'<span style="text-align:right;color:var(--muted);">$'+dispCost.toFixed(4)+'</span>'
@@ -2266,10 +2274,11 @@ window.openPresent=async(clientId)=>{
           +'</div>';
       });
       html+='<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Your Fund Entry Prices</div>'
-        +'<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">'
-        +'<div style="display:grid;grid-template-columns:2fr auto 1fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">'
+        +'<div style="overflow-x:auto;margin-bottom:24px;-webkit-overflow-scrolling:touch;">'
+        +'<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);min-width:360px;">'
+        +'<div style="display:grid;grid-template-columns:2fr 50px 90px 90px 90px;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">'
         +'<span>Fund</span><span></span><span style="text-align:right;">Avg Price</span><span style="text-align:right;">Now</span><span style="text-align:right;">Change</span></div>'
-        +epRows+'</div>';
+        +epRows+'</div></div>';
 
       // Build switch history section
       // Collect all switches: for each switch_out from fund A, find the matching switch_in on same date
@@ -2281,43 +2290,43 @@ window.openPresent=async(clientId)=>{
       allSwitchOuts.sort((a,b)=>a.so.date.localeCompare(b.so.date));
 
       if(allSwitchOuts.length>0){
-        html+='<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">🔀 Fund Switch History</div>';
+        html+='<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:8px;">🔀 Fund Switch History</div>';
         html+='<div style="font-size:12px;color:var(--dim);margin-bottom:12px;">Switches made to lock in gains and redeploy into growth opportunities.</div>';
-        html+='<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">';
-        html+='<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;">';
-        html+='<span>Date</span><span>Switched Out</span><span>Exit Price</span><span style="text-align:right;">Vs Avg Entry</span></div>';
+        html+='<div style="overflow-x:auto;margin-bottom:24px;-webkit-overflow-scrolling:touch;">';
+        html+='<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);min-width:400px;">';
+        html+='<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:8px 16px;border-bottom:1px solid rgba(255,255,255,0.07);display:grid;grid-template-columns:90px 1fr 100px 120px;">';
+        html+='<span>Date</span><span>Switched Out</span><span style="text-align:right;">Exit $</span><span style="text-align:right;">Vs Avg Entry</span></div>';
         allSwitchOuts.forEach((item,i)=>{
           const so=item.so;
           const vc=item.avgEntry>0?((so.price-item.avgEntry)/item.avgEntry*100):null;
           const vcol=vc===null?"var(--dim)":vc>=0?"var(--green)":"var(--red)";
-          const vcTxt=vc===null?"—":(vc>=0?"▲ +":"▼ ")+Math.abs(vc).toFixed(2)+"% "+(vc>=0?"✅ profit locked":"loss");
+          const vcTxt=vc===null?"—":(vc>=0?"▲ +":"▼ ")+Math.abs(vc).toFixed(2)+"% "+(vc>=0?"✅ locked":"loss");
           const border=i<allSwitchOuts.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
-          // Find switch_ins on same date
           const sameDate=epPresentFunds.flatMap(fn=>epPresent[fn].switchIns.filter(si=>si.date===so.date).map(si=>({toFund:fn,si})));
-          html+='<div style="padding:12px 18px;'+border+'">';
-          html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;align-items:start;gap:4px;">';
-          html+='<span style="font-size:12px;color:var(--dim);">'+fmtDate(so.date)+'</span>';
+          html+='<div style="padding:10px 16px;'+border+'">';
+          html+='<div style="display:grid;grid-template-columns:90px 1fr 100px 120px;align-items:center;">';
+          html+='<span style="font-size:11px;color:var(--dim);">'+fmtDate(so.date)+'</span>';
           html+='<span style="font-size:12px;font-weight:600;">'+esc(item.fromFund.replace("Income ",""))+'</span>';
-          html+='<span style="font-size:12px;color:var(--muted);">$'+so.price.toFixed(6)+'</span>';
+          html+='<span style="font-size:11px;color:var(--muted);text-align:right;">$'+so.price.toFixed(4)+'</span>';
           html+='<span style="font-size:12px;font-weight:700;color:'+vcol+';text-align:right;">'+vcTxt+'</span>';
           html+='</div>';
           if(sameDate.length>0){
-            html+='<div style="margin-top:8px;padding-left:12px;border-left:2px solid rgba(6,182,212,0.3);">';
+            html+='<div style="margin-top:6px;padding-left:16px;border-left:2px solid rgba(6,182,212,0.3);">';
             sameDate.forEach(({toFund,si})=>{
               const sc=si.chgPct,scol=sc===null?"var(--dim)":sc>=0?"var(--green)":"var(--red)";
-              const scTxt=sc===null?"—":(sc>=0?"▲ +":"▼ ")+Math.abs(sc).toFixed(2)+"%";
-              html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;font-size:11px;color:var(--dim);margin-top:4px;">';
+              const scTxt=sc===null?"—":(sc>=0?"▲ +":"▼ ")+Math.abs(sc).toFixed(2)+"% now";
+              html+='<div style="display:grid;grid-template-columns:90px 1fr 100px 120px;font-size:11px;margin-top:3px;">';
               html+='<span style="color:#67e8f9;">↳ Into</span>';
               html+='<span style="color:var(--text);font-weight:600;">'+esc(toFund.replace("Income ",""))+'</span>';
-              html+='<span style="color:var(--muted);">$'+si.price.toFixed(6)+'</span>';
-              html+='<span style="font-weight:700;color:'+scol+';text-align:right;">'+scTxt+' now</span>';
+              html+='<span style="color:var(--muted);text-align:right;">$'+si.price.toFixed(4)+'</span>';
+              html+='<span style="font-weight:700;color:'+scol+';text-align:right;">'+scTxt+'</span>';
               html+='</div>';
             });
             html+='</div>';
           }
           html+='</div>';
         });
-        html+='</div>';
+        html+='</div></div>';
       }
     }
 
