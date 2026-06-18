@@ -871,19 +871,38 @@ function calcPeriodReturns(txs, currentValue){
   return result;
 }
 
-// Compute weighted average entry price per fund from premium transactions.
-// Returns { [fundName]: { avgCost, firstDate, currentPrice, changePct, premiums:[{date,units,price,amount,chgPct}] } }
+// Compute weighted average entry price per fund + switch history.
+// Returns per-fund: { avgCost, firstDate, currentPrice, changePct,
+//   premiums:[{date,units,price,chgPct}],
+//   switchOuts:[{date,units,price,vsAvgPct}],   — exited at profit/loss vs avg entry
+//   switchIns:[{date,units,price,chgPct}]        — entered via switch, vs current price
+// }
 function calcEntryPrices(txs){
   const byFund={};
+  const ensure=name=>{
+    if(!byFund[name])byFund[name]={premiums:[],switchOuts:[],switchIns:[],
+      totalUnits:0,totalAmount:0,firstDate:null};
+  };
   for(const tx of txs){
-    if(tx.category!=="premium"||!tx.price||tx.price<=0||!tx.units||tx.units<=0)continue;
-    if(!byFund[tx.fundName])byFund[tx.fundName]={premiums:[],totalUnits:0,totalAmount:0,firstDate:tx.txDate};
-    const f=byFund[tx.fundName];
-    const amt=Math.abs(tx.amount)||tx.units*tx.price;
-    f.premiums.push({date:tx.txDate,units:tx.units,price:tx.price,amount:amt});
-    f.totalUnits+=tx.units;
-    f.totalAmount+=amt;
-    if(tx.txDate<f.firstDate)f.firstDate=tx.txDate;
+    const price=tx.price;
+    if(!price||price<=0)continue;
+    if(tx.category==="premium"&&tx.units>0){
+      ensure(tx.fundName);
+      const f=byFund[tx.fundName];
+      const amt=Math.abs(tx.amount)||tx.units*price;
+      f.premiums.push({date:tx.txDate,units:tx.units,price,amount:amt});
+      f.totalUnits+=tx.units;
+      f.totalAmount+=amt;
+      if(!f.firstDate||tx.txDate<f.firstDate)f.firstDate=tx.txDate;
+    } else if(tx.category==="switch_out"){
+      ensure(tx.fundName);
+      byFund[tx.fundName].switchOuts.push({date:tx.txDate,units:Math.abs(tx.units),price,amount:Math.abs(tx.amount||tx.units*price)});
+    } else if(tx.category==="switch_in"){
+      ensure(tx.fundName);
+      byFund[tx.fundName].switchIns.push({date:tx.txDate,units:tx.units,price,amount:Math.abs(tx.amount||tx.units*price)});
+      if(!byFund[tx.fundName].firstDate||tx.txDate<byFund[tx.fundName].firstDate)
+        byFund[tx.fundName].firstDate=tx.txDate;
+    }
   }
   for(const[name,f]of Object.entries(byFund)){
     f.avgCost=f.totalUnits>0?f.totalAmount/f.totalUnits:0;
@@ -891,7 +910,11 @@ function calcEntryPrices(txs){
     f.currentPrice=cur;
     f.changePct=f.avgCost>0&&cur>0?((cur-f.avgCost)/f.avgCost*100):null;
     f.premiums.sort((a,b)=>a.date.localeCompare(b.date));
-    f.premiums.forEach(p=>{p.chgPct=f.currentPrice>0&&p.price>0?((f.currentPrice-p.price)/p.price*100):null;});
+    f.premiums.forEach(p=>{p.chgPct=cur>0&&p.price>0?((cur-p.price)/p.price*100):null;});
+    f.switchOuts.sort((a,b)=>a.date.localeCompare(b.date));
+    f.switchOuts.forEach(s=>{s.vsAvgPct=f.avgCost>0?((s.price-f.avgCost)/f.avgCost*100):null;});
+    f.switchIns.sort((a,b)=>a.date.localeCompare(b.date));
+    f.switchIns.forEach(s=>{s.chgPct=cur>0&&s.price>0?((cur-s.price)/s.price*100):null;});
   }
   return byFund;
 }
@@ -1563,67 +1586,106 @@ function renderClientDetail(clientId){
     // ── Entry Price Analysis ──
     if(hasTxs){
       const ep=calcEntryPrices(txs);
-      const epFunds=Object.keys(ep);
+      const epFunds=Object.keys(ep).filter(n=>{const f=ep[n];return f.premiums.length>0||f.switchIns.length>0;});
       if(epFunds.length>0){
         html+=`<div class="sec-title" style="margin-top:20px;">📌 Entry Price Analysis</div>`;
-        html+=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px;">Your weighted average cost basis per fund vs today's price. Click <strong>▾ entries</strong> to see each purchase.</div>`;
+        html+=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px;">Average cost basis, switches, and price performance per fund.</div>`;
         epFunds.forEach((fname,fi)=>{
           const f=ep[fname];
-          if(!f.avgCost)return;
-          const col=f.changePct===null?"var(--dim)":f.changePct>=0?"var(--green)":"var(--red)";
-          const arrow=f.changePct===null?"—":f.changePct>=0?"▲":"▼";
-          const chgTxt=f.changePct===null?"N/A":`${arrow} ${Math.abs(f.changePct).toFixed(2)}%`;
-          const toggleId=`ep-${clientId}-${fi}`;
-          html+=`<div class="card-dark" style="margin-bottom:8px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-              <span style="font-size:13px;font-weight:700;color:var(--text);flex:1;">${esc(fname.replace("Income ",""))}</span>
-              <span style="font-size:11px;color:var(--dim);">Since ${fmtDate(f.firstDate)}</span>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px;">
-              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
-                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Avg Entry Price</div>
-                <div style="font-size:15px;font-weight:800;color:var(--muted);">$${f.avgCost.toFixed(6)}</div>
-              </div>
-              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
-                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Current Price</div>
-                <div style="font-size:15px;font-weight:800;color:var(--text);">${f.currentPrice>0?"$"+f.currentPrice.toFixed(6):'<span style="color:var(--dim)">N/A</span>'}</div>
-              </div>
-              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
-                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Since Entry</div>
-                <div style="font-size:15px;font-weight:800;color:${col};">${chgTxt}</div>
-              </div>
-            </div>
-            <button onclick="const d=document.getElementById('${toggleId}');d.style.display=d.style.display==='none'?'block':'none';this.textContent=d.style.display==='none'?'▾ ${f.premiums.length} entries':'▴ Hide entries';"
-              style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--dim);cursor:pointer;">
-              ▾ ${f.premiums.length} entries
-            </button>
-            <div id="${toggleId}" style="display:none;margin-top:10px;overflow-x:auto;">
-              <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                <thead>
-                  <tr style="color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(255,255,255,0.08);">
-                    <th style="text-align:left;padding:5px 8px;font-weight:600;">Date</th>
-                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Units</th>
-                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Entry Price</th>
-                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Now</th>
-                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Δ%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${f.premiums.map(p=>{
-                    const pc=p.chgPct;
-                    const pcol=pc===null?"var(--dim)":pc>=0?"var(--green)":"var(--red)";
-                    return`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
-                      <td style="padding:5px 8px;color:var(--dim);">${fmtDate(p.date)}</td>
-                      <td style="padding:5px 8px;text-align:right;">${p.units.toFixed(4)}</td>
-                      <td style="padding:5px 8px;text-align:right;color:var(--muted);">$${p.price.toFixed(6)}</td>
-                      <td style="padding:5px 8px;text-align:right;">${f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—"}</td>
-                      <td style="padding:5px 8px;text-align:right;font-weight:700;color:${pcol};">${pc===null?"—":(pc>=0?"+":"")+pc.toFixed(2)+"%"}</td>
-                    </tr>`;
-                  }).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>`;
+          const hasPrem=f.premiums.length>0&&f.avgCost>0;
+          const hasSO=f.switchOuts.length>0;
+          const hasSI=f.switchIns.length>0;
+          // Avg switch-in price for pure switch-in funds
+          const siTotalU=f.switchIns.reduce((s,x)=>s+x.units,0);
+          const siTotalA=f.switchIns.reduce((s,x)=>s+x.amount,0);
+          const avgSI=siTotalU>0?siTotalA/siTotalU:0;
+          const dispCost=hasPrem?f.avgCost:avgSI;
+          const dispLabel=hasPrem?"Avg Entry Price":"Avg Switch Price";
+          const dispChg=dispCost>0&&f.currentPrice>0?((f.currentPrice-dispCost)/dispCost*100):null;
+          const col=dispChg===null?"var(--dim)":dispChg>=0?"var(--green)":"var(--red)";
+          const chgTxt=dispChg===null?"N/A":(dispChg>=0?"▲ ":"▼ ")+Math.abs(dispChg).toFixed(2)+"%";
+          const tid1="ep-"+clientId+"-"+fi+"-p";
+          const tid2="ep-"+clientId+"-"+fi+"-so";
+          const tid3="ep-"+clientId+"-"+fi+"-si";
+          const th='color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(255,255,255,0.08);';
+          const TH=s=>'<th style="padding:5px 8px;font-weight:600;'+s+'">',td=s=>'<td style="padding:5px 8px;'+s+'">';
+
+          let card='<div class="card-dark" style="margin-bottom:8px;">';
+          card+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
+          card+='<span style="font-size:13px;font-weight:700;color:var(--text);flex:1;">'+esc(fname.replace("Income ",""))+'</span>';
+          card+='<span style="font-size:11px;color:var(--dim);">Since '+fmtDate(f.firstDate)+'</span></div>';
+          card+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px;">';
+          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
+          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">'+dispLabel+'</div>';
+          card+='<div style="font-size:15px;font-weight:800;color:var(--muted);">$'+dispCost.toFixed(6)+'</div></div>';
+          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
+          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Current Price</div>';
+          card+='<div style="font-size:15px;font-weight:800;color:var(--text);">'+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"N/A")+'</div></div>';
+          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
+          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">'+(hasPrem?"Since Entry":"Since Switch")+'</div>';
+          card+='<div style="font-size:15px;font-weight:800;color:'+col+';">'+chgTxt+'</div></div></div>';
+
+          // Premium entries toggle
+          if(hasPrem){
+            card+='<button onclick="var d=document.getElementById(\''+tid1+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
+            card+='style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--dim);cursor:pointer;margin-right:6px;">▾ '+f.premiums.length+' premium entries</button>';
+            card+='<div id="'+tid1+'" style="display:none;margin-top:10px;overflow-x:auto;">';
+            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
+            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units</th>"+TH("text-align:right;")+"Entry Price</th>"+TH("text-align:right;")+"Now</th>"+TH("text-align:right;")+"Δ%</th></tr></thead><tbody>";
+            f.premiums.forEach(p=>{
+              const pc=p.chgPct,pcol=pc===null?"var(--dim)":pc>=0?"var(--green)":"var(--red)";
+              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+              card+=td("color:var(--dim);")+fmtDate(p.date)+"</td>";
+              card+=td("text-align:right;")+p.units.toFixed(4)+"</td>";
+              card+=td("text-align:right;color:var(--muted);")+"$"+p.price.toFixed(6)+"</td>";
+              card+=td("text-align:right;")+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—")+"</td>";
+              card+=td("text-align:right;font-weight:700;color:"+pcol+";")+(pc===null?"—":(pc>=0?"+":"")+pc.toFixed(2)+"%")+"</td></tr>";
+            });
+            card+="</tbody></table></div>";
+          }
+
+          // Switch-outs toggle
+          if(hasSO){
+            card+='<button onclick="var d=document.getElementById(\''+tid2+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
+            card+='style="background:none;border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--green);cursor:pointer;margin-right:6px;margin-top:6px;">▾ '+f.switchOuts.length+' switches out ✅</button>';
+            card+='<div id="'+tid2+'" style="display:none;margin-top:10px;overflow-x:auto;">';
+            card+='<div style="font-size:11px;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:rgba(16,185,129,0.06);border-radius:6px;border-left:3px solid var(--green);">Units switched out from this fund. Exit price vs average entry shows profit/loss locked in.</div>';
+            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
+            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units Out</th>"+TH("text-align:right;")+"Exit Price</th>"+TH("text-align:right;")+"Avg Entry</th>"+TH("text-align:right;")+"Locked In</th></tr></thead><tbody>";
+            f.switchOuts.forEach(s=>{
+              const vc=s.vsAvgPct,vcol=vc===null?"var(--dim)":vc>=0?"var(--green)":"var(--red)";
+              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+              card+=td("color:var(--dim);")+fmtDate(s.date)+"</td>";
+              card+=td("text-align:right;")+s.units.toFixed(4)+"</td>";
+              card+=td("text-align:right;color:var(--muted);")+"$"+s.price.toFixed(6)+"</td>";
+              card+=td("text-align:right;color:var(--dim);")+( hasPrem?"$"+f.avgCost.toFixed(6):"—")+"</td>";
+              card+=td("text-align:right;font-weight:700;color:"+vcol+";")+(vc===null?"—":(vc>=0?"+":"")+vc.toFixed(2)+"%")+"</td></tr>";
+            });
+            card+="</tbody></table></div>";
+          }
+
+          // Switch-ins toggle
+          if(hasSI){
+            card+='<button onclick="var d=document.getElementById(\''+tid3+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
+            card+='style="background:none;border:1px solid rgba(6,182,212,0.35);border-radius:6px;padding:4px 10px;font-size:11px;color:#67e8f9;cursor:pointer;margin-top:6px;">▾ '+f.switchIns.length+' switches in</button>';
+            card+='<div id="'+tid3+'" style="display:none;margin-top:10px;overflow-x:auto;">';
+            card+='<div style="font-size:11px;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:rgba(6,182,212,0.06);border-radius:6px;border-left:3px solid #06b6d4;">Units switched into this fund. Switch price vs current price shows growth since the switch.</div>';
+            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
+            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units In</th>"+TH("text-align:right;")+"Switch Price</th>"+TH("text-align:right;")+"Now</th>"+TH("text-align:right;")+"Δ% Since Switch</th></tr></thead><tbody>";
+            f.switchIns.forEach(s=>{
+              const sc=s.chgPct,scol=sc===null?"var(--dim)":sc>=0?"var(--green)":"var(--red)";
+              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+              card+=td("color:var(--dim);")+fmtDate(s.date)+"</td>";
+              card+=td("text-align:right;")+s.units.toFixed(4)+"</td>";
+              card+=td("text-align:right;color:var(--muted);")+"$"+s.price.toFixed(6)+"</td>";
+              card+=td("text-align:right;")+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—")+"</td>";
+              card+=td("text-align:right;font-weight:700;color:"+scol+";")+(sc===null?"—":(sc>=0?"+":"")+sc.toFixed(2)+"%")+"</td></tr>";
+            });
+            card+="</tbody></table></div>";
+          }
+
+          card+="</div>";
+          html+=card;
         });
       }
     }
@@ -2176,28 +2238,88 @@ window.openPresent=async(clientId)=>{
 
     // Fund Entry Price Summary (Present mode — clean client-facing view)
     const epPresent=calcEntryPrices(txs);
-    const epPresentFunds=Object.keys(epPresent).filter(n=>epPresent[n].avgCost>0);
+    // Include funds with premiums OR switch_ins
+    const epPresentFunds=Object.keys(epPresent).filter(n=>{const f=epPresent[n];return f.avgCost>0||f.switchIns.length>0;});
     if(epPresentFunds.length>0){
-      html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Your Fund Entry Prices</div>
-      <div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">
-          <span>Fund</span><span style="text-align:right;">Avg Entry</span><span style="text-align:right;">Now</span><span style="text-align:right;">Change</span>
-        </div>
-        ${epPresentFunds.map((fname,i)=>{
-          const f=epPresent[fname];
-          const col=f.changePct===null?"var(--dim)":f.changePct>=0?"var(--green)":"var(--red)";
-          const arrow=f.changePct===null?"—":f.changePct>=0?"▲":"▼";
-          const chg=f.changePct===null?"N/A":arrow+" "+Math.abs(f.changePct).toFixed(2)+"%";
-          const border=i<epPresentFunds.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
-          const nowPrice=f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—";
-          return'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:12px 18px;font-size:13px;'+border+'">'
-            +'<span style="font-weight:600;color:var(--text);">'+esc(fname.replace("Income ",""))+'</span>'
-            +'<span style="text-align:right;color:var(--muted);">$'+f.avgCost.toFixed(4)+'</span>'
-            +'<span style="text-align:right;">'+nowPrice+'</span>'
-            +'<span style="text-align:right;font-weight:800;color:'+col+';">'+chg+'</span>'
-            +'</div>';
-        }).join("")}
-      </div>`;
+      // Build entry price table rows using string concat (no nested template literals)
+      let epRows="";
+      epPresentFunds.forEach((fname,i)=>{
+        const f=epPresent[fname];
+        const hasPrem=f.avgCost>0;
+        // For switch-in-only funds compute avg switch price
+        const siU=f.switchIns.reduce((s,x)=>s+x.units,0);
+        const siA=f.switchIns.reduce((s,x)=>s+x.amount,0);
+        const avgSI=siU>0?siA/siU:0;
+        const dispCost=hasPrem?f.avgCost:avgSI;
+        const dispLabelShort=hasPrem?"Entry":"Switch";
+        const dispChg=dispCost>0&&f.currentPrice>0?((f.currentPrice-dispCost)/dispCost*100):null;
+        const col=dispChg===null?"var(--dim)":dispChg>=0?"var(--green)":"var(--red)";
+        const arrow=dispChg===null?"—":dispChg>=0?"▲":"▼";
+        const chg=dispChg===null?"N/A":arrow+" "+Math.abs(dispChg).toFixed(2)+"%";
+        const border=i<epPresentFunds.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
+        const nowPrice=f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—";
+        epRows+='<div style="display:grid;grid-template-columns:2fr auto 1fr 1fr 1fr;padding:12px 18px;font-size:13px;align-items:center;'+border+'">'
+          +'<span style="font-weight:600;color:var(--text);">'+esc(fname.replace("Income ",""))+'</span>'
+          +'<span style="font-size:10px;color:var(--dim);padding:2px 6px;background:rgba(255,255,255,0.06);border-radius:4px;margin-right:4px;">'+dispLabelShort+'</span>'
+          +'<span style="text-align:right;color:var(--muted);">$'+dispCost.toFixed(4)+'</span>'
+          +'<span style="text-align:right;">'+nowPrice+'</span>'
+          +'<span style="text-align:right;font-weight:800;color:'+col+';">'+chg+'</span>'
+          +'</div>';
+      });
+      html+='<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Your Fund Entry Prices</div>'
+        +'<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">'
+        +'<div style="display:grid;grid-template-columns:2fr auto 1fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">'
+        +'<span>Fund</span><span></span><span style="text-align:right;">Avg Price</span><span style="text-align:right;">Now</span><span style="text-align:right;">Change</span></div>'
+        +epRows+'</div>';
+
+      // Build switch history section
+      // Collect all switches: for each switch_out from fund A, find the matching switch_in on same date
+      const allSwitchOuts=[];
+      epPresentFunds.forEach(fname=>{
+        const f=epPresent[fname];
+        f.switchOuts.forEach(so=>{allSwitchOuts.push({fromFund:fname,so,avgEntry:f.avgCost});});
+      });
+      allSwitchOuts.sort((a,b)=>a.so.date.localeCompare(b.so.date));
+
+      if(allSwitchOuts.length>0){
+        html+='<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">🔀 Fund Switch History</div>';
+        html+='<div style="font-size:12px;color:var(--dim);margin-bottom:12px;">Switches made to lock in gains and redeploy into growth opportunities.</div>';
+        html+='<div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">';
+        html+='<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;">';
+        html+='<span>Date</span><span>Switched Out</span><span>Exit Price</span><span style="text-align:right;">Vs Avg Entry</span></div>';
+        allSwitchOuts.forEach((item,i)=>{
+          const so=item.so;
+          const vc=item.avgEntry>0?((so.price-item.avgEntry)/item.avgEntry*100):null;
+          const vcol=vc===null?"var(--dim)":vc>=0?"var(--green)":"var(--red)";
+          const vcTxt=vc===null?"—":(vc>=0?"▲ +":"▼ ")+Math.abs(vc).toFixed(2)+"% "+(vc>=0?"✅ profit locked":"loss");
+          const border=i<allSwitchOuts.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
+          // Find switch_ins on same date
+          const sameDate=epPresentFunds.flatMap(fn=>epPresent[fn].switchIns.filter(si=>si.date===so.date).map(si=>({toFund:fn,si})));
+          html+='<div style="padding:12px 18px;'+border+'">';
+          html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;align-items:start;gap:4px;">';
+          html+='<span style="font-size:12px;color:var(--dim);">'+fmtDate(so.date)+'</span>';
+          html+='<span style="font-size:12px;font-weight:600;">'+esc(item.fromFund.replace("Income ",""))+'</span>';
+          html+='<span style="font-size:12px;color:var(--muted);">$'+so.price.toFixed(6)+'</span>';
+          html+='<span style="font-size:12px;font-weight:700;color:'+vcol+';text-align:right;">'+vcTxt+'</span>';
+          html+='</div>';
+          if(sameDate.length>0){
+            html+='<div style="margin-top:8px;padding-left:12px;border-left:2px solid rgba(6,182,212,0.3);">';
+            sameDate.forEach(({toFund,si})=>{
+              const sc=si.chgPct,scol=sc===null?"var(--dim)":sc>=0?"var(--green)":"var(--red)";
+              const scTxt=sc===null?"—":(sc>=0?"▲ +":"▼ ")+Math.abs(sc).toFixed(2)+"%";
+              html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;font-size:11px;color:var(--dim);margin-top:4px;">';
+              html+='<span style="color:#67e8f9;">↳ Into</span>';
+              html+='<span style="color:var(--text);font-weight:600;">'+esc(toFund.replace("Income ",""))+'</span>';
+              html+='<span style="color:var(--muted);">$'+si.price.toFixed(6)+'</span>';
+              html+='<span style="font-weight:700;color:'+scol+';text-align:right;">'+scTxt+' now</span>';
+              html+='</div>';
+            });
+            html+='</div>';
+          }
+          html+='</div>';
+        });
+        html+='</div>';
+      }
     }
 
     html+=`<div style="text-align:center;padding:24px 0 8px;font-size:12px;color:var(--dim);font-style:italic;line-height:1.8;">
