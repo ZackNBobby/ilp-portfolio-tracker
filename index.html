@@ -296,9 +296,11 @@ body{
 @media(max-width:600px){.g2{grid-template-columns:1fr;}.g3{grid-template-columns:1fr 1fr;}}
 /* Fund breakdown: 2-col → 1-col on mobile */
 .fund-breakdown-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px;}
+.fund-breakdown-grid>.fund-card{min-width:0;}
 @media(max-width:800px){.fund-breakdown-grid{grid-template-columns:1fr;}}
 /* Entry price analysis: 3-col → 2-col → 1-col */
 .ep-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.ep-grid>*{min-width:0;}
 @media(max-width:900px){.ep-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:600px){.ep-grid{grid-template-columns:1fr;}}
 
@@ -1617,9 +1619,9 @@ function renderClientDetail(clientId){
           const tid1="ep-"+clientId+"-"+fi+"-p";
           const tid2="ep-"+clientId+"-"+fi+"-so";
           const tid3="ep-"+clientId+"-"+fi+"-si";
-          // Compact grid helpers — no HTML tables, no wasted column space
-          const GC5='display:grid;grid-template-columns:88px 72px 90px 88px 82px;font-size:11px;align-items:center;';
-          const GC5so='display:grid;grid-template-columns:88px 72px 90px 90px 80px;font-size:11px;align-items:center;';
+          // Compact grid helpers — overflow-x:auto on parent handles mobile scroll
+          const GC5='display:grid;grid-template-columns:88px 72px 90px 88px 82px;font-size:11px;align-items:center;min-width:420px;';
+          const GC5so='display:grid;grid-template-columns:88px 72px 90px 90px 80px;font-size:11px;align-items:center;min-width:420px;';
           const hdrStyle='padding:3px 6px;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.08);';
           const rowStyle='padding:4px 6px;border-bottom:1px solid rgba(255,255,255,0.04);';
 
@@ -1645,7 +1647,7 @@ function renderClientDetail(clientId){
 
           // Premium entries panel
           if(hasPrem){
-            card+='<div id="'+tid1+'" style="display:none;margin-top:8px;">';
+            card+='<div id="'+tid1+'" style="display:none;margin-top:8px;overflow-x:auto;">';
             card+='<div style="'+GC5+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Entry $</span><span style="text-align:right;">Now $</span><span style="text-align:right;">Δ%</span></div>';
             f.premiums.forEach(p=>{
               const pc=p.chgPct,pcol=pc===null?"var(--dim)":pc>=0?"var(--green)":"var(--red)";
@@ -1661,7 +1663,7 @@ function renderClientDetail(clientId){
 
           // Switch-outs panel
           if(hasSO){
-            card+='<div id="'+tid2+'" style="display:none;margin-top:8px;">';
+            card+='<div id="'+tid2+'" style="display:none;margin-top:8px;overflow-x:auto;">';
             card+='<div style="font-size:10px;color:var(--green);margin-bottom:4px;padding-left:4px;">Exit price vs avg entry — profit/loss locked in at time of switch</div>';
             card+='<div style="'+GC5so+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Exit $</span><span style="text-align:right;">Avg Entry $</span><span style="text-align:right;">Locked In</span></div>';
             f.switchOuts.forEach(s=>{
@@ -1678,7 +1680,7 @@ function renderClientDetail(clientId){
 
           // Switch-ins panel
           if(hasSI){
-            card+='<div id="'+tid3+'" style="display:none;margin-top:8px;">';
+            card+='<div id="'+tid3+'" style="display:none;margin-top:8px;overflow-x:auto;">';
             card+='<div style="font-size:10px;color:#67e8f9;margin-bottom:4px;padding-left:4px;">Switch price vs current price — growth since we switched in</div>';
             card+='<div style="'+GC5+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Switch $</span><span style="text-align:right;">Now $</span><span style="text-align:right;">Δ% Since</span></div>';
             f.switchIns.forEach(s=>{
