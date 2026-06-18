@@ -871,6 +871,31 @@ function calcPeriodReturns(txs, currentValue){
   return result;
 }
 
+// Compute weighted average entry price per fund from premium transactions.
+// Returns { [fundName]: { avgCost, firstDate, currentPrice, changePct, premiums:[{date,units,price,amount,chgPct}] } }
+function calcEntryPrices(txs){
+  const byFund={};
+  for(const tx of txs){
+    if(tx.category!=="premium"||!tx.price||tx.price<=0||!tx.units||tx.units<=0)continue;
+    if(!byFund[tx.fundName])byFund[tx.fundName]={premiums:[],totalUnits:0,totalAmount:0,firstDate:tx.txDate};
+    const f=byFund[tx.fundName];
+    const amt=Math.abs(tx.amount)||tx.units*tx.price;
+    f.premiums.push({date:tx.txDate,units:tx.units,price:tx.price,amount:amt});
+    f.totalUnits+=tx.units;
+    f.totalAmount+=amt;
+    if(tx.txDate<f.firstDate)f.firstDate=tx.txDate;
+  }
+  for(const[name,f]of Object.entries(byFund)){
+    f.avgCost=f.totalUnits>0?f.totalAmount/f.totalUnits:0;
+    const cur=lookupFundPrice(name);
+    f.currentPrice=cur;
+    f.changePct=f.avgCost>0&&cur>0?((cur-f.avgCost)/f.avgCost*100):null;
+    f.premiums.sort((a,b)=>a.date.localeCompare(b.date));
+    f.premiums.forEach(p=>{p.chgPct=f.currentPrice>0&&p.price>0?((f.currentPrice-p.price)/p.price*100):null;});
+  }
+  return byFund;
+}
+
 function portfolioTotals(fundData){
   let totalInvested=0,totalValue=0,bonusValue=0,trueGain=0,dividendPaid=0;
   for(const fd of Object.values(fundData)){
@@ -1534,6 +1559,75 @@ function renderClientDetail(clientId){
         </div>
       </div>`;
     }
+
+    // ── Entry Price Analysis ──
+    if(hasTxs){
+      const ep=calcEntryPrices(txs);
+      const epFunds=Object.keys(ep);
+      if(epFunds.length>0){
+        html+=`<div class="sec-title" style="margin-top:20px;">📌 Entry Price Analysis</div>`;
+        html+=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px;">Your weighted average cost basis per fund vs today's price. Click <strong>▾ entries</strong> to see each purchase.</div>`;
+        epFunds.forEach((fname,fi)=>{
+          const f=ep[fname];
+          if(!f.avgCost)return;
+          const col=f.changePct===null?"var(--dim)":f.changePct>=0?"var(--green)":"var(--red)";
+          const arrow=f.changePct===null?"—":f.changePct>=0?"▲":"▼";
+          const chgTxt=f.changePct===null?"N/A":`${arrow} ${Math.abs(f.changePct).toFixed(2)}%`;
+          const toggleId=`ep-${clientId}-${fi}`;
+          html+=`<div class="card-dark" style="margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <span style="font-size:13px;font-weight:700;color:var(--text);flex:1;">${esc(fname.replace("Income ",""))}</span>
+              <span style="font-size:11px;color:var(--dim);">Since ${fmtDate(f.firstDate)}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px;">
+              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
+                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Avg Entry Price</div>
+                <div style="font-size:15px;font-weight:800;color:var(--muted);">$${f.avgCost.toFixed(6)}</div>
+              </div>
+              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
+                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Current Price</div>
+                <div style="font-size:15px;font-weight:800;color:var(--text);">${f.currentPrice>0?`$${f.currentPrice.toFixed(6)}`:`<span style="color:var(--dim)">N/A</span>`}</div>
+              </div>
+              <div style="background:var(--bg3);border-radius:8px;padding:10px;">
+                <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Since Entry</div>
+                <div style="font-size:15px;font-weight:800;color:${col};">${chgTxt}</div>
+              </div>
+            </div>
+            <button onclick="const d=document.getElementById('${toggleId}');d.style.display=d.style.display==='none'?'block':'none';this.textContent=d.style.display==='none'?'▾ ${f.premiums.length} entries':'▴ Hide entries';"
+              style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--dim);cursor:pointer;">
+              ▾ ${f.premiums.length} entries
+            </button>
+            <div id="${toggleId}" style="display:none;margin-top:10px;overflow-x:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead>
+                  <tr style="color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(255,255,255,0.08);">
+                    <th style="text-align:left;padding:5px 8px;font-weight:600;">Date</th>
+                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Units</th>
+                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Entry Price</th>
+                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Now</th>
+                    <th style="text-align:right;padding:5px 8px;font-weight:600;">Δ%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${f.premiums.map(p=>{
+                    const pc=p.chgPct;
+                    const pcol=pc===null?"var(--dim)":pc>=0?"var(--green)":"var(--red)";
+                    return`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+                      <td style="padding:5px 8px;color:var(--dim);">${fmtDate(p.date)}</td>
+                      <td style="padding:5px 8px;text-align:right;">${p.units.toFixed(4)}</td>
+                      <td style="padding:5px 8px;text-align:right;color:var(--muted);">$${p.price.toFixed(6)}</td>
+                      <td style="padding:5px 8px;text-align:right;">${f.currentPrice>0?`$${f.currentPrice.toFixed(6)}`:"—"}</td>
+                      <td style="padding:5px 8px;text-align:right;font-weight:700;color:${pcol};">${pc===null?"—":pc>=0?`+${pc.toFixed(2)}%`:`${pc.toFixed(2)}%`}</td>
+                    </tr>`;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+        });
+      }
+    }
+
   }else if(!hasTxs){
     html+=`<div class="card" style="text-align:center;padding:24px;">
       <div style="font-size:28px;margin-bottom:8px;">📁</div>
@@ -2077,6 +2171,31 @@ window.openPresent=async(clientId)=>{
         <div style="margin-top:10px;">
           <div class="prog-wrap"><div class="prog-bar ${fd.displayGain>=0?"green":"red"}" style="width:${Math.min(100,Math.max(0,Math.abs(fd.displayGainPct)))}%"></div></div>
         </div>
+      </div>`;
+    }
+
+    // Fund Entry Price Summary (Present mode — clean client-facing view)
+    const epPresent=calcEntryPrices(txs);
+    const epPresentFunds=Object.keys(epPresent).filter(n=>epPresent[n].avgCost>0);
+    if(epPresentFunds.length>0){
+      html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Your Fund Entry Prices</div>
+      <div style="background:var(--bg2);border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);margin-bottom:24px;">
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.07em;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">
+          <span>Fund</span><span style="text-align:right;">Avg Entry</span><span style="text-align:right;">Now</span><span style="text-align:right;">Change</span>
+        </div>
+        ${epPresentFunds.map((fname,i)=>{
+          const f=epPresent[fname];
+          const col=f.changePct===null?"var(--dim)":f.changePct>=0?"var(--green)":"var(--red)";
+          const arrow=f.changePct===null?"—":f.changePct>=0?"▲":"▼";
+          const chg=f.changePct===null?"N/A":`${arrow} ${Math.abs(f.changePct).toFixed(2)}%`;
+          const isLast=i===epPresentFunds.length-1;
+          return`<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:12px 18px;font-size:13px;${isLast?"":" border-bottom:1px solid rgba(255,255,255,0.04);}">
+            <span style="font-weight:600;color:var(--text);">${esc(fname.replace("Income ",""))}</span>
+            <span style="text-align:right;color:var(--muted);">$${f.avgCost.toFixed(4)}</span>
+            <span style="text-align:right;">${f.currentPrice>0?`$${f.currentPrice.toFixed(4)}`:"—"}</span>
+            <span style="text-align:right;font-weight:800;color:${col};">${chg}</span>
+          </div>`;
+        }).join("")}
       </div>`;
     }
 
