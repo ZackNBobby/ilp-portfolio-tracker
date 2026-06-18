@@ -327,8 +327,10 @@ body{
 .tx-other{background:rgba(30,41,59,0.5);color:var(--muted);}
 
 /* ── Fund price editor ── */
-.price-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+@media(max-width:900px){.price-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:600px){.price-grid{grid-template-columns:1fr;}}
+.price-card.drag-over{border-color:var(--gold)!important;box-shadow:0 0 0 2px rgba(245,158,11,0.3)!important;}
 .price-card{
   background:var(--bg3);border-radius:10px;padding:12px 14px;
   border:1px solid rgba(30,41,59,0.5);
@@ -689,11 +691,18 @@ let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPr
 let tab="dashboard",currentClientId=null;
 let unsubs=[],charts={};
 
+let priceCardOrder=JSON.parse(localStorage.getItem('priceCardOrder')||'null');
+function _shortFund(n){return n.replace(/^Income\s+/i,'').replace(/\s+Fund$/i,'').toLowerCase();}
 function getAllFundNames(){
   const s=new Set(DEFAULT_FUNDS);
-  Object.values(clientTxs).forEach(txs=>txs.forEach(tx=>{if(tx.fundName)s.add(tx.fundName);}));
-  Object.keys(fundPrices).forEach(n=>s.add(n));
-  return[...s].sort();
+  const knownShorts=new Set(DEFAULT_FUNDS.map(_shortFund));
+  const addIfNew=n=>{if(n&&!s.has(n)&&!knownShorts.has(_shortFund(n)))s.add(n);};
+  Object.values(clientTxs).forEach(txs=>txs.forEach(tx=>{if(tx.fundName)addIfNew(tx.fundName);}));
+  Object.keys(fundPrices).forEach(n=>addIfNew(n));
+  const all=[...s].sort();
+  if(!priceCardOrder)return all;
+  const idx=new Map(priceCardOrder.map((n,i)=>[n,i]));
+  return all.sort((a,b)=>(idx.get(a)??9999)-(idx.get(b)??9999));
 }
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
@@ -1699,7 +1708,11 @@ function renderPrices(){
     const ch=fundPriceChanges[f]||{};
     const isLive=fundPriceSource[f]==="live";
     const chgBadge=(v,lbl)=>v!=null?`<span style="font-size:10px;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'};">${v>=0?'+':''}${v.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> ${lbl}</span></span>`:'';
-    return`<div class="price-card" onclick="openFundDetail('${esc(f)}')" title="Click to view fund details & performance" style="flex-direction:column;align-items:stretch;gap:5px;">
+    const safeF=esc(f);
+    return`<div class="price-card" draggable="true"
+      ondragstart="_pcDragStart('${safeF}',event)" ondragend="_pcDragEnd(event)"
+      ondragover="_pcDragOver(event)" ondragleave="_pcDragLeave(event)" ondrop="_pcDrop('${safeF}',event)"
+      onclick="openFundDetail('${safeF}')" title="Drag to reorder · Click to view details" style="flex-direction:column;align-items:stretch;gap:5px;cursor:grab;">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
         <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;">${esc(short)}</span>
         ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.45);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#06b6d4;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#67e8f9;letter-spacing:0.5px;">LIVE</span></span>`:''}
@@ -1763,6 +1776,30 @@ window.closeEditor=()=>{
   const el=document.getElementById("priceEditorOverlay");
   if(el)el.style.display="none";
   _editingFund=null;_editingFTSym=null;
+};
+
+// ── Price card drag-to-reorder ──
+let _dragPriceFund=null;
+window._pcDragStart=(f,e)=>{
+  _dragPriceFund=f;
+  e.dataTransfer.effectAllowed='move';
+  e.currentTarget.style.opacity='0.4';
+};
+window._pcDragEnd=(e)=>{e.currentTarget.style.opacity='';};
+window._pcDragOver=(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');};
+window._pcDragLeave=(e)=>{e.currentTarget.classList.remove('drag-over');};
+window._pcDrop=(f,e)=>{
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!_dragPriceFund||_dragPriceFund===f)return;
+  const order=getAllFundNames();
+  const from=order.indexOf(_dragPriceFund);
+  const to=order.indexOf(f);
+  if(from<0||to<0)return;
+  order.splice(from,1);order.splice(to,0,_dragPriceFund);
+  priceCardOrder=order;
+  localStorage.setItem('priceCardOrder',JSON.stringify(order));
+  renderPage();
 };
 
 // ── Income fund slug map ──
