@@ -298,10 +298,9 @@ body{
 .fund-breakdown-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px;}
 .fund-breakdown-grid>.fund-card{min-width:0;}
 @media(max-width:800px){.fund-breakdown-grid{grid-template-columns:1fr;}}
-/* Entry price analysis: 3-col → 2-col → 1-col */
-.ep-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+/* Entry price analysis: 2-col → 1-col on mobile */
+.ep-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
 .ep-grid>*{min-width:0;}
-@media(max-width:900px){.ep-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:600px){.ep-grid{grid-template-columns:1fr;}}
 
 /* ── Upload / drag-drop ── */
