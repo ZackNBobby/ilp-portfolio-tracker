@@ -194,17 +194,17 @@ body{
 
 /* ── Fund card ── */
 .fund-card{
-  background:var(--bg3);border-radius:var(--radius);padding:16px;
-  border:1px solid rgba(30,41,59,0.5);margin-bottom:10px;
+  background:var(--bg3);border-radius:var(--radius);padding:10px 14px;
+  border:1px solid rgba(30,41,59,0.5);margin-bottom:7px;
   animation:fadeInUp 0.4s ease both;transition:border-color 0.2s,opacity 0.2s;
 }
 .fund-card.dragging{opacity:0.35;border-color:var(--gold);}
 .fund-card.drag-over{border-color:var(--gold);box-shadow:0 0 0 2px rgba(245,158,11,0.25);}
-.fund-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.fund-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
 .drag-handle{color:var(--dim);cursor:grab;font-size:16px;line-height:1;user-select:none;flex-shrink:0;}
 .drag-handle:active{cursor:grabbing;}
-.fund-name{font-size:14px;font-weight:700;color:var(--gold-l);flex:1;margin:0;}
-.fund-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(30,41,59,0.4);font-size:12px;}
+.fund-name{font-size:13px;font-weight:700;color:var(--gold-l);flex:1;margin:0;}
+.fund-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid rgba(30,41,59,0.4);font-size:11px;}
 .fund-row:last-child{border-bottom:none;}
 .fund-row .lk{color:var(--dim);}
 .fund-row .lv{font-weight:700;}
@@ -291,7 +291,7 @@ body{
 .badge-trivantage{background:rgba(80,7,36,0.4);color:#fda4af;border:1px solid rgba(244,63,94,0.25);}
 
 /* ── Grid helpers ── */
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
 @media(max-width:600px){.g2{grid-template-columns:1fr;}.g3{grid-template-columns:1fr 1fr;}}
 
@@ -1607,81 +1607,80 @@ function renderClientDetail(clientId){
           const tid1="ep-"+clientId+"-"+fi+"-p";
           const tid2="ep-"+clientId+"-"+fi+"-so";
           const tid3="ep-"+clientId+"-"+fi+"-si";
-          const th='color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid rgba(255,255,255,0.08);';
-          const TH=s=>'<th style="padding:5px 8px;font-weight:600;'+s+'">',td=s=>'<td style="padding:5px 8px;'+s+'">';
+          // Compact grid helpers — no HTML tables, no wasted column space
+          const GC5='display:grid;grid-template-columns:88px 72px 90px 88px 82px;font-size:11px;align-items:center;';
+          const GC5so='display:grid;grid-template-columns:88px 72px 90px 90px 80px;font-size:11px;align-items:center;';
+          const hdrStyle='padding:3px 6px;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.08);';
+          const rowStyle='padding:4px 6px;border-bottom:1px solid rgba(255,255,255,0.04);';
 
-          let card='<div class="card-dark" style="margin-bottom:8px;">';
-          card+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">';
-          card+='<span style="font-size:13px;font-weight:700;color:var(--text);flex:1;">'+esc(fname.replace("Income ",""))+'</span>';
-          card+='<span style="font-size:11px;color:var(--dim);">Since '+fmtDate(f.firstDate)+'</span></div>';
-          card+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:10px;">';
-          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
-          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">'+dispLabel+'</div>';
-          card+='<div style="font-size:15px;font-weight:800;color:var(--muted);">$'+dispCost.toFixed(6)+'</div></div>';
-          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
-          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Current Price</div>';
-          card+='<div style="font-size:15px;font-weight:800;color:var(--text);">'+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"N/A")+'</div></div>';
-          card+='<div style="background:var(--bg3);border-radius:8px;padding:10px;">';
-          card+='<div style="font-size:10px;color:var(--dim);margin-bottom:4px;">'+(hasPrem?"Since Entry":"Since Switch")+'</div>';
-          card+='<div style="font-size:15px;font-weight:800;color:'+col+';">'+chgTxt+'</div></div></div>';
+          let card='<div class="card-dark" style="margin-bottom:6px;padding:10px 14px;">';
+          // Fund name + since date
+          card+='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px;">';
+          card+='<span style="font-size:12px;font-weight:700;color:var(--text);flex:1;">'+esc(fname.replace("Income ",""))+'</span>';
+          card+='<span style="font-size:10px;color:var(--dim);">Since '+fmtDate(f.firstDate)+'</span></div>';
+          // Compact inline stat row
+          card+='<div style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:8px;flex-wrap:wrap;">';
+          card+='<span style="color:var(--dim);">'+dispLabel+':</span>';
+          card+='<span style="color:var(--muted);font-weight:700;">$'+dispCost.toFixed(4)+'</span>';
+          card+='<span style="color:var(--dim);">→  Now:</span>';
+          card+='<span style="font-weight:700;">'+(f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"N/A")+'</span>';
+          card+='<span style="font-weight:800;color:'+col+';background:'+( dispChg===null?"rgba(255,255,255,0.05)":dispChg>=0?"rgba(16,185,129,0.12)":"rgba(239,68,68,0.12)")+';padding:1px 7px;border-radius:20px;">'+chgTxt+'</span>';
+          card+='</div>';
+          // Toggle buttons — all on one row
+          card+='<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+          if(hasPrem) card+='<button onclick="var d=document.getElementById(\''+tid1+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:5px;padding:3px 9px;font-size:10px;color:var(--dim);cursor:pointer;">▾ '+f.premiums.length+' premiums</button>';
+          if(hasSO)  card+='<button onclick="var d=document.getElementById(\''+tid2+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" style="background:none;border:1px solid rgba(16,185,129,0.35);border-radius:5px;padding:3px 9px;font-size:10px;color:var(--green);cursor:pointer;">▾ '+f.switchOuts.length+' switched out ✅</button>';
+          if(hasSI)  card+='<button onclick="var d=document.getElementById(\''+tid3+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" style="background:none;border:1px solid rgba(6,182,212,0.35);border-radius:5px;padding:3px 9px;font-size:10px;color:#67e8f9;cursor:pointer;">▾ '+f.switchIns.length+' switched in</button>';
+          card+='</div>';
 
-          // Premium entries toggle
+          // Premium entries panel
           if(hasPrem){
-            card+='<button onclick="var d=document.getElementById(\''+tid1+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
-            card+='style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--dim);cursor:pointer;margin-right:6px;">▾ '+f.premiums.length+' premium entries</button>';
-            card+='<div id="'+tid1+'" style="display:none;margin-top:10px;overflow-x:auto;">';
-            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
-            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units</th>"+TH("text-align:right;")+"Entry Price</th>"+TH("text-align:right;")+"Now</th>"+TH("text-align:right;")+"Δ%</th></tr></thead><tbody>";
+            card+='<div id="'+tid1+'" style="display:none;margin-top:8px;">';
+            card+='<div style="'+GC5+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Entry $</span><span style="text-align:right;">Now $</span><span style="text-align:right;">Δ%</span></div>';
             f.premiums.forEach(p=>{
               const pc=p.chgPct,pcol=pc===null?"var(--dim)":pc>=0?"var(--green)":"var(--red)";
-              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
-              card+=td("color:var(--dim);")+fmtDate(p.date)+"</td>";
-              card+=td("text-align:right;")+p.units.toFixed(4)+"</td>";
-              card+=td("text-align:right;color:var(--muted);")+"$"+p.price.toFixed(6)+"</td>";
-              card+=td("text-align:right;")+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—")+"</td>";
-              card+=td("text-align:right;font-weight:700;color:"+pcol+";")+(pc===null?"—":(pc>=0?"+":"")+pc.toFixed(2)+"%")+"</td></tr>";
+              card+='<div style="'+GC5+rowStyle+'">';
+              card+='<span style="color:var(--dim);">'+fmtDate(p.date)+'</span>';
+              card+='<span style="text-align:right;">'+p.units.toFixed(2)+'</span>';
+              card+='<span style="text-align:right;color:var(--muted);">$'+p.price.toFixed(4)+'</span>';
+              card+='<span style="text-align:right;">'+(f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—")+'</span>';
+              card+='<span style="text-align:right;font-weight:700;color:'+pcol+';">'+(pc===null?"—":(pc>=0?"+":"")+pc.toFixed(2)+"%")+'</span></div>';
             });
-            card+="</tbody></table></div>";
+            card+='</div>';
           }
 
-          // Switch-outs toggle
+          // Switch-outs panel
           if(hasSO){
-            card+='<button onclick="var d=document.getElementById(\''+tid2+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
-            card+='style="background:none;border:1px solid rgba(16,185,129,0.35);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--green);cursor:pointer;margin-right:6px;margin-top:6px;">▾ '+f.switchOuts.length+' switches out ✅</button>';
-            card+='<div id="'+tid2+'" style="display:none;margin-top:10px;overflow-x:auto;">';
-            card+='<div style="font-size:11px;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:rgba(16,185,129,0.06);border-radius:6px;border-left:3px solid var(--green);">Units switched out from this fund. Exit price vs average entry shows profit/loss locked in.</div>';
-            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
-            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units Out</th>"+TH("text-align:right;")+"Exit Price</th>"+TH("text-align:right;")+"Avg Entry</th>"+TH("text-align:right;")+"Locked In</th></tr></thead><tbody>";
+            card+='<div id="'+tid2+'" style="display:none;margin-top:8px;">';
+            card+='<div style="font-size:10px;color:var(--green);margin-bottom:4px;padding-left:4px;">Exit price vs avg entry — profit/loss locked in at time of switch</div>';
+            card+='<div style="'+GC5so+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Exit $</span><span style="text-align:right;">Avg Entry $</span><span style="text-align:right;">Locked In</span></div>';
             f.switchOuts.forEach(s=>{
               const vc=s.vsAvgPct,vcol=vc===null?"var(--dim)":vc>=0?"var(--green)":"var(--red)";
-              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
-              card+=td("color:var(--dim);")+fmtDate(s.date)+"</td>";
-              card+=td("text-align:right;")+s.units.toFixed(4)+"</td>";
-              card+=td("text-align:right;color:var(--muted);")+"$"+s.price.toFixed(6)+"</td>";
-              card+=td("text-align:right;color:var(--dim);")+( hasPrem?"$"+f.avgCost.toFixed(6):"—")+"</td>";
-              card+=td("text-align:right;font-weight:700;color:"+vcol+";")+(vc===null?"—":(vc>=0?"+":"")+vc.toFixed(2)+"%")+"</td></tr>";
+              card+='<div style="'+GC5so+rowStyle+'">';
+              card+='<span style="color:var(--dim);">'+fmtDate(s.date)+'</span>';
+              card+='<span style="text-align:right;">'+s.units.toFixed(2)+'</span>';
+              card+='<span style="text-align:right;color:var(--muted);">$'+s.price.toFixed(4)+'</span>';
+              card+='<span style="text-align:right;color:var(--dim);">'+(hasPrem?"$"+f.avgCost.toFixed(4):"—")+'</span>';
+              card+='<span style="text-align:right;font-weight:700;color:'+vcol+';">'+(vc===null?"—":(vc>=0?"+":"")+vc.toFixed(2)+"%")+'</span></div>';
             });
-            card+="</tbody></table></div>";
+            card+='</div>';
           }
 
-          // Switch-ins toggle
+          // Switch-ins panel
           if(hasSI){
-            card+='<button onclick="var d=document.getElementById(\''+tid3+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';" ';
-            card+='style="background:none;border:1px solid rgba(6,182,212,0.35);border-radius:6px;padding:4px 10px;font-size:11px;color:#67e8f9;cursor:pointer;margin-top:6px;">▾ '+f.switchIns.length+' switches in</button>';
-            card+='<div id="'+tid3+'" style="display:none;margin-top:10px;overflow-x:auto;">';
-            card+='<div style="font-size:11px;color:var(--dim);margin-bottom:6px;padding:6px 8px;background:rgba(6,182,212,0.06);border-radius:6px;border-left:3px solid #06b6d4;">Units switched into this fund. Switch price vs current price shows growth since the switch.</div>';
-            card+='<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="'+th+'">';
-            card+=TH("text-align:left;")+"Date</th>"+TH("text-align:right;")+"Units In</th>"+TH("text-align:right;")+"Switch Price</th>"+TH("text-align:right;")+"Now</th>"+TH("text-align:right;")+"Δ% Since Switch</th></tr></thead><tbody>";
+            card+='<div id="'+tid3+'" style="display:none;margin-top:8px;">';
+            card+='<div style="font-size:10px;color:#67e8f9;margin-bottom:4px;padding-left:4px;">Switch price vs current price — growth since we switched in</div>';
+            card+='<div style="'+GC5+hdrStyle+'"><span>Date</span><span style="text-align:right;">Units</span><span style="text-align:right;">Switch $</span><span style="text-align:right;">Now $</span><span style="text-align:right;">Δ% Since</span></div>';
             f.switchIns.forEach(s=>{
               const sc=s.chgPct,scol=sc===null?"var(--dim)":sc>=0?"var(--green)":"var(--red)";
-              card+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
-              card+=td("color:var(--dim);")+fmtDate(s.date)+"</td>";
-              card+=td("text-align:right;")+s.units.toFixed(4)+"</td>";
-              card+=td("text-align:right;color:var(--muted);")+"$"+s.price.toFixed(6)+"</td>";
-              card+=td("text-align:right;")+(f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—")+"</td>";
-              card+=td("text-align:right;font-weight:700;color:"+scol+";")+(sc===null?"—":(sc>=0?"+":"")+sc.toFixed(2)+"%")+"</td></tr>";
+              card+='<div style="'+GC5+rowStyle+'">';
+              card+='<span style="color:var(--dim);">'+fmtDate(s.date)+'</span>';
+              card+='<span style="text-align:right;">'+s.units.toFixed(2)+'</span>';
+              card+='<span style="text-align:right;color:var(--muted);">$'+s.price.toFixed(4)+'</span>';
+              card+='<span style="text-align:right;">'+(f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—")+'</span>';
+              card+='<span style="text-align:right;font-weight:700;color:'+scol+';">'+(sc===null?"—":(sc>=0?"+":"")+sc.toFixed(2)+"%")+'</span></div>';
             });
-            card+="</tbody></table></div>";
+            card+='</div>';
           }
 
           card+="</div>";
