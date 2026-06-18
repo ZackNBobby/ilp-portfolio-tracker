@@ -697,6 +697,7 @@ const STARTUP_BONUS={
 // ── State ──
 let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPrices={},clientTxs={};
 let tab="dashboard",currentClientId=null;
+let dashProductTab="all"; // "all" | "flex" | "vantage"
 let unsubs=[],charts={};
 
 // Resolve a fund name from a transaction to a stored price, tolerating missing "Income " prefix.
@@ -1140,8 +1141,39 @@ function renderPage(){
 }
 
 // ── Dashboard ──
+function getProductTabClients(){
+  if(dashProductTab==="flex") return clients.filter(c=>c.product==="Invest Flex");
+  if(dashProductTab==="vantage") return clients.filter(c=>c.product==="Invest Flex Vantage"||c.product==="Invest Flex TriVantage");
+  return clients;
+}
+window.setDashProductTab=t=>{
+  dashProductTab=t;
+  // Update tab button styles
+  ["all","flex","vantage"].forEach(id=>{
+    const btn=document.getElementById("dpt-"+id);
+    if(btn) btn.style.cssText=btn.style.cssText.replace(/background:[^;]+;/,"")+(t===id?"background:var(--gold-glow);border-color:var(--gold);color:var(--gold-l);":"border-color:rgba(255,255,255,0.15);color:var(--dim);");
+  });
+  const q=(document.getElementById("searchInp")||{}).value||"";
+  filterClients(q);
+};
 function renderDashboard(){
-  let html=`<div class="search-wrap">
+  const flexCount=clients.filter(c=>c.product==="Invest Flex").length;
+  const vantageCount=clients.filter(c=>c.product==="Invest Flex Vantage"||c.product==="Invest Flex TriVantage").length;
+  const tabs=[
+    {id:"all",  label:"All Clients",          count:clients.length},
+    {id:"flex", label:"Invest Flex",           count:flexCount},
+    {id:"vantage",label:"Vantage / Tri-Vantage",count:vantageCount},
+  ];
+  let html=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">`;
+  tabs.forEach(t=>{
+    const active=dashProductTab===t.id;
+    html+=`<button id="dpt-${t.id}" onclick="setDashProductTab('${t.id}')"
+      style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;border:1px solid ${active?"var(--gold)":"rgba(255,255,255,0.15)"};background:${active?"var(--gold-glow)":"transparent"};color:${active?"var(--gold-l)":"var(--dim)"};font-size:12px;font-weight:600;cursor:pointer;transition:all 0.18s;">
+      ${t.label}<span style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:10px;font-size:11px;">${t.count}</span>
+    </button>`;
+  });
+  html+=`</div>`;
+  html+=`<div class="search-wrap">
     <span class="search-ico">🔍</span>
     <input class="search-inp" id="searchInp" type="text" placeholder="Search clients by name or policy number..." oninput="filterClients(this.value)"/>
   </div>`;
@@ -1149,7 +1181,7 @@ function renderDashboard(){
     html+=`<div class="empty"><span class="empty-icon">👤</span>No clients yet.<br>Click <strong style="color:var(--gold)">+ Add Client</strong> in the tabs above to get started.</div>`;
     return html;
   }
-  html+=`<div id="clientList">${buildClientList(clients)}</div>`;
+  html+=`<div id="clientList">${buildClientList(getProductTabClients())}</div>`;
   return html;
 }
 function buildClientList(list){
@@ -1195,10 +1227,11 @@ function buildClientList(list){
   return`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">${cards}</div>`;
 }
 window.filterClients=q=>{
-  const filtered=clients.filter(c=>
+  const base=getProductTabClients();
+  const filtered=q.trim()?base.filter(c=>
     c.name.toLowerCase().includes(q.toLowerCase())||
     (c.policyNo||"").toLowerCase().includes(q.toLowerCase())
-  );
+  ):base;
   const el=document.getElementById("clientList");
   if(el)el.innerHTML=buildClientList(filtered);
 };
