@@ -1586,7 +1586,7 @@ function renderClientDetail(clientId){
               </div>
               <div style="background:var(--bg3);border-radius:8px;padding:10px;">
                 <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Current Price</div>
-                <div style="font-size:15px;font-weight:800;color:var(--text);">${f.currentPrice>0?`$${f.currentPrice.toFixed(6)}`:`<span style="color:var(--dim)">N/A</span>`}</div>
+                <div style="font-size:15px;font-weight:800;color:var(--text);">${f.currentPrice>0?"$"+f.currentPrice.toFixed(6):'<span style="color:var(--dim)">N/A</span>'}</div>
               </div>
               <div style="background:var(--bg3);border-radius:8px;padding:10px;">
                 <div style="font-size:10px;color:var(--dim);margin-bottom:4px;">Since Entry</div>
@@ -1616,8 +1616,8 @@ function renderClientDetail(clientId){
                       <td style="padding:5px 8px;color:var(--dim);">${fmtDate(p.date)}</td>
                       <td style="padding:5px 8px;text-align:right;">${p.units.toFixed(4)}</td>
                       <td style="padding:5px 8px;text-align:right;color:var(--muted);">$${p.price.toFixed(6)}</td>
-                      <td style="padding:5px 8px;text-align:right;">${f.currentPrice>0?`$${f.currentPrice.toFixed(6)}`:"—"}</td>
-                      <td style="padding:5px 8px;text-align:right;font-weight:700;color:${pcol};">${pc===null?"—":pc>=0?`+${pc.toFixed(2)}%`:`${pc.toFixed(2)}%`}</td>
+                      <td style="padding:5px 8px;text-align:right;">${f.currentPrice>0?"$"+f.currentPrice.toFixed(6):"—"}</td>
+                      <td style="padding:5px 8px;text-align:right;font-weight:700;color:${pcol};">${pc===null?"—":(pc>=0?"+":"")+pc.toFixed(2)+"%"}</td>
                     </tr>`;
                   }).join("")}
                 </tbody>
@@ -2187,14 +2187,15 @@ window.openPresent=async(clientId)=>{
           const f=epPresent[fname];
           const col=f.changePct===null?"var(--dim)":f.changePct>=0?"var(--green)":"var(--red)";
           const arrow=f.changePct===null?"—":f.changePct>=0?"▲":"▼";
-          const chg=f.changePct===null?"N/A":`${arrow} ${Math.abs(f.changePct).toFixed(2)}%`;
-          const isLast=i===epPresentFunds.length-1;
-          return`<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:12px 18px;font-size:13px;${isLast?"":" border-bottom:1px solid rgba(255,255,255,0.04);}">
-            <span style="font-weight:600;color:var(--text);">${esc(fname.replace("Income ",""))}</span>
-            <span style="text-align:right;color:var(--muted);">$${f.avgCost.toFixed(4)}</span>
-            <span style="text-align:right;">${f.currentPrice>0?`$${f.currentPrice.toFixed(4)}`:"—"}</span>
-            <span style="text-align:right;font-weight:800;color:${col};">${chg}</span>
-          </div>`;
+          const chg=f.changePct===null?"N/A":arrow+" "+Math.abs(f.changePct).toFixed(2)+"%";
+          const border=i<epPresentFunds.length-1?" border-bottom:1px solid rgba(255,255,255,0.04);":"";
+          const nowPrice=f.currentPrice>0?"$"+f.currentPrice.toFixed(4):"—";
+          return'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;padding:12px 18px;font-size:13px;'+border+'">'
+            +'<span style="font-weight:600;color:var(--text);">'+esc(fname.replace("Income ",""))+'</span>'
+            +'<span style="text-align:right;color:var(--muted);">$'+f.avgCost.toFixed(4)+'</span>'
+            +'<span style="text-align:right;">'+nowPrice+'</span>'
+            +'<span style="text-align:right;font-weight:800;color:'+col+';">'+chg+'</span>'
+            +'</div>';
         }).join("")}
       </div>`;
     }
