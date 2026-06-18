@@ -691,6 +691,21 @@ let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPr
 let tab="dashboard",currentClientId=null;
 let unsubs=[],charts={};
 
+// Resolve a fund name from a transaction to a stored price, tolerating missing "Income " prefix.
+function lookupFundPrice(name){
+  if(fundPrices[name]!=null)return fundPrices[name];
+  // Try prefixed / unprefixed variants
+  const withIncome="Income "+name;
+  if(fundPrices[withIncome]!=null)return fundPrices[withIncome];
+  const withoutIncome=name.replace(/^Income\s+/i,"");
+  if(fundPrices[withoutIncome]!=null)return fundPrices[withoutIncome];
+  // Fuzzy: match by short name (strip "Income " prefix and " Fund" suffix)
+  const short=n=>n.replace(/^Income\s+/i,"").replace(/\s+Fund$/i,"").toLowerCase();
+  const key=short(name);
+  for(const [k,v] of Object.entries(fundPrices)){if(short(k)===key&&v!=null)return v;}
+  return 0;
+}
+
 let priceCardOrder=JSON.parse(localStorage.getItem('priceCardOrder')||'null');
 function _shortFund(n){return n.replace(/^Income\s+/i,'').replace(/\s+Fund$/i,'').toLowerCase();}
 function getAllFundNames(){
@@ -775,7 +790,7 @@ function calcPortfolio(txs){
     else if(tx.category==="dividend"){fd.dividendPaid+=Math.abs(tx.amount);}
   }
   for(const[name,fd]of Object.entries(funds)){
-    const price=fundPrices[name]||0;
+    const price=lookupFundPrice(name);
     fd.currentPrice=price;
     fd.netUnits=fd.premiumUnits+fd.feeUnits+fd.reinvestUnits+fd.switchInUnits+fd.switchOutUnits;
     fd.totalUnits=fd.netUnits+fd.bonusUnits;
@@ -813,7 +828,7 @@ function calcTimeSeries(txs){
     holdings[f]+=tx.units;
     if(tx.price>0)lastPrice[f]=tx.price;
     let total=0;
-    for(const[fund,units]of Object.entries(holdings))total+=Math.max(0,units)*(lastPrice[fund]||0);
+    for(const[fund,units]of Object.entries(holdings))total+=Math.max(0,units)*(lastPrice[fund]||lookupFundPrice(fund)||0);
     byDate[tx.txDate]={date:tx.txDate,value:total};
   }
   // Always add today using live fund prices so the chart reflects current market value,
@@ -3238,13 +3253,21 @@ function renderFdmPerformance(){
   // Priority 3: Stored Income bid prices
   }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
     perf=storedPerf;
+    // Fill any null periods with the API's live scrape data (it covers ~30 days of history)
+    if(livePerf){
+      ["1M","3M","6M","1Y","3Y","5Y"].forEach(p=>{if((perf[p]===null||perf[p]===undefined)&&livePerf[p]!=null)perf[p]=livePerf[p];});
+    }
     perfSource=`📅 Based on <strong>Income bid price</strong> (SGD) · ${_fdmHistory.length} stored price points`;
   }else if(staticAR){
     perf=staticAR;
+    // Fill any null periods with the API's live scrape data
+    if(livePerf){
+      ["1M","3M","6M","1Y","3Y","5Y"].forEach(p=>{if((perf[p]===null||perf[p]===undefined)&&livePerf[p]!=null)perf[p]=livePerf[p];});
+    }
     perfSource=`📋 From fund factsheet as of ${staticAR.asOf} — press ⟳ Fetch to start building live history`;
   }else if(livePerf){
     perf=livePerf;
-    perfSource=`📡 From Income's website (limited to ~30 days of embedded price data)`;
+    perfSource=`📡 From Income's website (~30 days of embedded price data)`;
   }
 
   // Latest price info
