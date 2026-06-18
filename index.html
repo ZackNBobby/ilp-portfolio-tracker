@@ -1074,18 +1074,23 @@ function renderDashboard(){
 }
 function buildClientList(list){
   if(list.length===0)return`<div class="empty"><span class="empty-icon">🔍</span>No clients match your search.</div>`;
-  return list.map((c,i)=>{
-    const strategy=getStrategy(c.product);
+  // Pre-compute gain % so we can sort highest first
+  const withGain=list.map(c=>{
     const txs=clientTxs[c.fid]||[];
     const hasTxs=txs.length>0;
-    const fundData=hasTxs?calcPortfolio(txs):{};
-    const totals=hasTxs?portfolioTotals(fundData):{};
     const hasPrice=Object.keys(fundPrices).length>0;
+    const fundData=hasTxs?calcPortfolio(txs):{};
+    const totals=hasTxs&&hasPrice?portfolioTotals(fundData):{};
     const _cb=getStartupBonus(c.product,c.term,c.annualPremium);
     const _bGrant=_cb?c.annualPremium*_cb.pct/100:0;
-    const _adjGain=hasTxs?totals.totalValue-totals.totalInvested-_bGrant:0;
-    const _adjPct=hasTxs&&totals.totalInvested>0?_adjGain/totals.totalInvested*100:0;
-    return`<div class="client-card" style="animation-delay:${i*0.05}s" onclick="viewClient('${c.fid}')">
+    const _adjGain=hasTxs&&hasPrice?totals.totalValue-totals.totalInvested-_bGrant:null;
+    const _adjPct=_adjGain!==null&&totals.totalInvested>0?_adjGain/totals.totalInvested*100:null;
+    return{c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct};
+  });
+  withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
+
+  const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>`
+    <div class="client-card" style="animation-delay:${i*0.05}s" onclick="viewClient('${c.fid}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
         <div>
           <div style="font-size:16px;font-weight:800;margin-bottom:5px;">${esc(c.name)}</div>
@@ -1096,7 +1101,7 @@ function buildClientList(list){
         ${hasTxs&&hasPrice?`<div style="text-align:right;">
           <div style="font-size:11px;color:var(--dim);">Portfolio Value</div>
           <div style="font-size:20px;font-weight:900;color:var(--gold-l);">${$f(totals.totalValue)}</div>
-          <div style="font-size:12px;font-weight:700;color:${_adjGain>=0?"var(--green)":"var(--red)"};">${$pct(_adjPct)} true gain</div>
+          <div style="font-size:12px;font-weight:700;color:${(_adjGain??0)>=0?"var(--green)":"var(--red)"};">${$pct(_adjPct??0)} true gain</div>
         </div>`:""}
       </div>
       <div style="display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;">
@@ -1105,8 +1110,9 @@ function buildClientList(list){
         <span>💵 AP: ${$f(c.annualPremium)}/yr</span>
         <span>📁 ${hasTxs?txs.length+" transactions":"No data uploaded"}</span>
       </div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
+
+  return`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">${cards}</div>`;
 }
 window.filterClients=q=>{
   const filtered=clients.filter(c=>
