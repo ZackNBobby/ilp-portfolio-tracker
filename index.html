@@ -742,6 +742,7 @@ const STARTUP_BONUS={
 
 // ── State ──
 let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPrices={},clientTxs={};
+let clientDivHistory={};
 let tab="dashboard",currentClientId=null;
 let dashProductTab="all"; // "all" | "flex" | "vantage"
 let unsubs=[],charts={};
@@ -1124,6 +1125,91 @@ async function saveTransactions(clientId,txs){
   }
   await batch.commit();
 }
+async function loadDivHistory(clientId){
+  const q=query(collection(db,"distributionHistory"),where("clientId","==",clientId),where("uid","==",OWNER));
+  const snap=await getDocs(q);
+  clientDivHistory[clientId]=[];
+  snap.forEach(d=>clientDivHistory[clientId].push(d.data()));
+  clientDivHistory[clientId].sort((a,b)=>b.declarationDate.localeCompare(a.declarationDate));
+}
+async function saveDivHistory(clientId,records){
+  const batch=writeBatch(db);
+  const q=query(collection(db,"distributionHistory"),where("clientId","==",clientId),where("uid","==",OWNER));
+  const snap=await getDocs(q);
+  snap.forEach(d=>batch.delete(d.ref));
+  for(const r of records){
+    batch.set(doc(collection(db,"distributionHistory")),{...r,clientId,uid:OWNER});
+  }
+  await batch.commit();
+  clientDivHistory[clientId]=[...records].sort((a,b)=>b.declarationDate.localeCompare(a.declarationDate));
+}
+function parseDistributionHistoryFile(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const data=new Uint8Array(e.target.result);
+        const wb=XLSX.read(data,{type:"array",cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        if(rows.length<2){resolve([]);return;}
+        const headers=rows[0].map(h=>String(h).trim());
+        const C={
+          fund:findCol(headers,["fund name","fund"]),
+          date:findCol(headers,["declaration date","date"]),
+          distRate:findCol(headers,["distribution rate","dist rate","rate"]),
+          units:findCol(headers,["units holding","units"]),
+          price:findCol(headers,["fund price at declaration","fund price at","fund price","price"]),
+          paymode:findCol(headers,["paymode","pay mode"]),
+          encashment:findCol(headers,["encashment"]),
+          reinvestment:findCol(headers,["reinvestment"]),
+        };
+        const records=[];
+        for(let i=1;i<rows.length;i++){
+          const row=rows[i];
+          const fundName=String(row[C.fund]||"").trim();
+          if(!fundName)continue;
+          const declarationDate=parseDate(row[C.date]);
+          if(!declarationDate)continue;
+          const distributionRate=C.distRate>=0?smartParseNum(row[C.distRate]):0;
+          const unitsHolding=C.units>=0?smartParseNum(row[C.units]):0;
+          const fundPrice=C.price>=0?smartParseNum(row[C.price]):0;
+          const encashment=C.encashment>=0?smartParseNum(row[C.encashment]):0;
+          const reinvestment=C.reinvestment>=0?smartParseNum(row[C.reinvestment]):0;
+          const paymode=C.paymode>=0?String(row[C.paymode]||"").trim():"";
+          if(distributionRate<=0&&encashment<=0&&reinvestment<=0)continue;
+          records.push({fundName,declarationDate,distributionRate,unitsHolding,fundPrice,encashment,reinvestment,paymode});
+        }
+        resolve(records);
+      }catch(err){reject(err);}
+    };
+    reader.onerror=reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+async function processDivHistoryFile(clientId,file){
+  const statusEl=document.getElementById("divHistStatus-"+clientId);
+  if(statusEl){statusEl.style.display="block";statusEl.textContent="⏳ Parsing file...";statusEl.style.background="rgba(245,158,11,0.08)";statusEl.style.color="var(--gold)";}
+  try{
+    const records=await parseDistributionHistoryFile(file);
+    if(!records.length)throw new Error("No records found — check the file format.");
+    await saveDivHistory(clientId,records);
+    if(statusEl){statusEl.textContent=`✅ ${records.length} distribution records saved.`;statusEl.style.background="rgba(16,185,129,0.08)";statusEl.style.color="var(--green)";}
+    renderAll();
+  }catch(err){
+    if(statusEl){statusEl.textContent="❌ "+err.message;statusEl.style.background="rgba(239,68,68,0.08)";statusEl.style.color="var(--red)";}
+  }
+}
+window.handleDivHistoryDrop=async(clientId,e)=>{
+  e.preventDefault();
+  document.getElementById("divHistDrop-"+clientId)?.classList.remove("drag-over");
+  const file=e.dataTransfer?.files?.[0];
+  if(file)await processDivHistoryFile(clientId,file);
+};
+window.handleDivHistoryFile=async(clientId,input)=>{
+  const file=input.files?.[0];
+  if(file)await processDivHistoryFile(clientId,file);
+};
 async function saveFundPriceDB(name,price,change1D=null,change7D=null,source=null){
   await setDoc(doc(db,"fundPrices",name.replace(/\s+/g,"_")),{
     name,price:parseFloat(price),change1D,change7D,source,updatedAt:new Date().toISOString()
@@ -1632,6 +1718,115 @@ function renderClientDetail(clientId){
             </div>`;
           }).join("")}
         </div>`;
+      }
+
+      // ── Distribution History section (upload from Income portal) ──
+      {
+        const _dh=clientDivHistory[clientId]||[];
+        const _hasDistHist=_dh.length>0;
+
+        // Group by YYYY-MM for monthly totals
+        const _dhByMonth={};
+        for(const r of _dh){
+          const mo=r.declarationDate.slice(0,7);
+          _dhByMonth[mo]=(_dhByMonth[mo]||0)+(r.encashment||0)+(r.reinvestment||0);
+        }
+        const _dhMonths=Object.keys(_dhByMonth).sort().reverse();
+
+        // Latest dist rate per fund for next-payout prediction
+        const _latestRate={};
+        for(const r of [..._dh].sort((a,b)=>a.declarationDate.localeCompare(b.declarationDate))){
+          if(r.distributionRate>0)_latestRate[r.fundName]=r.distributionRate;
+        }
+        // Predict next payout: rate × currentPrice × currentUnits
+        let _predictedNext=0,_canPredict=false;
+        for(const[fname,fd]of Object.entries(fundData)){
+          const rate=_latestRate[fname];
+          const price=lookupFundPrice(fname);
+          const units=(fd.netUnits||0)+(fd.bonusUnits||0);
+          if(rate&&price&&units>0){_predictedNext+=rate*price*units;_canPredict=true;}
+        }
+
+        // Growth % — last two months
+        let _dhGrowth=null;
+        if(_dhMonths.length>=2){
+          const last=_dhByMonth[_dhMonths[0]],prev=_dhByMonth[_dhMonths[1]];
+          if(prev>0)_dhGrowth=(last-prev)/prev*100;
+        }
+
+        html+=`<div class="sec-title">📊 Distribution History</div>
+        <div id="divHistDrop-${clientId}" class="drop-zone" style="cursor:pointer;margin-bottom:10px;"
+          onclick="document.getElementById('divHistFile-${clientId}').click()"
+          ondragover="event.preventDefault();this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="handleDivHistoryDrop('${clientId}',event)">
+          <div style="font-size:22px;margin-bottom:4px;">📂</div>
+          <div style="font-size:13px;font-weight:700;color:var(--gold);">${_hasDistHist?"Re-upload Distribution History":"Upload Distribution History Excel"}</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:3px;">Drop file here or click to browse · Income Portal → Distribution History → Export to Excel</div>
+          <input type="file" id="divHistFile-${clientId}" accept=".xlsx,.xls" style="display:none" onchange="handleDivHistoryFile('${clientId}',this)"/>
+        </div>
+        <div id="divHistStatus-${clientId}" style="display:none;font-size:13px;padding:10px 14px;border-radius:10px;margin-bottom:10px;"></div>`;
+
+        if(_hasDistHist){
+          const _lastMoPayout=_dhMonths.length>0?_dhByMonth[_dhMonths[0]]:0;
+          html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
+            <div class="stat-card">
+              <div class="stat-lbl">Last Payout</div>
+              <div class="stat-val" style="color:#d8b4fe;">${$f(_lastMoPayout)}</div>
+              <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_dhMonths.length>0?_fmtMo(_dhMonths[0]):"—"}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-lbl">Next Predicted</div>
+              <div class="stat-val" style="color:${_canPredict?"#d8b4fe":"var(--dim)"};">${_canPredict?$f(_predictedNext):"—"}</div>
+              <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_canPredict?"Current NAV × dist rate":"—"}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-lbl">Month-on-Month</div>
+              <div class="stat-val" style="color:${_dhGrowth!=null?(_dhGrowth>=0?"var(--green)":"var(--red)"):"var(--dim)"};">${_dhGrowth!=null?(_dhGrowth>=0?"+":"")+_dhGrowth.toFixed(2)+"%":"—"}</div>
+              <div style="font-size:10px;color:var(--dim);margin-top:2px;">vs previous month</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-lbl">Records</div>
+              <div class="stat-val muted">${_dh.length}</div>
+              <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_dhMonths.length} month${_dhMonths.length!==1?"s":""}</div>
+            </div>
+          </div>
+          <div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);border-radius:12px;overflow:hidden;margin-bottom:8px;">
+            <div style="display:grid;grid-template-columns:1.4fr 1.8fr 0.9fr 0.9fr 1.1fr 1fr 1fr;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;padding:8px 12px;border-bottom:1px solid rgba(139,92,246,0.15);">
+              <span>Date</span><span>Fund</span><span style="text-align:right;">Rate/unit</span><span style="text-align:right;">Price</span><span style="text-align:right;">Units</span><span style="text-align:right;">Cash Out</span><span style="text-align:right;">Reinvested</span>
+            </div>
+            ${_dh.slice(0,30).map(r=>{
+              const sf=r.fundName.replace(/^Income\s+/i,"").replace(/\s+Fund$/i,"");
+              return`<div style="display:grid;grid-template-columns:1.4fr 1.8fr 0.9fr 0.9fr 1.1fr 1fr 1fr;padding:8px 12px;font-size:11px;border-bottom:1px solid rgba(139,92,246,0.07);align-items:center;">
+                <span style="color:var(--dim);">${r.declarationDate}</span>
+                <span style="font-weight:600;font-size:10px;" title="${r.fundName}">${sf}</span>
+                <span style="text-align:right;font-family:monospace;font-size:10px;">${r.distributionRate>0?r.distributionRate.toFixed(6):"—"}</span>
+                <span style="text-align:right;">${r.fundPrice>0?"$"+r.fundPrice.toFixed(3):"—"}</span>
+                <span style="text-align:right;color:var(--dim);">${r.unitsHolding>0?r.unitsHolding.toLocaleString("en-SG",{maximumFractionDigits:0}):"—"}</span>
+                <span style="text-align:right;font-weight:700;color:#d8b4fe;">${r.encashment>0?$f(r.encashment):"—"}</span>
+                <span style="text-align:right;color:var(--green);">${r.reinvestment>0?$f(r.reinvestment):"—"}</span>
+              </div>`;
+            }).join("")}
+            ${_dh.length>30?`<div style="padding:8px 12px;font-size:11px;color:var(--dim);text-align:center;">… ${_dh.length-30} more records</div>`:""}
+          </div>`;
+          if(_dhMonths.length>1){
+            html+=`<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);border-radius:12px;overflow:hidden;margin-bottom:14px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;padding:8px 14px;border-bottom:1px solid rgba(139,92,246,0.15);">
+                <span>Month</span><span style="text-align:right;">Total Payout</span><span style="text-align:right;">Growth</span>
+              </div>
+              ${_dhMonths.map((m,i)=>{
+                const total=_dhByMonth[m];
+                const prev=_dhMonths[i+1]?_dhByMonth[_dhMonths[i+1]]:null;
+                const g=prev?(total-prev)/prev*100:null;
+                return`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(139,92,246,0.07);">
+                  <span style="font-weight:600;">${_fmtMo(m)}</span>
+                  <span style="text-align:right;font-weight:700;color:#d8b4fe;">${$f(total)}</span>
+                  <span style="text-align:right;font-size:12px;color:${g!=null?(g>=0?"var(--green)":"var(--red)"):"var(--dim)"};">${g!=null?(g>=0?"+":"")+g.toFixed(2)+"%":"—"}</span>
+                </div>`;
+              }).join("")}
+            </div>`;
+          }
+        }
       }
     }
 
@@ -2858,6 +3053,7 @@ window.setTab=t=>{
 window.viewClient=async(id)=>{
   currentClientId=id;tab="client";
   if(!clientTxs[id])await loadClientTxs(id);
+  if(!clientDivHistory[id])await loadDivHistory(id);
   renderAll();window.scrollTo(0,0);
 };
 window.goBack=()=>{tab="dashboard";currentClientId=null;renderAll();window.scrollTo(0,0);};
