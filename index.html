@@ -735,6 +735,9 @@ const STARTUP_BONUS={
     15:[{min:3600,pct:10.0,tier:"Tier 1"},{min:9600,pct:40.0,tier:"Tier 2"}],
     20:[{min:2400,pct:25.0,tier:"Tier 1"},{min:9600,pct:55.0,tier:"Tier 2"}],
   },
+  "Invest Flex TriVantage":{
+    10:[{min:48000,pct:15.0,tier:"MIP 10"}],
+  },
 };
 
 // ── State ──
@@ -1261,6 +1264,7 @@ function buildClientList(list){
         ${c.policyNo?`<span>📋 ${esc(c.policyNo)}</span>`:""}
         <span>📅 Since ${fmtDate(c.startDate)}</span>
         <span>💵 AP: ${$f(c.annualPremium)}/yr</span>
+        ${getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice?`<span style="color:#d8b4fe;">💰 ~${$f(totals.totalValue*(c.dividendRate||6)/100/12)}/mo income</span>`:""}
         <span>📁 ${hasTxs?txs.length+" transactions":"No data uploaded"}</span>
       </div>
     </div>`).join("");
@@ -1311,6 +1315,11 @@ function renderAddClientForm(){
       <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="Annual Premium" oninput="updateBonusDisplay()"/></div>
     </div>
     <div id="bonusIndicator" style="margin-bottom:12px;"></div>
+    <div id="divRateRow" style="display:none;margin-bottom:12px;">
+      <label class="lbl">Annual Dividend Rate (%)</label>
+      <input class="inp" id="cDivRate" type="number" step="0.1" min="1" max="15" placeholder="6" value="6"/>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px;">Projected monthly income = NAV × rate ÷ 12. Income benchmark is 6% p.a.</div>
+    </div>
     <div style="margin-bottom:16px;">
       <label class="lbl">Notes (optional)</label>
       <input class="inp" id="cNotes" placeholder="Risk profile, goals, remarks..."/>
@@ -1399,6 +1408,9 @@ window.updateBonusDisplay=()=>{
   const product=document.getElementById("cProduct")?.value||"";
   const term=document.getElementById("cTerm")?.value||"";
   const ap=parseFloat(document.getElementById("cAP")?.value||"0")||0;
+  const isDivProduct=product==="Invest Flex Vantage"||product==="Invest Flex TriVantage";
+  const divRow=document.getElementById("divRateRow");
+  if(divRow)divRow.style.display=isDivProduct?"block":"none";
   const el=document.getElementById("bonusIndicator");
   if(!el)return;
   if(!product||!term||!ap){el.innerHTML="";return;}
@@ -1442,6 +1454,8 @@ window.doAddClient=async()=>{
   const term=document.getElementById("cTerm")?.value||"";
   const ap=document.getElementById("cAP")?.value||"";
   const notes=document.getElementById("cNotes")?.value.trim()||"";
+  const isDivProduct=product==="Invest Flex Vantage"||product==="Invest Flex TriVantage";
+  const dividendRate=isDivProduct?parseFloat(document.getElementById("cDivRate")?.value||"6")||6:null;
   const errEl=document.getElementById("addClientErr");
   const errs=[];
   if(!name)errs.push("Name required.");
@@ -1454,6 +1468,7 @@ window.doAddClient=async()=>{
   const obj={
     uid:OWNER,name,policyNo,product,strategy:getStrategy(product),
     startDate,term:parseInt(term),annualPremium:parseFloat(ap),
+    ...(dividendRate!==null?{dividendRate}:{}),
     funds,notes,createdAt:new Date().toISOString()
   };
   try{
@@ -1520,6 +1535,7 @@ function renderClientDetail(clientId){
       <div><div class="stat-lbl">Annual Premium</div><div style="font-weight:700;color:var(--gold);">${$f(c.annualPremium)}</div></div>
       <div><div class="stat-lbl">Monthly Premium</div><div style="font-weight:700;">${$f(c.annualPremium/12)}</div></div>
       ${(()=>{const b=getStartupBonus(c.product,c.term,c.annualPremium);return b?`<div><div class="stat-lbl">Startup Bonus</div><div style="font-weight:700;color:var(--gold);">${b.pct}% <span style="font-size:11px;color:var(--dim);">(${b.tier} · ${$f(c.annualPremium*b.pct/100)})</span></div></div>`:"";})()}
+      ${strategy==="dividend"?`<div><div class="stat-lbl">Dividend Rate</div><div style="font-weight:700;color:#d8b4fe;">${(c.dividendRate||6).toFixed(1)}% p.a.</div></div>`:""}
       ${c.notes?`<div><div class="stat-lbl">Notes</div><div style="font-size:12px;color:var(--muted);">${esc(c.notes)}</div></div>`:""}
     </div>
   </div>`;
@@ -1563,11 +1579,60 @@ function renderClientDetail(clientId){
         <div style="font-size:10px;color:var(--dim);margin-top:2px;">Shown separately</div>
       </div>
     </div>`;
-    if(strategy==="dividend"&&totals.dividendPaid>0){
-      html+=`<div class="card" style="text-align:center;border-color:rgba(139,92,246,0.3);margin-bottom:14px;">
-        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;">Total Dividends Received</div>
-        <div style="font-size:28px;font-weight:900;color:#d8b4fe;margin-top:4px;">${$f(totals.dividendPaid)}</div>
+    if(strategy==="dividend"){
+      const _divRate=(c.dividendRate||6)/100;
+      const _projMonthly=allFundsPriced?totals.totalValue*_divRate/12:null;
+      const _projAnnual=allFundsPriced?totals.totalValue*_divRate:null;
+      // Group dividend transactions by YYYY-MM
+      const _divByMonth={};
+      for(const tx of txs){
+        if(tx.category==="dividend"){
+          const mo=tx.txDate.slice(0,7);
+          _divByMonth[mo]=(_divByMonth[mo]||0)+Math.abs(tx.amount);
+        }
+      }
+      const _divMonths=Object.keys(_divByMonth).sort().reverse();
+      const _moNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const _fmtMo=m=>{const[y,mo]=m.split("-");return`${_moNames[parseInt(mo)-1]} ${y}`;};
+      html+=`<div class="sec-title">💰 Dividend Income</div>
+      <div class="stat-grid-4" style="margin-bottom:14px;">
+        <div class="stat-card">
+          <div class="stat-lbl">Projected Monthly</div>
+          <div class="stat-val" style="color:#d8b4fe;">${_projMonthly?$f(_projMonthly):"N/A"}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">At ${(c.dividendRate||6).toFixed(1)}% p.a.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Projected Annual</div>
+          <div class="stat-val" style="color:#d8b4fe;">${_projAnnual?$f(_projAnnual):"N/A"}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">At ${(c.dividendRate||6).toFixed(1)}% p.a.</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Total Received</div>
+          <div class="stat-val" style="color:#d8b4fe;">${totals.dividendPaid>0?$f(totals.dividendPaid):"—"}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_divMonths.length>0?_divMonths.length+" month"+(totals.dividendPaid>0?"s":""):"No payouts yet"}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Avg Monthly</div>
+          <div class="stat-val" style="color:#d8b4fe;">${_divMonths.length>0?$f(totals.dividendPaid/_divMonths.length):"—"}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">Actual average</div>
+        </div>
       </div>`;
+      if(_divMonths.length>0){
+        html+=`<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.2);border-radius:12px;overflow:hidden;margin-bottom:14px;">
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;padding:9px 14px;border-bottom:1px solid rgba(139,92,246,0.15);">
+            <span>Month</span><span style="text-align:right;">Received</span><span style="text-align:right;">vs Projected</span>
+          </div>
+          ${_divMonths.map(m=>{
+            const actual=_divByMonth[m];
+            const diff=_projMonthly!=null?actual-_projMonthly:null;
+            return`<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(139,92,246,0.08);">
+              <span style="font-weight:600;">${_fmtMo(m)}</span>
+              <span style="text-align:right;font-weight:700;color:#d8b4fe;">${$f(actual)}</span>
+              <span style="text-align:right;font-size:12px;color:${diff!=null?(diff>=0?"var(--green)":"var(--red)"):"var(--dim)"};">${diff!=null?(diff>=0?"+":"")+$f(diff):"—"}</span>
+            </div>`;
+          }).join("")}
+        </div>`;
+      }
     }
 
     // Annualised Returns
@@ -2288,10 +2353,26 @@ window.openPresent=async(clientId)=>{
       </div>
     </div>`;
 
-    if(strategy==="dividend"&&totals.dividendPaid>0){
-      html+=`<div style="background:linear-gradient(135deg,#110a2a,#1a0f3a);border-radius:14px;padding:20px;text-align:center;border:1px solid rgba(139,92,246,0.3);margin-bottom:24px;">
-        <div style="font-size:12px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Total Dividends Received</div>
-        <div style="font-size:28px;font-weight:900;color:#d8b4fe;">${$f(totals.dividendPaid)}</div>
+    if(strategy==="dividend"){
+      const _pDivRate=(c.dividendRate||6)/100;
+      const _pProjMonthly=hasPrices?totals.totalValue*_pDivRate/12:null;
+      const _pProjAnnual=hasPrices?totals.totalValue*_pDivRate:null;
+      html+=`<div style="background:linear-gradient(135deg,#110a2a,#1a0f3a);border-radius:14px;padding:20px;border:1px solid rgba(139,92,246,0.3);margin-bottom:24px;">
+        <div style="font-size:12px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:14px;">💰 Dividend Income (at ${(c.dividendRate||6).toFixed(1)}% p.a.)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center;">
+          <div>
+            <div style="font-size:11px;color:#a78bfa;margin-bottom:4px;">Monthly Income</div>
+            <div style="font-size:22px;font-weight:900;color:#d8b4fe;">${_pProjMonthly?$f(_pProjMonthly):"N/A"}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#a78bfa;margin-bottom:4px;">Annual Income</div>
+            <div style="font-size:22px;font-weight:900;color:#d8b4fe;">${_pProjAnnual?$f(_pProjAnnual):"N/A"}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#a78bfa;margin-bottom:4px;">Total Received</div>
+            <div style="font-size:22px;font-weight:900;color:#d8b4fe;">${totals.dividendPaid>0?$f(totals.dividendPaid):"—"}</div>
+          </div>
+        </div>
       </div>`;
     }
 
