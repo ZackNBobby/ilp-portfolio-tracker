@@ -1413,13 +1413,15 @@ function renderAddClientForm(){
 
     <div class="sec-title" style="margin-bottom:8px;">📁 Transaction History</div>
     <div style="font-size:12px;color:var(--dim);margin-bottom:10px;">Drop the Fund Transaction Excel from Income's system — funds and allocations will be auto-detected.</div>
-    <div class="drop-zone" id="addClientDrop"
+    <div class="drop-zone" id="addClientDrop" style="cursor:pointer;"
+      onclick="document.getElementById('addClientFileInput').click()"
       ondragover="event.preventDefault();this.classList.add('drag-over')"
       ondragleave="this.classList.remove('drag-over')"
       ondrop="handleAddClientDrop(event)">
       <div style="font-size:28px;margin-bottom:6px;">📂</div>
       <div style="font-size:14px;font-weight:700;color:var(--gold);">Drop Excel file here</div>
-      <div style="font-size:12px;color:var(--dim);margin-top:4px;">or <label style="color:var(--gold);cursor:pointer;text-decoration:underline;">browse<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleAddClientFile(this)"/></label></div>
+      <div style="font-size:12px;color:var(--dim);margin-top:4px;">or click anywhere to browse</div>
+      <input type="file" id="addClientFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleAddClientFile(this)"/>
     </div>
     <div id="acUploadStatus" style="display:none;margin-top:10px;font-size:13px;padding:10px 14px;border-radius:10px;"></div>
     <div id="acFundList" style="display:none;margin-top:12px;"></div>
