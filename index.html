@@ -170,6 +170,57 @@ body{
 }
 .dash-tab-btn.active .dash-tab-count{background:rgba(245,158,11,0.2);}
 
+/* ── Name privacy blur ── */
+.name-blur{
+  filter:blur(7px);user-select:none;
+  transition:filter 0.3s ease;display:inline-block;
+}
+.names-revealed .name-blur{filter:none;user-select:auto;}
+.blur-toggle-btn{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;
+  border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);
+  color:rgba(245,158,11,0.65);transition:all 0.18s;margin-left:auto;
+}
+.blur-toggle-btn:hover{background:rgba(245,158,11,0.12);color:var(--gold-l);}
+
+/* ── Period selector ── */
+.period-bar{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.period-lbl{font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.06em;margin-right:2px;}
+.period-btn{
+  padding:3px 11px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;
+  transition:all 0.15s;
+  border:1px solid rgba(245,158,11,0.18);
+  background:rgba(245,158,11,0.04);
+  color:rgba(245,158,11,0.42);
+}
+.period-btn.active{
+  background:rgba(245,158,11,0.15);color:var(--gold-l);
+  border-color:rgba(245,158,11,0.5);
+}
+.period-btn:hover:not(.active){border-color:rgba(245,158,11,0.35);color:rgba(245,158,11,0.65);}
+
+/* ── Premium due badge ── */
+.prem-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;}
+.prem-badge.urgent{color:var(--red);background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.28);}
+.prem-badge.warning{color:#f97316;background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.28);}
+
+/* ── Premium paid button ── */
+.prem-pay-btn{
+  margin-left:5px;padding:1px 6px;border-radius:6px;
+  font-size:10px;font-weight:700;cursor:pointer;
+  border:1px solid currentColor;background:transparent;color:inherit;
+  transition:background 0.15s,color 0.15s;
+}
+.prem-pay-btn:hover{background:rgba(255,255,255,0.15);}
+
+/* ── Premium due banner ── */
+.prem-banner{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;
+  background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.22);
+  font-size:12px;color:#fb923c;margin-bottom:12px;
+}
+
 /* ── Sticky client header ── */
 .client-sticky-hdr{
   position:sticky;top:0;z-index:200;
@@ -745,6 +796,11 @@ let clients=[],fundPrices={},fundPriceChanges={},fundPriceSource={},underlyingPr
 let clientDivHistory={};
 let tab="dashboard",currentClientId=null;
 let dashProductTab="all"; // "all" | "flex" | "vantage"
+let dashPeriod="1D"; // "1D" | "1W" | "1M" | "3M"
+let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest first
+let _snapshotSavedToday="";
+let namesBlurred=true; // PDPA: names blurred by default
+let _blurTimer=null;
 let unsubs=[],charts={};
 
 // Resolve a fund name from a transaction to a stored price, tolerating missing "Income " prefix.
@@ -1222,6 +1278,30 @@ async function saveUnderlyingPriceDB(ftSymbol,price){
   },{merge:true});
   underlyingPrices[ftSymbol]=parseFloat(price);
 }
+async function savePortfolioSnapshot(clientId,totalValue,adjGain){
+  const today=new Date().toISOString().slice(0,10);
+  const docId=OWNER+"_"+clientId+"_"+today;
+  await setDoc(doc(db,"portfolioSnapshots",docId),{
+    uid:OWNER,clientId,date:today,totalValue,adjGain,savedAt:new Date().toISOString()
+  },{merge:true});
+}
+async function saveDailySnapshots(){
+  const today=new Date().toISOString().slice(0,10);
+  if(_snapshotSavedToday===today)return;
+  if(!clients.length||!Object.keys(fundPrices).length)return;
+  _snapshotSavedToday=today;
+  for(const c of clients){
+    const txs=clientTxs[c.fid]||[];
+    if(!txs.length)continue;
+    const fundData=calcPortfolio(txs);
+    const totals=portfolioTotals(fundData);
+    if(!totals.totalValue)continue;
+    const _cb=getStartupBonus(c.product,c.term,c.annualPremium);
+    const _bGrant=_cb?c.annualPremium*_cb.pct/100:0;
+    const adjGain=totals.totalValue-totals.totalInvested-_bGrant;
+    await savePortfolioSnapshot(c.fid,totals.totalValue,adjGain);
+  }
+}
 
 function startListeners(){
   unsubs.forEach(u=>u());unsubs=[];
@@ -1246,11 +1326,25 @@ function startListeners(){
       if(fd.source)fundPriceSource[fd.name]=fd.source;
     });
     renderAll();
+    saveDailySnapshots();
   },err=>console.error("fundPrices listener error:",err)));
   unsubs.push(onSnapshot(collection(db,"underlyingPrices"),snap=>{
     underlyingPrices={};snap.forEach(d=>{const ud=d.data();underlyingPrices[ud.ftSymbol]=ud.price;});
     renderAll();
   },err=>console.error("underlyingPrices listener error:",err)));
+  const qSnap=query(collection(db,"portfolioSnapshots"),where("uid","==",OWNER));
+  unsubs.push(onSnapshot(qSnap,snap=>{
+    portfolioSnapshots={};
+    snap.forEach(d=>{
+      const sd=d.data();
+      if(!portfolioSnapshots[sd.clientId])portfolioSnapshots[sd.clientId]=[];
+      portfolioSnapshots[sd.clientId].push({date:sd.date,totalValue:sd.totalValue,adjGain:sd.adjGain});
+    });
+    Object.keys(portfolioSnapshots).forEach(cid=>{
+      portfolioSnapshots[cid].sort((a,b)=>b.date.localeCompare(a.date));
+    });
+    renderAll();
+  },err=>console.error("snapshots listener error:",err)));
 }
 
 // ── Rendering ──
@@ -1271,6 +1365,93 @@ function renderPage(){
   else{tab="dashboard";el.innerHTML=renderDashboard();}
   attachPageHandlers();
 }
+
+// ── Portfolio snapshot helpers ──
+function periodDays(p){return{1D:1,1W:7,1M:30,"3M":90}[p]||1;}
+function getSnapshotBefore(clientId,daysAgo){
+  const snaps=portfolioSnapshots[clientId];
+  if(!snaps||!snaps.length)return null;
+  const d=new Date();d.setDate(d.getDate()-daysAgo);
+  const cutoff=d.toISOString().slice(0,10);
+  // newest snapshot that is on or before the cutoff date
+  return snaps.find(s=>s.date<=cutoff)||null;
+}
+
+// ── Premium reminder helpers ──
+function getRelevantPremiumDate(startDate){
+  if(!startDate)return null;
+  const start=new Date(startDate);
+  const today=new Date();today.setHours(0,0,0,0);
+  // this year's anniversary
+  let ann=new Date(start);ann.setFullYear(today.getFullYear());
+  const d=Math.ceil((ann-today)/86400000);
+  if(d>=-30&&d<=30)return{date:ann,days:d};
+  // next year's anniversary (if within 30 days)
+  let annNext=new Date(start);annNext.setFullYear(today.getFullYear()+1);
+  const dn=Math.ceil((annNext-today)/86400000);
+  if(dn>=0&&dn<=30)return{date:annNext,days:dn};
+  return null;
+}
+function premiumDaysUntil(startDate,premiumPaidYear){
+  const r=getRelevantPremiumDate(startDate);
+  if(!r)return null;
+  if((premiumPaidYear||0)>=r.date.getFullYear())return null; // paid this cycle
+  return r.days;
+}
+function premiumBadgeHtml(startDate,premiumPaidYear,fid){
+  const r=getRelevantPremiumDate(startDate);
+  if(!r)return"";
+  if((premiumPaidYear||0)>=r.date.getFullYear())return"";
+  const d=r.days;
+  const cls=d<=7?"urgent":"warning";
+  const label=d<0?"Overdue "+Math.abs(d)+"d":d===0?"Due today":d===1?"Due tomorrow":"Due in "+d+"d";
+  const payBtn=fid?"<button class=\"prem-pay-btn\" onclick=\"markPremiumPaid(event,'"+fid+"',"+r.date.getFullYear()+")\">✓ Paid</button>":"";
+  return"<span class=\"prem-badge "+cls+"\">⏰ AP "+label+payBtn+"</span>";
+}
+window.markPremiumPaid=async(e,fid,year)=>{
+  e.stopPropagation();
+  await setDoc(doc(db,"clients",fid),{premiumPaidYear:year},{merge:true});
+  const c=clients.find(x=>x.fid===fid);
+  if(c)c.premiumPaidYear=year;
+  renderAll();
+};
+
+// ── Name privacy helpers ──
+function renderName(name){
+  const parts=(name||"").trim().split(/\s+/);
+  if(parts.length<=1)return"<span class=\"name-blur\">"+esc(parts[0]||"")+"</span>";
+  return esc(parts[0])+" <span class=\"name-blur\">"+esc(parts.slice(1).join(" "))+"</span>";
+}
+function _startBlurTimer(){
+  clearTimeout(_blurTimer);
+  _blurTimer=setTimeout(()=>{
+    namesBlurred=true;
+    document.body.classList.remove("names-revealed");
+    const btn=document.getElementById("blurToggleBtn");
+    if(btn)btn.innerHTML="👁 Show Names";
+  },30000);
+}
+window.toggleNames=()=>{
+  namesBlurred=!namesBlurred;
+  document.body.classList.toggle("names-revealed",!namesBlurred);
+  const btn=document.getElementById("blurToggleBtn");
+  if(btn)btn.innerHTML=namesBlurred?"👁 Show Names":"🙈 Hide Names";
+  if(!namesBlurred)_startBlurTimer();
+  else clearTimeout(_blurTimer);
+};
+// Set up inactivity listeners once
+["mousemove","keydown","touchstart","click"].forEach(ev=>
+  document.addEventListener(ev,()=>{if(!namesBlurred)_startBlurTimer();})
+);
+
+window.setDashPeriod=p=>{
+  dashPeriod=p;
+  document.querySelectorAll(".period-btn").forEach(b=>b.classList.remove("active"));
+  const btn=document.getElementById("per-"+p);
+  if(btn)btn.classList.add("active");
+  const el=document.getElementById("clientList");
+  if(el)el.innerHTML=buildClientList(getProductTabClients());
+};
 
 // ── Dashboard ──
 function getProductTabClients(){
@@ -1295,14 +1476,33 @@ function renderDashboard(){
     {id:"flex", label:"Invest Flex",           count:flexCount},
     {id:"vantage",label:"Vantage / Tri-Vantage",count:vantageCount},
   ];
-  let html=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">`;
+  let html=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">`;
   tabs.forEach(t=>{
     const active=dashProductTab===t.id;
     html+=`<button id="dpt-${t.id}" onclick="setDashProductTab('${t.id}')" class="dash-tab-btn${active?" active":""}">
       ${t.label}<span class="dash-tab-count">${t.count}</span>
     </button>`;
   });
+  html+=`<button id="blurToggleBtn" class="blur-toggle-btn" onclick="toggleNames()">${namesBlurred?"👁 Show Names":"🙈 Hide Names"}</button>`;
   html+=`</div>`;
+
+  // Period selector
+  html+=`<div class="period-bar"><span class="period-lbl">CHANGE OVER</span>`;
+  ["1D","1W","1M","3M"].forEach(p=>{
+    html+=`<button id="per-${p}" class="period-btn${dashPeriod===p?" active":""}" onclick="setDashPeriod('${p}')">${p}</button>`;
+  });
+  html+=`</div>`;
+
+  // Premium due summary banner
+  const premDueClients=clients.filter(c=>{ const d=premiumDaysUntil(c.startDate,c.premiumPaidYear); return d!==null&&d<=30; });
+  if(premDueClients.length>0){
+    const urgentCount=premDueClients.filter(c=>premiumDaysUntil(c.startDate,c.premiumPaidYear)<=7).length;
+    const msg=urgentCount>0
+      ? urgentCount+" client"+(urgentCount>1?"s":"")+" with premium due within 7 days — "+premDueClients.length+" total within 30 days"
+      : premDueClients.length+" client"+(premDueClients.length>1?"s":"")+" with annual premium due within 30 days";
+    html+=`<div class="prem-banner">⏰ <strong>${msg}</strong></div>`;
+  }
+
   html+=`<div class="search-wrap">
     <span class="search-ico">🔍</span>
     <input class="search-inp" id="searchInp" type="text" placeholder="Search clients by name or policy number..." oninput="filterClients(this.value)"/>
@@ -1331,29 +1531,50 @@ function buildClientList(list){
   });
   withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
 
-  const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>`
-    <div class="client-card" style="animation-delay:${i*0.05}s" onclick="viewClient('${c.fid}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-        <div>
-          <div style="font-size:16px;font-weight:800;margin-bottom:5px;">${esc(c.name)}</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            ${productBadge(c.product)}${stratBadge(c.product)}
-          </div>
-        </div>
-        ${hasTxs&&hasPrice?`<div style="text-align:right;">
-          <div style="font-size:11px;color:var(--dim);">Portfolio Value</div>
-          <div style="font-size:20px;font-weight:900;color:var(--gold-l);">${$f(totals.totalValue)}</div>
-          <div style="font-size:12px;font-weight:700;color:${(_adjGain??0)>=0?"var(--green)":"var(--red)"};">${$pct(_adjPct??0)} true gain</div>
-        </div>`:""}
-      </div>
-      <div style="display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;">
-        ${c.policyNo?`<span>📋 ${esc(c.policyNo)}</span>`:""}
-        <span>📅 Since ${fmtDate(c.startDate)}</span>
-        <span>💵 AP: ${$f(c.annualPremium)}/yr</span>
-        ${getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice?`<span style="color:#d8b4fe;">💰 ~${$f(totals.totalValue*(c.dividendRate||6)/100/12)}/mo income</span>`:""}
-        <span>📁 ${hasTxs?txs.length+" transactions":"No data uploaded"}</span>
-      </div>
-    </div>`).join("");
+  const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>{
+    // Period delta vs snapshot
+    let deltaHtml="";
+    if(hasTxs&&hasPrice&&totals.totalValue){
+      const snap=getSnapshotBefore(c.fid,periodDays(dashPeriod));
+      if(snap&&snap.totalValue){
+        const delta=totals.totalValue-snap.totalValue;
+        const deltaPct=snap.totalValue>0?delta/snap.totalValue*100:0;
+        const col=delta>=0?"var(--green)":"var(--red)";
+        const arrow=delta>=0?"▲":"▼";
+        deltaHtml="<div style=\"font-size:10px;color:"+col+";font-weight:700;margin-top:2px;\">"+arrow+" "+$f(Math.abs(delta))+" ("+Math.abs(deltaPct).toFixed(1)+"%) vs "+dashPeriod+"</div>";
+      } else {
+        deltaHtml="<div style=\"font-size:10px;color:var(--dim);margin-top:2px;\">No "+dashPeriod+" data yet</div>";
+      }
+    }
+    const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
+    const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
+      ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
+    return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
+      +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
+        +"<div>"
+          +"<div style=\"font-size:16px;font-weight:800;margin-bottom:5px;\">"+renderName(c.name)+"</div>"
+          +"<div style=\"display:flex;gap:6px;flex-wrap:wrap;align-items:center;\">"
+            +productBadge(c.product)+stratBadge(c.product)+premBadge
+          +"</div>"
+        +"</div>"
+        +(hasTxs&&hasPrice
+          ?"<div style=\"text-align:right;\">"
+            +"<div style=\"font-size:11px;color:var(--dim);\">Portfolio Value</div>"
+            +"<div style=\"font-size:20px;font-weight:900;color:var(--gold-l);\">"+$f(totals.totalValue)+"</div>"
+            +"<div style=\"font-size:12px;font-weight:700;color:"+((_adjGain??0)>=0?"var(--green)":"var(--red)")+";\">"+$pct(_adjPct??0)+" true gain</div>"
+            +deltaHtml
+          +"</div>"
+          :"")
+      +"</div>"
+      +"<div style=\"display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;\">"
+        +(c.policyNo?"<span>📋 "+esc(c.policyNo)+"</span>":"")
+        +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
+        +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
+        +divIncome
+        +"<span>📁 "+(hasTxs?txs.length+" transactions":"No data uploaded")+"</span>"
+      +"</div>"
+    +"</div>";
+  }).join("");
 
   return`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">${cards}</div>`;
 }
