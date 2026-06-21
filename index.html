@@ -1367,7 +1367,7 @@ function renderPage(){
 }
 
 // ── Portfolio snapshot helpers ──
-function periodDays(p){return{1D:1,1W:7,1M:30,"3M":90}[p]||1;}
+function periodDays(p){return{"1D":1,"1W":7,"1M":30,"3M":90}[p]||1;}
 function getSnapshotBefore(clientId,daysAgo){
   const snaps=portfolioSnapshots[clientId];
   if(!snaps||!snaps.length)return null;
