@@ -221,6 +221,16 @@ body{
   font-size:12px;color:#fb923c;margin-bottom:12px;
 }
 
+/* ── Client sub-tabs ── */
+.client-subtab-bar{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--gold-border);padding-bottom:0;}
+.client-subtab{
+  padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;
+  border:none;background:none;color:var(--dim);
+  border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.18s;
+}
+.client-subtab.active{color:var(--gold-l);border-bottom-color:var(--gold);}
+.client-subtab:hover:not(.active){color:var(--muted);}
+
 /* ── Print / PDF Report ── */
 .btn-print{
   display:flex;align-items:center;gap:5px;
@@ -832,6 +842,7 @@ let tab="dashboard",currentClientId=null;
 let dashProductTab="all"; // "all" | "flex" | "vantage"
 let dashPeriod="1D"; // "1D" | "1W" | "1M" | "3M"
 let dashSort="gain"; // "gain" | "value" | "name"
+let currentClientTab="overview"; // "overview" | "notes"
 let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest first
 let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
@@ -1450,6 +1461,10 @@ window.printClientReport=(clientId)=>{
   // Restore blur state after print dialog closes
   if(namesBlurred)setTimeout(()=>document.body.classList.remove("names-revealed"),500);
 };
+window.setClientTab=t=>{
+  currentClientTab=t;
+  renderPage();
+};
 window.notesChanged=()=>{
   const el=document.getElementById("notesSaveStatus");
   if(el)el.textContent="Unsaved…";
@@ -1908,6 +1923,29 @@ function renderClientDetail(clientId){
     <div style="font-size:12px;color:#64748b;">${esc(c.product)} · Policy ${esc(c.policyNo||"—")} · Since ${fmtDate(c.startDate)}</div>
   </div>`;
 
+  // Sub-tab bar
+  html+=`<div class="client-subtab-bar">
+    <button class="client-subtab${currentClientTab==="overview"?" active":""}" onclick="setClientTab('overview')">📊 Overview</button>
+    <button class="client-subtab${currentClientTab==="notes"?" active":""}" onclick="setClientTab('notes')">📝 Notes</button>
+  </div>`;
+
+  // ── Notes tab ──
+  if(currentClientTab==="notes"){
+    html+=`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="sec-title" style="margin-bottom:0;">📝 Client Notes</div>
+        <span id="notesSaveStatus" style="font-size:11px;color:var(--dim);"></span>
+      </div>
+      <textarea id="clientNotesTA" rows="8"
+        style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:10px;color:var(--text);
+               font-size:13px;padding:10px 12px;resize:vertical;outline:none;font-family:inherit;line-height:1.6;"
+        placeholder="Risk profile, goals, next review, remarks..."
+        oninput="notesChanged()"
+        onblur="saveClientNotes('${clientId}')">${esc(c.notes||"")}</textarea>
+    </div>`;
+    return html;
+  }
+
   // Info strip
   html+=`<div class="card" style="margin-bottom:14px;">
     <div class="g3" style="margin-bottom:0;">
@@ -1919,20 +1957,6 @@ function renderClientDetail(clientId){
       ${(()=>{const b=getStartupBonus(c.product,c.term,c.annualPremium);return b?`<div><div class="stat-lbl">Startup Bonus</div><div style="font-weight:700;color:var(--gold);">${b.pct}% <span style="font-size:11px;color:var(--dim);">(${b.tier} · ${$f(c.annualPremium*b.pct/100)})</span></div></div>`:"";})()}
       ${strategy==="dividend"?`<div><div class="stat-lbl">Dividend Rate</div><div style="font-weight:700;color:#d8b4fe;">${(c.dividendRate||6).toFixed(1)}% p.a.</div></div>`:""}
     </div>
-  </div>`;
-
-  // ── Client Notes (editable) ──
-  html+=`<div class="card" style="margin-bottom:14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div class="sec-title" style="margin-bottom:0;">📝 Client Notes</div>
-      <span id="notesSaveStatus" style="font-size:11px;color:var(--dim);"></span>
-    </div>
-    <textarea id="clientNotesTA" rows="3"
-      style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:10px;color:var(--text);
-             font-size:13px;padding:10px 12px;resize:vertical;outline:none;font-family:inherit;line-height:1.6;"
-      placeholder="Risk profile, goals, next review, remarks..."
-      oninput="notesChanged()"
-      onblur="saveClientNotes('${clientId}')">${esc(c.notes||"")}</textarea>
   </div>`;
 
   if(!hasPrices&&hasTxs){
@@ -3385,7 +3409,7 @@ window.setTab=t=>{
   renderAll();window.scrollTo(0,0);
 };
 window.viewClient=async(id)=>{
-  currentClientId=id;tab="client";
+  currentClientId=id;tab="client";currentClientTab="overview";
   if(!clientTxs[id])await loadClientTxs(id);
   if(!clientDivHistory[id])await loadDivHistory(id);
   renderAll();window.scrollTo(0,0);
