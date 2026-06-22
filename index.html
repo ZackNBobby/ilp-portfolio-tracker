@@ -490,7 +490,7 @@ body{
 .present-overlay{
   position:fixed;inset:0;z-index:9999;
   background:linear-gradient(135deg,#020508,#04080f,#060b14);
-  overflow-y:auto;padding:40px 24px;display:none;
+  overflow-y:auto;overflow-x:hidden;padding:40px 24px;display:none;
 }
 .present-overlay.show{display:block;}
 .present-close{
@@ -2247,10 +2247,14 @@ function renderClientDetail(clientId){
     html+=`<div class="sec-title">🏦 Fund Breakdown</div>`;
     html+='<div class="fund-breakdown-grid">';
     const orderedFundNames=getFundOrder(clientId,Object.keys(fundData));
+    const _epMap=calcEntryPrices(txs);
     for(const fname of orderedFundNames){
       const fd=fundData[fname];
       if(!fd)continue;
       const safeF=esc(fname);
+      const _ep=_epMap[fname];
+      const _epCost=_ep?(_ep.avgCost>0?_ep.avgCost:(()=>{const u=_ep.switchIns.reduce((s,x)=>s+x.units,0);const a=_ep.switchIns.reduce((s,x)=>s+x.amount,0);return u>0?a/u:0;})()) : 0;
+      const _underperf=_epCost>0&&fd.currentPrice>0&&fd.currentPrice<_epCost;
       html+=`<div class="fund-card" draggable="true" data-fund="${safeF}" data-client="${clientId}"
         ondragstart="fundDragStart(event,'${clientId}','${safeF}')"
         ondragover="fundDragOver(event)"
@@ -2259,6 +2263,7 @@ function renderClientDetail(clientId){
         <div class="fund-card-hdr">
           <span class="drag-handle" title="Drag to reorder">⠿</span>
           <span class="fund-name">${esc(fname)}</span>
+          ${_underperf?`<span style="font-size:10px;font-weight:700;color:#ef4444;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:2px 7px;white-space:nowrap;">⚠️ Below entry</span>`:""}
           <button class="btn-reinvest" onclick="openAddReinvest('${clientId}','${safeF}')">＋ Reinvestment</button>
         </div>
         <div class="g2">
@@ -2891,18 +2896,18 @@ window.openPresent=async(clientId)=>{
       <div style="font-size:16px;font-weight:700;margin-top:8px;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$pct(pAdjPct)} true return</div>
     </div>`;
 
-    html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px;">
-      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid var(--gold-border);">
+    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:32px;">
+      <div style="background:var(--bg2);border-radius:14px;padding:18px;text-align:center;border:1px solid var(--gold-border);">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">You Invested</div>
-        <div style="font-size:22px;font-weight:900;color:var(--muted);">${$f(totals.totalInvested)}</div>
+        <div style="font-size:20px;font-weight:900;color:var(--muted);">${$f(totals.totalInvested)}</div>
       </div>
-      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid ${pAdjGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
+      <div style="background:var(--bg2);border-radius:14px;padding:18px;text-align:center;border:1px solid ${pAdjGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">True Gain</div>
-        <div style="font-size:22px;font-weight:900;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$f(pAdjGain)}</div>
+        <div style="font-size:20px;font-weight:900;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$f(pAdjGain)}</div>
       </div>
-      <div style="background:var(--bg2);border-radius:14px;padding:20px;text-align:center;border:1px solid var(--gold-border);">
+      <div style="background:var(--bg2);border-radius:14px;padding:18px;text-align:center;border:1px solid var(--gold-border);">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Startup Bonus</div>
-        <div style="font-size:22px;font-weight:900;color:var(--gold-l);">${$f(totals.bonusValue)}</div>
+        <div style="font-size:20px;font-weight:900;color:var(--gold-l);">${$f(totals.bonusValue)}</div>
       </div>
     </div>`;
 
@@ -2958,19 +2963,21 @@ window.openPresent=async(clientId)=>{
     </div>`;
 
     html+=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px;">Fund Breakdown</div>`;
+    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:24px;">`;
     for(const[fname,fd]of Object.entries(fundData)){
-      html+=`<div style="background:var(--bg2);border-radius:14px;padding:18px;border:1px solid var(--gold-border);margin-bottom:10px;">
+      html+=`<div style="background:var(--bg2);border-radius:14px;padding:18px;border:1px solid var(--gold-border);">
         <div style="font-size:14px;font-weight:700;color:var(--gold-l);margin-bottom:12px;">${esc(fname)}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;">
-          <div><div style="font-size:11px;color:var(--dim);">Current Value</div><div style="font-size:16px;font-weight:800;">${$f(fd.netPremiumValue)}</div></div>
-          <div><div style="font-size:11px;color:var(--dim);">Gain / Loss</div><div style="font-size:16px;font-weight:800;color:${fd.displayGain>=0?"var(--green)":"var(--red)"};">${$f(fd.displayGain)} <span style="font-size:12px;">(${$pct(fd.displayGainPct)})</span></div></div>
-          <div><div style="font-size:11px;color:var(--dim);">Bonus Value</div><div style="font-size:16px;font-weight:800;color:var(--gold);">${$f(fd.bonusValue)}</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+          <div><div style="font-size:10px;color:var(--dim);">Current Value</div><div style="font-size:14px;font-weight:800;">${$f(fd.netPremiumValue)}</div></div>
+          <div><div style="font-size:10px;color:var(--dim);">Gain / Loss</div><div style="font-size:14px;font-weight:800;color:${fd.displayGain>=0?"var(--green)":"var(--red)"};">${$f(fd.displayGain)} <span style="font-size:11px;">(${$pct(fd.displayGainPct)})</span></div></div>
+          <div><div style="font-size:10px;color:var(--dim);">Bonus Value</div><div style="font-size:14px;font-weight:800;color:var(--gold);">${$f(fd.bonusValue)}</div></div>
         </div>
         <div style="margin-top:10px;">
           <div class="prog-wrap"><div class="prog-bar ${fd.displayGain>=0?"green":"red"}" style="width:${Math.min(100,Math.max(0,Math.abs(fd.displayGainPct)))}%"></div></div>
         </div>
       </div>`;
     }
+    html+=`</div>`;
 
     // Fund Entry Price Summary (Present mode — clean client-facing view)
     const epPresent=calcEntryPrices(txs);
