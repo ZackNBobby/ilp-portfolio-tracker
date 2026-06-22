@@ -797,6 +797,7 @@ let clientDivHistory={};
 let tab="dashboard",currentClientId=null;
 let dashProductTab="all"; // "all" | "flex" | "vantage"
 let dashPeriod="1D"; // "1D" | "1W" | "1M" | "3M"
+let dashSort="gain"; // "gain" | "value" | "name"
 let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest first
 let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
@@ -1444,6 +1445,12 @@ window.toggleNames=()=>{
   document.addEventListener(ev,()=>{if(!namesBlurred)_startBlurTimer();})
 );
 
+window.setDashSort=s=>{
+  dashSort=s;
+  const el=document.getElementById("clientList");
+  if(el)el.innerHTML=buildClientList(getProductTabClients());
+};
+
 window.setDashPeriod=p=>{
   dashPeriod=p;
   document.querySelectorAll(".period-btn").forEach(b=>b.classList.remove("active"));
@@ -1486,10 +1493,15 @@ function renderDashboard(){
   html+=`<button id="blurToggleBtn" class="blur-toggle-btn" onclick="toggleNames()">${namesBlurred?"👁 Show Names":"🙈 Hide Names"}</button>`;
   html+=`</div>`;
 
-  // Period selector
-  html+=`<div class="period-bar"><span class="period-lbl">CHANGE OVER</span>`;
+  // Period selector + Sort bar on same row
+  html+=`<div class="period-bar">`;
+  html+=`<span class="period-lbl">CHANGE OVER</span>`;
   ["1D","1W","1M","3M"].forEach(p=>{
     html+=`<button id="per-${p}" class="period-btn${dashPeriod===p?" active":""}" onclick="setDashPeriod('${p}')">${p}</button>`;
+  });
+  html+=`<span class="period-lbl" style="margin-left:10px;">SORT</span>`;
+  [["gain","🏆 Gain"],["value","💰 Value"],["name","🔤 Name"]].forEach(([s,lbl])=>{
+    html+=`<button class="period-btn${dashSort===s?" active":""}" onclick="setDashSort('${s}')">${lbl}</button>`;
   });
   html+=`</div>`;
 
@@ -1529,7 +1541,9 @@ function buildClientList(list){
     const _adjPct=_adjGain!==null&&totals.totalInvested>0?_adjGain/totals.totalInvested*100:null;
     return{c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct};
   });
-  withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
+  if(dashSort==="value") withGain.sort((a,b)=>(b.totals.totalValue??0)-(a.totals.totalValue??0));
+  else if(dashSort==="name") withGain.sort((a,b)=>a.c.name.localeCompare(b.c.name));
+  else withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
 
   const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>{
     // Period delta vs snapshot
@@ -1549,6 +1563,13 @@ function buildClientList(list){
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
     const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
       ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
+    // #8 underperforming fund alert
+    let underAlert="";
+    if(hasTxs&&hasPrice){
+      const ep=calcEntryPrices(txs);
+      const underCount=Object.values(ep).filter(f=>f.changePct!==null&&f.changePct<0).length;
+      if(underCount>0)underAlert="<span style=\"color:var(--red);font-weight:700;\">⚠️ "+underCount+" fund"+(underCount>1?"s":"")+" below entry</span>";
+    }
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
@@ -1571,6 +1592,7 @@ function buildClientList(list){
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +divIncome
+        +underAlert
         +"<span>📁 "+(hasTxs?txs.length+" transactions":"No data uploaded")+"</span>"
       +"</div>"
     +"</div>";
