@@ -1819,10 +1819,7 @@ function renderClientDetail(clientId){
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <div id="clientNameDisplay" style="font-size:22px;font-weight:900;transition:filter 0.2s;">${esc(c.name)}</div>
-          <button onclick="(function(){var el=document.getElementById('clientNameDisplay');var blurred=el.dataset.blurred==='1';el.style.filter=blurred?'':'blur(8px)';el.dataset.blurred=blurred?'0':'1';this.title=blurred?'Blur name':'Show name';})(this)"
-            title="Blur name for privacy"
-            style="background:none;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:3px 7px;font-size:13px;cursor:pointer;color:var(--dim);flex-shrink:0;">👁</button>
+          <div style="font-size:22px;font-weight:900;">${renderName(c.name)}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           ${productBadge(c.product)}${stratBadge(c.product)}
