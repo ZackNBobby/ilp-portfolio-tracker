@@ -1619,13 +1619,6 @@ function buildClientList(list){
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
     const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
       ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
-    // #8 underperforming fund alert
-    let underAlert="";
-    if(hasTxs&&hasPrice){
-      const ep=calcEntryPrices(txs);
-      const underCount=Object.values(ep).filter(f=>f.changePct!==null&&f.changePct<0).length;
-      if(underCount>0)underAlert="<span style=\"color:var(--red);font-weight:700;\">⚠️ "+underCount+" fund"+(underCount>1?"s":"")+" below entry</span>";
-    }
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
@@ -1648,7 +1641,6 @@ function buildClientList(list){
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +divIncome
-        +underAlert
         +"<span>📁 "+(hasTxs?txs.length+" transactions":"No data uploaded")+"</span>"
       +"</div>"
     +"</div>";
