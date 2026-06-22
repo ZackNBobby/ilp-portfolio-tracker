@@ -221,6 +221,40 @@ body{
   font-size:12px;color:#fb923c;margin-bottom:12px;
 }
 
+/* ── Print / PDF Report ── */
+.btn-print{
+  display:flex;align-items:center;gap:5px;
+  padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;
+  border:1px solid rgba(96,165,250,0.35);background:rgba(96,165,250,0.08);
+  color:#93c5fd;transition:all 0.18s;
+}
+.btn-print:hover{background:rgba(96,165,250,0.16);border-color:rgba(96,165,250,0.55);}
+@media print{
+  /* Hide all navigation and interactive elements */
+  .orb,#tabBar,.header,.blur-toggle-btn,.btn-back,.btn-del,.btn-present,.btn-print,
+  .prem-pay-btn,.dash-tab-btn,.period-bar,.search-wrap,.client-sticky-hdr .btn-back,
+  .growth-tabs,.chart-card:has(#gwrap-sp500),.prem-banner{display:none!important;}
+  /* Print header injected via JS */
+  #printHeader{display:block!important;}
+  /* Force white background + dark text */
+  *{color:#111!important;background:transparent!important;box-shadow:none!important;
+     border-color:#ddd!important;backdrop-filter:none!important;filter:none!important;}
+  body{background:#fff!important;padding:0;margin:0;}
+  .card{border:1px solid #e2e8f0!important;border-radius:8px!important;margin-bottom:12px!important;}
+  /* Unblur all names */
+  .name-blur{filter:none!important;user-select:auto!important;}
+  /* Keep the client sticky header visible but static */
+  .client-sticky-hdr{position:static!important;border-bottom:2px solid #e2e8f0!important;
+    padding:12px 0!important;margin-bottom:16px!important;}
+  /* Prevent page breaks inside cards */
+  .stat-card,.fund-card,.card{break-inside:avoid;}
+  /* Hide charts that don't render well in print */
+  .charts-row,.chart-card{display:none!important;}
+  /* Gold-ify headings */
+  .sec-title{color:#b45309!important;border-bottom:1px solid #fcd34d!important;}
+  .stat-val.gold{color:#b45309!important;}
+}
+
 /* ── Sticky client header ── */
 .client-sticky-hdr{
   position:sticky;top:0;z-index:200;
@@ -1409,6 +1443,13 @@ function premiumBadgeHtml(startDate,premiumPaidYear,fid){
   const payBtn=fid?"<button class=\"prem-pay-btn\" onclick=\"markPremiumPaid(event,'"+fid+"',"+r.date.getFullYear()+")\">✓ Paid</button>":"";
   return"<span class=\"prem-badge "+cls+"\">⏰ AP "+label+payBtn+"</span>";
 }
+window.printClientReport=(clientId)=>{
+  // Temporarily reveal names for printing
+  document.body.classList.add("names-revealed");
+  window.print();
+  // Restore blur state after print dialog closes
+  if(namesBlurred)setTimeout(()=>document.body.classList.remove("names-revealed"),500);
+};
 window.notesChanged=()=>{
   const el=document.getElementById("notesSaveStatus");
   if(el)el.textContent="Unsaved…";
@@ -1863,10 +1904,16 @@ function renderClientDetail(clientId){
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="btn-print" onclick="printClientReport('${clientId}')">🖨 Print Report</button>
         <button class="btn-present" onclick="openPresent('${clientId}')">📊 Present</button>
         <button class="btn-del" onclick="doDelClient('${clientId}')">🗑 Delete Client</button>
       </div>
     </div>
+  </div>
+  <div id="printHeader" style="display:none;padding:0 0 16px;border-bottom:2px solid #e2e8f0;margin-bottom:16px;">
+    <div style="font-size:10px;color:#64748b;margin-bottom:4px;">ILP Portfolio Report · Generated ${new Date().toLocaleDateString("en-SG",{day:"2-digit",month:"short",year:"numeric"})}</div>
+    <div style="font-size:22px;font-weight:900;">${esc(c.name)}</div>
+    <div style="font-size:12px;color:#64748b;">${esc(c.product)} · Policy ${esc(c.policyNo||"—")} · Since ${fmtDate(c.startDate)}</div>
   </div>`;
 
   // Info strip
