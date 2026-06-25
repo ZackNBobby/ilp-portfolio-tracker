@@ -5025,6 +5025,32 @@ window.showRule72Popup=rate=>{
 };
 window.closeRule72=()=>document.getElementById("r72overlay")?.remove();
 
+// ── ESC key: close topmost layer or navigate back ──
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Escape")return;
+  // 1. Present mode (highest z-index)
+  if(document.getElementById("presentOverlay")?.classList.contains("show")){
+    closePresent();return;
+  }
+  // 2. Reinvest modal (dynamically inserted)
+  if(document.getElementById("reinvestModal")){
+    document.getElementById("reinvestModal").remove();return;
+  }
+  // 3. Rule of 72 popup
+  if(document.getElementById("r72overlay")){
+    closeRule72();return;
+  }
+  // 4. Fund Detail modal
+  const fdm=document.getElementById("fdmOverlay");
+  if(fdm&&fdm.style.display!=="none"&&fdm.style.display!==""){
+    closeFundDetail();return;
+  }
+  // 5. Client detail page → back to dashboard
+  if(tab==="client"){goBack();return;}
+  // 6. Add Client form → back to dashboard
+  if(tab==="addclient"){tab="dashboard";renderAll();return;}
+});
+
 autoFetchPricesOnStartup();
 </script>
 </body>
