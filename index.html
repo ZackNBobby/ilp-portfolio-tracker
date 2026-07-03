@@ -751,7 +751,7 @@ body{
     </div>
     <div style="margin-bottom:20px;">
       <label class="lbl">Date of Birth</label>
-      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10" onkeydown="if(event.key==='Enter')saveEditClientInfo()"/>
+      <input class="inp" id="ecDOB" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)" onkeydown="if(event.key==='Enter')saveEditClientInfo()"/>
     </div>
     <div id="ecErr" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
     <div style="display:flex;gap:10px;">
@@ -1169,6 +1169,7 @@ function smartParseNum(val){
   if(s.startsWith("(")&&s.endsWith(")"))return-parseFloat(s.slice(1,-1))||0;
   return parseFloat(s)||0;
 }
+function normalizeDobInput(input){input.value=input.value.replace(/-/g,"/");}
 function parseDate(val){
   if(!val)return"";
   if(val instanceof Date){
@@ -1775,7 +1776,7 @@ function renderAddClientForm(){
     </div>
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">NRIC (confidential)</label><input class="inp" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;"/></div>
-      <div><label class="lbl">Date of Birth (confidential)</label><input class="inp" id="cDOB" type="text" placeholder="DD-MM-YYYY" maxlength="10"/></div>
+      <div><label class="lbl">Date of Birth (confidential)</label><input class="inp" id="cDOB" type="text" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)"/></div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
       <div>
@@ -3552,7 +3553,7 @@ window.saveEditClientInfo=async()=>{
   const rawDob=document.getElementById("ecDOB").value.trim();
   const dob=rawDob?parseDate(rawDob):"";
   const errEl=document.getElementById("ecErr");
-  if(rawDob&&!dob.match(/^\d{4}-\d{2}-\d{2}$/)){errEl.textContent="DOB format: DD-MM-YYYY";errEl.style.display="block";return;}
+  if(rawDob&&!dob.match(/^\d{4}-\d{2}-\d{2}$/)){errEl.textContent="DOB format: DD/MM/YYYY";errEl.style.display="block";return;}
   errEl.style.display="none";
   try{
     await updateClientFields(clientId,{nric:nric||"",dob:dob||""});
