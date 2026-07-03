@@ -841,6 +841,31 @@ const DEFAULT_FUNDS=[
 const CHART_COLORS=["#3b82f6","#eab308","#10b981","#ef4444","#8b5cf6","#06b6d4","#f97316","#ec4899"];
 const CHART_COLORS_BG=["rgba(59,130,246,0.8)","rgba(234,179,8,0.8)","rgba(16,185,129,0.8)","rgba(239,68,68,0.8)","rgba(139,92,246,0.8)","rgba(6,182,212,0.8)","rgba(249,115,22,0.8)","rgba(236,72,153,0.8)"];
 const PRODUCTS=["Invest Flex","Invest Flex Vantage","Invest Flex TriVantage"];
+const PAYMENT_MODES={monthly:{label:"Monthly",months:1},quarterly:{label:"Quarterly",months:3},"semi-annual":{label:"Semi-Annual",months:6},annual:{label:"Annual",months:12}};
+function getPolicyYear(startDate){
+  if(!startDate)return 1;
+  const diff=(Date.now()-new Date(startDate).getTime())/(1000*60*60*24*365.25);
+  return Math.max(1,Math.floor(diff)+1);
+}
+function getCurrentMode(c){
+  const hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?c.paymentModeHistory:[{effectiveYear:1,mode:"annual"}];
+  const yr=getPolicyYear(c.startDate);
+  const sorted=[...hist].sort((a,b)=>b.effectiveYear-a.effectiveYear);
+  return(sorted.find(h=>h.effectiveYear<=yr)||sorted[sorted.length-1]).mode;
+}
+function getInstallment(annualPremium,mode){
+  return annualPremium/({monthly:12,quarterly:4,"semi-annual":2,annual:1}[mode]||1);
+}
+function getNextPaymentDate(startDate,mode){
+  if(!startDate)return null;
+  const start=new Date(startDate);
+  const months=PAYMENT_MODES[mode]?.months||12;
+  let next=new Date(start);
+  const now=new Date();
+  while(next<=now){next=new Date(next.getFullYear(),next.getMonth()+months,next.getDate());}
+  return next;
+}
+function daysUntil(date){if(!date)return null;return Math.ceil((date.getTime()-Date.now())/(1000*60*60*24));}
 const STARTUP_BONUS={
   "Invest Flex":{
     5:[{min:9600,pct:6.0,tier:"Entry"}],
@@ -1421,6 +1446,30 @@ window.doGoogleSignIn=async()=>{
     if(errEl){errEl.textContent="Sign-in failed: "+err.message;errEl.style.display="block";}
   }
 };
+window.savePaymentMode=async(clientId)=>{
+  const c=clients.find(x=>x.fid===clientId);if(!c)return;
+  const yearEl=document.getElementById("pmYear-"+clientId);
+  const modeEl=document.getElementById("pmMode-"+clientId);
+  const errEl=document.getElementById("pmErr-"+clientId);
+  const yr=parseInt(yearEl?.value||"0");
+  const mode=modeEl?.value||"";
+  if(!yr||yr<1){if(errEl){errEl.textContent="Enter a valid policy year.";errEl.style.display="block";}return;}
+  if(!mode){if(errEl){errEl.textContent="Select a mode.";errEl.style.display="block";}return;}
+  const existing=(c.paymentModeHistory||[]).filter(h=>h.effectiveYear!==yr);
+  const updated=[...existing,{effectiveYear:yr,mode}].sort((a,b)=>a.effectiveYear-b.effectiveYear);
+  try{
+    await updateClientFields(clientId,{paymentModeHistory:updated});
+    showToast("✅ Payment mode updated.");
+    if(errEl)errEl.style.display="none";
+  }catch(e){if(errEl){errEl.textContent="Error: "+e.message;errEl.style.display="block";}}
+};
+window.removePaymentMode=async(clientId,yr)=>{
+  const c=clients.find(x=>x.fid===clientId);if(!c)return;
+  if(yr===1){showToast("⚠️ Cannot remove Year 1 mode.");return;}
+  const updated=(c.paymentModeHistory||[]).filter(h=>h.effectiveYear!==yr);
+  await updateClientFields(clientId,{paymentModeHistory:updated});
+  showToast("🗑 Mode entry removed.");
+};
 window.doSignOut=async()=>{
   unsubs.forEach(u=>u());unsubs=[];
   clients=[];clientTxs={};clientDivHistory={};fundPrices={};
@@ -1724,6 +1773,12 @@ function buildClientList(list){
     const _cardDaysToB=getDaysToBirthday(c.dob);
     const bdayBadge=_cardDaysToB!==null&&_cardDaysToB<=30
       ?"<span style=\"color:#f59e0b;\">🎂 "+(_cardDaysToB===0?"Birthday today!":"Birthday in "+_cardDaysToB+"d")+"</span>":"";
+    const _cardMode=getCurrentMode(c);
+    const _cardNextDate=getNextPaymentDate(c.startDate,_cardMode);
+    const _cardDaysNext=daysUntil(_cardNextDate);
+    const payModeBadge="<span style=\"color:var(--dim);\">💳 "+(PAYMENT_MODES[_cardMode]?.label||_cardMode)+"</span>";
+    const payAlertBadge=_cardDaysNext!==null&&_cardDaysNext<=7
+      ?"<span style=\"color:"+(_cardDaysNext<0?"var(--red)":"var(--gold)")+";font-weight:700;\">🔔 "+(_cardDaysNext<0?"Payment overdue":"Payment due in "+_cardDaysNext+"d")+"</span>":"";
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
@@ -1744,6 +1799,7 @@ function buildClientList(list){
       +"<div style=\"display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;\">"
         +(c.policyNo?"<span>📋 <span class=\"name-blur\">"+esc(c.policyNo)+"</span></span>":"")
         +(bdayBadge?bdayBadge:"")
+        +(payAlertBadge?payAlertBadge:payModeBadge)
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +divIncome
@@ -1800,6 +1856,15 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">Policy Start Date *</label><input class="inp" id="cStart" type="text" placeholder="DD-MM-YYYY" maxlength="10"/></div>
       <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="Annual Premium" oninput="updateBonusDisplay()"/></div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="lbl">Payment Mode (Year 1)</label>
+      <select class="sel" id="cPayMode">
+        <option value="annual">Annual (once a year)</option>
+        <option value="semi-annual">Semi-Annual (every 6 months)</option>
+        <option value="quarterly">Quarterly (every 3 months)</option>
+        <option value="monthly">Monthly</option>
+      </select>
     </div>
     <div id="bonusIndicator" style="margin-bottom:12px;"></div>
     <div id="divRateRow" style="display:none;margin-bottom:12px;">
@@ -1946,6 +2011,7 @@ window.doAddClient=async()=>{
   const nric=document.getElementById("cNRIC")?.value.trim()||"";
   const rawDob=document.getElementById("cDOB")?.value.trim()||"";
   const dob=rawDob?parseDate(rawDob):"";
+  const payMode=document.getElementById("cPayMode")?.value||"annual";
   const isDivProduct=product==="Invest Flex Vantage"||product==="Invest Flex TriVantage";
   const dividendRate=isDivProduct?parseFloat(document.getElementById("cDivRate")?.value||"6")||6:null;
   const errEl=document.getElementById("addClientErr");
@@ -1963,6 +2029,7 @@ window.doAddClient=async()=>{
     ...(dividendRate!==null?{dividendRate}:{}),
     ...(nric?{nric}:{}),
     ...(dob?{dob}:{}),
+    paymentModeHistory:[{effectiveYear:1,mode:payMode}],
     funds,notes,createdAt:new Date().toISOString()
   };
   try{
@@ -2051,8 +2118,7 @@ function renderClientDetail(clientId){
   const _daysToB=getDaysToBirthday(c.dob);
   const _bdaySoon=_daysToB!==null&&_daysToB<=30;
   html+=`<div class="card" style="margin-bottom:14px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:11px;color:var(--dim);">Press <kbd style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to reveal confidential fields</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
       <button onclick="openEditClientInfo('${clientId}')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);color:var(--gold);cursor:pointer;">✏️ Edit Info</button>
     </div>
     <div class="g3" style="margin-bottom:0;">
@@ -2071,6 +2137,72 @@ function renderClientDetail(clientId){
       <div><div class="stat-lbl">Current Age</div><div class="name-blur" style="font-weight:700;">${_age!==null?_age+" years old":"—"}</div></div>
     </div>
   </div>`;
+
+  // ── Payment Schedule ──
+  {
+    const _hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?[...c.paymentModeHistory].sort((a,b)=>a.effectiveYear-b.effectiveYear):[{effectiveYear:1,mode:"annual"}];
+    const _curMode=getCurrentMode(c);
+    const _modeLabel=PAYMENT_MODES[_curMode]?.label||_curMode;
+    const _installment=getInstallment(c.annualPremium,_curMode);
+    const _policyYr=getPolicyYear(c.startDate);
+    const _nextDate=getNextPaymentDate(c.startDate,_curMode);
+    const _daysNext=daysUntil(_nextDate);
+    const _alertSoon=_daysNext!==null&&_daysNext<=7;
+    const _alertOverdue=_daysNext!==null&&_daysNext<0;
+    // Upload reminder: last tx date vs interval
+    const _lastTxDate=txs.length?txs.reduce((m,t)=>t.txDate>m?t.txDate:m,""):null;
+    const _intervalDays=(PAYMENT_MODES[_curMode]?.months||12)*30;
+    const _daysSinceLastTx=_lastTxDate?Math.floor((Date.now()-new Date(_lastTxDate).getTime())/(1000*60*60*24)):null;
+    const _needsUpload=_curMode!=="annual"&&_daysSinceLastTx!==null&&_daysSinceLastTx>=_intervalDays*0.8;
+
+    html+=`<div class="sec-title">💳 Payment Schedule</div>
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Current Mode · Year ${_policyYr}</div>
+          <div style="font-size:22px;font-weight:900;color:var(--gold);">${_modeLabel}</div>
+          <div style="font-size:13px;color:var(--dim);margin-top:2px;">${$f(_installment)} per payment · ${$f(c.annualPremium)}/yr</div>
+        </div>
+        ${_nextDate?`<div style="text-align:right;">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Next Payment</div>
+          <div style="font-size:16px;font-weight:800;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--text)"};">${fmtDate(_nextDate.toISOString().split("T")[0])}</div>
+          <div style="font-size:12px;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--dim)"};">${_alertOverdue?"Overdue by "+Math.abs(_daysNext)+"d":_daysNext===0?"Due today":_daysNext+" days away"}</div>
+        </div>`:""}
+      </div>
+      ${_alertOverdue?`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px;">⚠️ Payment appears overdue — please check with client.</div>`:""}
+      ${_alertSoon&&!_alertOverdue?`<div style="background:rgba(245,158,11,0.08);border:1px solid var(--gold-border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--gold-l);margin-bottom:12px;">🔔 Next payment due in ${_daysNext===0?"today":_daysNext+" day"+(_daysNext===1?"":"s")} — ${$f(_installment)} ${_modeLabel}.</div>`:""}
+      ${_needsUpload?`<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:#67e8f9;margin-bottom:12px;">📤 Time to upload transaction history — last upload was ${_daysSinceLastTx} days ago.</div>`:""}
+      <div style="border-top:1px solid var(--faint);padding-top:14px;margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Mode History</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${_hist.map((h,i)=>{
+            const nextEntry=_hist[i+1];
+            const yearRange=nextEntry?`Year ${h.effectiveYear}–${nextEntry.effectiveYear-1}`:`Year ${h.effectiveYear}+`;
+            const isCurrent=!nextEntry||nextEntry.effectiveYear>_policyYr;
+            return`<div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:10px;height:10px;border-radius:50%;background:${isCurrent?"var(--gold)":"var(--dim)"};flex-shrink:0;"></div>
+              <div style="font-size:13px;${isCurrent?"font-weight:700;color:var(--gold-l)":"color:var(--dim)"};">${yearRange}: <strong>${PAYMENT_MODES[h.mode]?.label||h.mode}</strong> — ${$f(getInstallment(c.annualPremium,h.mode))}/payment${isCurrent?" <span style=\"font-size:10px;background:rgba(245,158,11,0.15);color:var(--gold);border-radius:4px;padding:1px 6px;\">CURRENT</span>":""}</div>
+              ${h.effectiveYear>1?`<button onclick="removePaymentMode('${clientId}',${h.effectiveYear})" style="font-size:10px;padding:2px 6px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);color:#fca5a5;cursor:pointer;margin-left:auto;">✕</button>`:""}
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--faint);padding-top:14px;">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px;">Add / update mode change:</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:var(--dim);">From Year</span>
+            <input type="number" id="pmYear-${clientId}" min="1" max="30" value="${_policyYr+1}" class="inp" style="width:70px;padding:6px 10px;"/>
+          </div>
+          <select id="pmMode-${clientId}" class="sel" style="flex:1;min-width:140px;">
+            ${Object.entries(PAYMENT_MODES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join("")}
+          </select>
+          <button onclick="savePaymentMode('${clientId}')" class="btn-pri" style="padding:8px 18px;white-space:nowrap;">💾 Save</button>
+        </div>
+        <div id="pmErr-${clientId}" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
+      </div>
+    </div>`;
+  }
 
   if(!hasPrices&&hasTxs){
     html+=`<div class="card" style="border-color:rgba(245,158,11,0.3);text-align:center;padding:24px;">
