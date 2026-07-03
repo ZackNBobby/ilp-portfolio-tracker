@@ -2116,7 +2116,13 @@ function renderClientDetail(clientId){
     const _lastTxDate=txs.length?txs.reduce((m,t)=>t.txDate>m?t.txDate:m,""):null;
     const _intervalDays=(PAYMENT_MODES[_curMode]?.months||12)*30;
     const _daysSinceLastTx=_lastTxDate?Math.floor((Date.now()-new Date(_lastTxDate).getTime())/(1000*60*60*24)):null;
-    const _needsUpload=_curMode!=="annual"&&_daysSinceLastTx!==null&&_daysSinceLastTx>=_intervalDays*0.8;
+    // Only remind after at least one payment under the current mode has actually occurred
+    const _start=c.startDate?new Date(c.startDate):null;
+    const _modeAnniv=_start?new Date(_start.getFullYear()+(_modeEffYr-1),_start.getMonth(),_start.getDate()):null;
+    const _modeIntMonths=PAYMENT_MODES[_curMode]?.months||12;
+    const _firstModePayment=_modeAnniv?new Date(_modeAnniv.getFullYear(),_modeAnniv.getMonth()+_modeIntMonths,_modeAnniv.getDate()):null;
+    const _modeHasFired=_firstModePayment&&_firstModePayment<=new Date();
+    const _needsUpload=_modeHasFired&&_daysSinceLastTx!==null&&_daysSinceLastTx>=_intervalDays*0.8;
     html+=`<div class="card" style="margin-bottom:14px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
         <div>
