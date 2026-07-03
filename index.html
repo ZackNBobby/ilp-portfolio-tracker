@@ -741,6 +741,26 @@ body{
   <div class="content" id="app"></div>
 </div>
 
+<!-- Edit Client Info Modal -->
+<div id="editClientModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9000;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+  <div style="background:#07101e;border:1px solid var(--gold-border);border-radius:20px;padding:32px 28px;max-width:400px;width:92%;box-shadow:0 8px 60px rgba(0,0,0,0.8);">
+    <div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:20px;">🔐 Confidential Client Info</div>
+    <div style="margin-bottom:14px;">
+      <label class="lbl">NRIC</label>
+      <input class="inp" id="ecNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;"/>
+    </div>
+    <div style="margin-bottom:20px;">
+      <label class="lbl">Date of Birth</label>
+      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10"/>
+    </div>
+    <div id="ecErr" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-pri" style="flex:1;" onclick="saveEditClientInfo(currentClientId)">💾 Save</button>
+      <button class="btn-sec" onclick="closeEditClientInfo()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Presentation overlay -->
 <div class="present-overlay" id="presentOverlay">
   <button class="present-close" onclick="closePresent()">✕ Exit Presentation</button>
@@ -909,6 +929,20 @@ const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const todayStr=()=>{const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");};
 const fmtDate=s=>{if(!s)return"";const[y,m,d]=s.split("-");return`${d}/${m}/${y}`;};
+function getAge(dob){
+  if(!dob)return null;
+  const today=new Date(),d=new Date(dob);
+  let age=today.getFullYear()-d.getFullYear();
+  if(today.getMonth()<d.getMonth()||(today.getMonth()===d.getMonth()&&today.getDate()<d.getDate()))age--;
+  return age;
+}
+function getDaysToBirthday(dob){
+  if(!dob)return null;
+  const today=new Date(),d=new Date(dob);
+  let next=new Date(today.getFullYear(),d.getMonth(),d.getDate());
+  if(next<=today)next=new Date(today.getFullYear()+1,d.getMonth(),d.getDate());
+  return Math.ceil((next-today)/(1000*60*60*24));
+}
 
 function showToast(msg,dur=3000){
   const t=document.getElementById("toast");
@@ -1209,6 +1243,9 @@ async function parseExcelFile(file){
 
 // ── Firestore ──
 async function saveClient(obj){return await addDoc(collection(db,"clients"),obj);}
+async function updateClientFields(clientId,fields){
+  await setDoc(doc(db,"clients",clientId),fields,{merge:true});
+}
 async function removeClient(fid){
   await deleteDoc(doc(db,"clients",fid));
   // delete all transactions for this client
@@ -1683,6 +1720,9 @@ function buildClientList(list){
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
     const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
       ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
+    const _cardDaysToB=getDaysToBirthday(c.dob);
+    const bdayBadge=_cardDaysToB!==null&&_cardDaysToB<=30
+      ?"<span style=\"color:#f59e0b;\">🎂 "+(_cardDaysToB===0?"Birthday today!":"Birthday in "+_cardDaysToB+"d")+"</span>":"";
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
@@ -1702,6 +1742,7 @@ function buildClientList(list){
       +"</div>"
       +"<div style=\"display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;\">"
         +(c.policyNo?"<span>📋 "+esc(c.policyNo)+"</span>":"")
+        +(bdayBadge?bdayBadge:"")
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +divIncome
@@ -1731,6 +1772,10 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">Full Name *</label><input class="inp" id="cName" placeholder="Client's Name"/></div>
       <div><label class="lbl">Policy Number</label><input class="inp" id="cPolicy" placeholder="Policy No."/></div>
+    </div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">NRIC (confidential)</label><input class="inp" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;"/></div>
+      <div><label class="lbl">Date of Birth (confidential)</label><input class="inp" id="cDOB" type="text" placeholder="DD-MM-YYYY" maxlength="10"/></div>
     </div>
     <div class="g2" style="margin-bottom:12px;">
       <div>
@@ -1897,6 +1942,9 @@ window.doAddClient=async()=>{
   const term=document.getElementById("cTerm")?.value||"";
   const ap=document.getElementById("cAP")?.value||"";
   const notes=document.getElementById("cNotes")?.value.trim()||"";
+  const nric=document.getElementById("cNRIC")?.value.trim()||"";
+  const rawDob=document.getElementById("cDOB")?.value.trim()||"";
+  const dob=rawDob?parseDate(rawDob):"";
   const isDivProduct=product==="Invest Flex Vantage"||product==="Invest Flex TriVantage";
   const dividendRate=isDivProduct?parseFloat(document.getElementById("cDivRate")?.value||"6")||6:null;
   const errEl=document.getElementById("addClientErr");
@@ -1912,6 +1960,8 @@ window.doAddClient=async()=>{
     uid:OWNER,name,policyNo,product,strategy:getStrategy(product),
     startDate,term:parseInt(term),annualPremium:parseFloat(ap),
     ...(dividendRate!==null?{dividendRate}:{}),
+    ...(nric?{nric}:{}),
+    ...(dob?{dob}:{}),
     funds,notes,createdAt:new Date().toISOString()
   };
   try{
@@ -1996,7 +2046,14 @@ function renderClientDetail(clientId){
   }
 
   // Info strip
+  const _age=getAge(c.dob);
+  const _daysToB=getDaysToBirthday(c.dob);
+  const _bdaySoon=_daysToB!==null&&_daysToB<=30;
   html+=`<div class="card" style="margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--dim);">Press <kbd style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to reveal confidential fields</div>
+      <button onclick="openEditClientInfo('${clientId}')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);color:var(--gold);cursor:pointer;">✏️ Edit Info</button>
+    </div>
     <div class="g3" style="margin-bottom:0;">
       <div><div class="stat-lbl">Policy No.</div><div style="font-weight:700;">${esc(c.policyNo||"—")}</div></div>
       <div><div class="stat-lbl">Started</div><div style="font-weight:700;">${fmtDate(c.startDate)}</div></div>
@@ -2005,6 +2062,12 @@ function renderClientDetail(clientId){
       <div><div class="stat-lbl">Monthly Premium</div><div style="font-weight:700;">${$f(c.annualPremium/12)}</div></div>
       ${(()=>{const b=getStartupBonus(c.product,c.term,c.annualPremium);return b?`<div><div class="stat-lbl">Startup Bonus</div><div style="font-weight:700;color:var(--gold);">${b.pct}% <span style="font-size:11px;color:var(--dim);">(${b.tier} · ${$f(c.annualPremium*b.pct/100)})</span></div></div>`:"";})()}
       ${strategy==="dividend"?`<div><div class="stat-lbl">Dividend Rate</div><div style="font-weight:700;color:#d8b4fe;">${(c.dividendRate||6).toFixed(1)}% p.a.</div></div>`:""}
+      <div><div class="stat-lbl">NRIC</div><div class="name-blur" style="font-weight:700;font-family:monospace;">${c.nric?esc(c.nric):"—"}</div></div>
+      <div>
+        <div class="stat-lbl">Date of Birth${_bdaySoon?` <span style="color:#f59e0b;font-size:13px;">🎂 ${_daysToB===0?"Today!":"in "+_daysToB+"d"}</span>`:""}</div>
+        <div class="name-blur" style="font-weight:700;">${c.dob?fmtDate(c.dob)+` <span style="font-size:11px;color:var(--dim);">(${_age}y)</span>`:"—"}</div>
+      </div>
+      <div><div class="stat-lbl">Current Age</div><div class="name-blur" style="font-weight:700;">${_age!==null?_age+" years old":"—"}</div></div>
     </div>
   </div>`;
 
@@ -3471,6 +3534,27 @@ window.viewClient=async(id)=>{
   renderAll();window.scrollTo(0,0);
 };
 window.goBack=()=>{tab="dashboard";currentClientId=null;renderAll();window.scrollTo(0,0);};
+window.openEditClientInfo=(clientId)=>{
+  const c=clients.find(x=>x.fid===clientId);if(!c)return;
+  const mo=document.getElementById("editClientModal");
+  document.getElementById("ecNRIC").value=c.nric||"";
+  document.getElementById("ecDOB").value=c.dob?fmtDate(c.dob):"";
+  mo.style.display="flex";
+};
+window.closeEditClientInfo=()=>{document.getElementById("editClientModal").style.display="none";};
+window.saveEditClientInfo=async(clientId)=>{
+  const nric=document.getElementById("ecNRIC").value.trim();
+  const rawDob=document.getElementById("ecDOB").value.trim();
+  const dob=rawDob?parseDate(rawDob):"";
+  const errEl=document.getElementById("ecErr");
+  if(rawDob&&!dob.match(/^\d{4}-\d{2}-\d{2}$/)){errEl.textContent="DOB format: DD-MM-YYYY";errEl.style.display="block";return;}
+  errEl.style.display="none";
+  try{
+    await updateClientFields(clientId,{nric:nric||"",dob:dob||""});
+    showToast("✅ Client info updated.");
+    closeEditClientInfo();
+  }catch(e){errEl.textContent="Error: "+e.message;errEl.style.display="block";}
+};
 window.doDelClient=async(id)=>{
   if(!confirm("Delete this client and ALL their transactions? This cannot be undone."))return;
   await removeClient(id);
