@@ -847,20 +847,23 @@ function getPolicyYear(startDate){
   const diff=(Date.now()-new Date(startDate).getTime())/(1000*60*60*24*365.25);
   return Math.max(1,Math.floor(diff)+1);
 }
-function getCurrentMode(c){
+function getCurrentModeEntry(c){
   const hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?c.paymentModeHistory:[{effectiveYear:1,mode:"annual"}];
   const yr=getPolicyYear(c.startDate);
   const sorted=[...hist].sort((a,b)=>b.effectiveYear-a.effectiveYear);
-  return(sorted.find(h=>h.effectiveYear<=yr)||sorted[sorted.length-1]).mode;
+  return sorted.find(h=>h.effectiveYear<=yr)||sorted[sorted.length-1];
 }
+function getCurrentMode(c){return getCurrentModeEntry(c).mode;}
 function getInstallment(annualPremium,mode){
   return annualPremium/({monthly:12,quarterly:4,"semi-annual":2,annual:1}[mode]||1);
 }
-function getNextPaymentDate(startDate,mode){
+function getNextPaymentDate(startDate,mode,modeEffectiveYear=1){
   if(!startDate)return null;
   const start=new Date(startDate);
   const months=PAYMENT_MODES[mode]?.months||12;
-  let next=new Date(start);
+  // Count payments from the anniversary when this mode began, not from policy day 1
+  const modeStart=new Date(start.getFullYear()+(modeEffectiveYear-1),start.getMonth(),start.getDate());
+  let next=new Date(modeStart);
   const now=new Date();
   while(next<=now){next=new Date(next.getFullYear(),next.getMonth()+months,next.getDate());}
   return next;
@@ -2100,11 +2103,13 @@ function renderClientDetail(clientId){
   // ── Payments tab ──
   if(currentClientTab==="payments"){
     const _hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?[...c.paymentModeHistory].sort((a,b)=>a.effectiveYear-b.effectiveYear):[{effectiveYear:1,mode:"annual"}];
-    const _curMode=getCurrentMode(c);
+    const _curEntry=getCurrentModeEntry(c);
+    const _curMode=_curEntry.mode;
+    const _modeEffYr=_curEntry.effectiveYear;
     const _modeLabel=PAYMENT_MODES[_curMode]?.label||_curMode;
     const _installment=getInstallment(c.annualPremium,_curMode);
     const _policyYr=getPolicyYear(c.startDate);
-    const _nextDate=getNextPaymentDate(c.startDate,_curMode);
+    const _nextDate=getNextPaymentDate(c.startDate,_curMode,_modeEffYr);
     const _daysNext=daysUntil(_nextDate);
     const _alertSoon=_daysNext!==null&&_daysNext<=7;
     const _alertOverdue=_daysNext!==null&&_daysNext<0;
