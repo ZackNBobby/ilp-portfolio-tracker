@@ -747,15 +747,15 @@ body{
     <div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:20px;">🔐 Confidential Client Info</div>
     <div style="margin-bottom:14px;">
       <label class="lbl">NRIC</label>
-      <input class="inp" id="ecNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" onkeydown="if(event.key==='Enter')saveEditClientInfo(currentClientId)"/>
+      <input class="inp" id="ecNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" onkeydown="if(event.key==='Enter')saveEditClientInfo()"/>
     </div>
     <div style="margin-bottom:20px;">
       <label class="lbl">Date of Birth</label>
-      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10" onkeydown="if(event.key==='Enter')saveEditClientInfo(currentClientId)"/>
+      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10" onkeydown="if(event.key==='Enter')saveEditClientInfo()"/>
     </div>
     <div id="ecErr" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
     <div style="display:flex;gap:10px;">
-      <button class="btn-pri" style="flex:1;" onclick="saveEditClientInfo(currentClientId)">💾 Save</button>
+      <button class="btn-pri" style="flex:1;" onclick="saveEditClientInfo()">💾 Save</button>
       <button class="btn-sec" onclick="closeEditClientInfo()">Cancel</button>
     </div>
   </div>
@@ -3537,12 +3537,17 @@ window.goBack=()=>{tab="dashboard";currentClientId=null;renderAll();window.scrol
 window.openEditClientInfo=(clientId)=>{
   const c=clients.find(x=>x.fid===clientId);if(!c)return;
   const mo=document.getElementById("editClientModal");
+  mo.dataset.clientId=clientId;
   document.getElementById("ecNRIC").value=c.nric||"";
   document.getElementById("ecDOB").value=c.dob?fmtDate(c.dob):"";
+  document.getElementById("ecErr").style.display="none";
   mo.style.display="flex";
+  setTimeout(()=>document.getElementById("ecNRIC").focus(),50);
 };
 window.closeEditClientInfo=()=>{document.getElementById("editClientModal").style.display="none";};
-window.saveEditClientInfo=async(clientId)=>{
+window.saveEditClientInfo=async()=>{
+  const clientId=document.getElementById("editClientModal").dataset.clientId;
+  if(!clientId)return;
   const nric=document.getElementById("ecNRIC").value.trim();
   const rawDob=document.getElementById("ecDOB").value.trim();
   const dob=rawDob?parseDate(rawDob):"";
