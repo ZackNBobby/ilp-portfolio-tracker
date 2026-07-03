@@ -747,11 +747,11 @@ body{
     <div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:20px;">🔐 Confidential Client Info</div>
     <div style="margin-bottom:14px;">
       <label class="lbl">NRIC</label>
-      <input class="inp" id="ecNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;"/>
+      <input class="inp" id="ecNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" onkeydown="if(event.key==='Enter')saveEditClientInfo(currentClientId)"/>
     </div>
     <div style="margin-bottom:20px;">
       <label class="lbl">Date of Birth</label>
-      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10"/>
+      <input class="inp" id="ecDOB" placeholder="DD-MM-YYYY" maxlength="10" onkeydown="if(event.key==='Enter')saveEditClientInfo(currentClientId)"/>
     </div>
     <div id="ecErr" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
     <div style="display:flex;gap:10px;">
