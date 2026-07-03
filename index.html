@@ -2093,8 +2093,73 @@ function renderClientDetail(clientId){
   // Sub-tab bar
   html+=`<div class="client-subtab-bar">
     <button class="client-subtab${currentClientTab==="overview"?" active":""}" onclick="setClientTab('overview')">📊 Overview</button>
+    <button class="client-subtab${currentClientTab==="payments"?" active":""}" onclick="setClientTab('payments')">💳 Payments</button>
     <button class="client-subtab${currentClientTab==="notes"?" active":""}" onclick="setClientTab('notes')">📝 Notes</button>
   </div>`;
+
+  // ── Payments tab ──
+  if(currentClientTab==="payments"){
+    const _hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?[...c.paymentModeHistory].sort((a,b)=>a.effectiveYear-b.effectiveYear):[{effectiveYear:1,mode:"annual"}];
+    const _curMode=getCurrentMode(c);
+    const _modeLabel=PAYMENT_MODES[_curMode]?.label||_curMode;
+    const _installment=getInstallment(c.annualPremium,_curMode);
+    const _policyYr=getPolicyYear(c.startDate);
+    const _nextDate=getNextPaymentDate(c.startDate,_curMode);
+    const _daysNext=daysUntil(_nextDate);
+    const _alertSoon=_daysNext!==null&&_daysNext<=7;
+    const _alertOverdue=_daysNext!==null&&_daysNext<0;
+    const _lastTxDate=txs.length?txs.reduce((m,t)=>t.txDate>m?t.txDate:m,""):null;
+    const _intervalDays=(PAYMENT_MODES[_curMode]?.months||12)*30;
+    const _daysSinceLastTx=_lastTxDate?Math.floor((Date.now()-new Date(_lastTxDate).getTime())/(1000*60*60*24)):null;
+    const _needsUpload=_curMode!=="annual"&&_daysSinceLastTx!==null&&_daysSinceLastTx>=_intervalDays*0.8;
+    html+=`<div class="card" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Current Mode · Year ${_policyYr}</div>
+          <div style="font-size:22px;font-weight:900;color:var(--gold);">${_modeLabel}</div>
+          <div style="font-size:13px;color:var(--dim);margin-top:2px;">${$f(_installment)} per payment · ${$f(c.annualPremium)}/yr</div>
+        </div>
+        ${_nextDate?`<div style="text-align:right;">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Next Payment</div>
+          <div style="font-size:16px;font-weight:800;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--text)"};">${fmtDate(_nextDate.toISOString().split("T")[0])}</div>
+          <div style="font-size:12px;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--dim)"};">${_alertOverdue?"Overdue by "+Math.abs(_daysNext)+"d":_daysNext===0?"Due today":_daysNext+" days away"}</div>
+        </div>`:""}
+      </div>
+      ${_alertOverdue?`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px;">⚠️ Payment appears overdue — please check with client.</div>`:""}
+      ${_alertSoon&&!_alertOverdue?`<div style="background:rgba(245,158,11,0.08);border:1px solid var(--gold-border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--gold-l);margin-bottom:12px;">🔔 Next payment due ${_daysNext===0?"today":"in "+_daysNext+" day"+(_daysNext===1?"":"s")} — ${$f(_installment)} ${_modeLabel}.</div>`:""}
+      ${_needsUpload?`<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:#67e8f9;margin-bottom:12px;">📤 Time to upload transaction history — last upload was ${_daysSinceLastTx} days ago.</div>`:""}
+      <div style="border-top:1px solid var(--faint);padding-top:14px;margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Mode History</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${_hist.map((h,i)=>{
+            const nextEntry=_hist[i+1];
+            const yearRange=nextEntry?`Year ${h.effectiveYear}–${nextEntry.effectiveYear-1}`:`Year ${h.effectiveYear}+`;
+            const isCurrent=!nextEntry||nextEntry.effectiveYear>_policyYr;
+            return`<div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:10px;height:10px;border-radius:50%;background:${isCurrent?"var(--gold)":"var(--dim)"};flex-shrink:0;"></div>
+              <div style="font-size:13px;${isCurrent?"font-weight:700;color:var(--gold-l)":"color:var(--dim)"};">${yearRange}: <strong>${PAYMENT_MODES[h.mode]?.label||h.mode}</strong> — ${$f(getInstallment(c.annualPremium,h.mode))}/payment${isCurrent?` <span style="font-size:10px;background:rgba(245,158,11,0.15);color:var(--gold);border-radius:4px;padding:1px 6px;margin-left:4px;">CURRENT</span>`:""}</div>
+              ${h.effectiveYear>1?`<button onclick="removePaymentMode('${clientId}',${h.effectiveYear})" style="font-size:10px;padding:2px 6px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);color:#fca5a5;cursor:pointer;margin-left:auto;">✕</button>`:""}
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--faint);padding-top:14px;">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px;">Add / update mode change:</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:12px;color:var(--dim);">From Year</span>
+            <input type="number" id="pmYear-${clientId}" min="1" max="30" value="${_policyYr+1}" class="inp" style="width:70px;padding:6px 10px;"/>
+          </div>
+          <select id="pmMode-${clientId}" class="sel" style="flex:1;min-width:140px;">
+            ${Object.entries(PAYMENT_MODES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join("")}
+          </select>
+          <button onclick="savePaymentMode('${clientId}')" class="btn-pri" style="padding:8px 18px;white-space:nowrap;">💾 Save</button>
+        </div>
+        <div id="pmErr-${clientId}" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
+      </div>
+    </div>`;
+    return html;
+  }
 
   // ── Notes tab ──
   if(currentClientTab==="notes"){
@@ -2137,72 +2202,6 @@ function renderClientDetail(clientId){
       <div><div class="stat-lbl">Current Age</div><div class="name-blur" style="font-weight:700;">${_age!==null?_age+" years old":"—"}</div></div>
     </div>
   </div>`;
-
-  // ── Payment Schedule ──
-  {
-    const _hist=(c.paymentModeHistory&&c.paymentModeHistory.length)?[...c.paymentModeHistory].sort((a,b)=>a.effectiveYear-b.effectiveYear):[{effectiveYear:1,mode:"annual"}];
-    const _curMode=getCurrentMode(c);
-    const _modeLabel=PAYMENT_MODES[_curMode]?.label||_curMode;
-    const _installment=getInstallment(c.annualPremium,_curMode);
-    const _policyYr=getPolicyYear(c.startDate);
-    const _nextDate=getNextPaymentDate(c.startDate,_curMode);
-    const _daysNext=daysUntil(_nextDate);
-    const _alertSoon=_daysNext!==null&&_daysNext<=7;
-    const _alertOverdue=_daysNext!==null&&_daysNext<0;
-    // Upload reminder: last tx date vs interval
-    const _lastTxDate=txs.length?txs.reduce((m,t)=>t.txDate>m?t.txDate:m,""):null;
-    const _intervalDays=(PAYMENT_MODES[_curMode]?.months||12)*30;
-    const _daysSinceLastTx=_lastTxDate?Math.floor((Date.now()-new Date(_lastTxDate).getTime())/(1000*60*60*24)):null;
-    const _needsUpload=_curMode!=="annual"&&_daysSinceLastTx!==null&&_daysSinceLastTx>=_intervalDays*0.8;
-
-    html+=`<div class="sec-title">💳 Payment Schedule</div>
-    <div class="card" style="margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-        <div>
-          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Current Mode · Year ${_policyYr}</div>
-          <div style="font-size:22px;font-weight:900;color:var(--gold);">${_modeLabel}</div>
-          <div style="font-size:13px;color:var(--dim);margin-top:2px;">${$f(_installment)} per payment · ${$f(c.annualPremium)}/yr</div>
-        </div>
-        ${_nextDate?`<div style="text-align:right;">
-          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Next Payment</div>
-          <div style="font-size:16px;font-weight:800;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--text)"};">${fmtDate(_nextDate.toISOString().split("T")[0])}</div>
-          <div style="font-size:12px;color:${_alertOverdue?"var(--red)":_alertSoon?"var(--gold)":"var(--dim)"};">${_alertOverdue?"Overdue by "+Math.abs(_daysNext)+"d":_daysNext===0?"Due today":_daysNext+" days away"}</div>
-        </div>`:""}
-      </div>
-      ${_alertOverdue?`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:10px 14px;font-size:13px;color:#fca5a5;margin-bottom:12px;">⚠️ Payment appears overdue — please check with client.</div>`:""}
-      ${_alertSoon&&!_alertOverdue?`<div style="background:rgba(245,158,11,0.08);border:1px solid var(--gold-border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--gold-l);margin-bottom:12px;">🔔 Next payment due in ${_daysNext===0?"today":_daysNext+" day"+(_daysNext===1?"":"s")} — ${$f(_installment)} ${_modeLabel}.</div>`:""}
-      ${_needsUpload?`<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.25);border-radius:10px;padding:10px 14px;font-size:13px;color:#67e8f9;margin-bottom:12px;">📤 Time to upload transaction history — last upload was ${_daysSinceLastTx} days ago.</div>`:""}
-      <div style="border-top:1px solid var(--faint);padding-top:14px;margin-bottom:14px;">
-        <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Mode History</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${_hist.map((h,i)=>{
-            const nextEntry=_hist[i+1];
-            const yearRange=nextEntry?`Year ${h.effectiveYear}–${nextEntry.effectiveYear-1}`:`Year ${h.effectiveYear}+`;
-            const isCurrent=!nextEntry||nextEntry.effectiveYear>_policyYr;
-            return`<div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:10px;height:10px;border-radius:50%;background:${isCurrent?"var(--gold)":"var(--dim)"};flex-shrink:0;"></div>
-              <div style="font-size:13px;${isCurrent?"font-weight:700;color:var(--gold-l)":"color:var(--dim)"};">${yearRange}: <strong>${PAYMENT_MODES[h.mode]?.label||h.mode}</strong> — ${$f(getInstallment(c.annualPremium,h.mode))}/payment${isCurrent?" <span style=\"font-size:10px;background:rgba(245,158,11,0.15);color:var(--gold);border-radius:4px;padding:1px 6px;\">CURRENT</span>":""}</div>
-              ${h.effectiveYear>1?`<button onclick="removePaymentMode('${clientId}',${h.effectiveYear})" style="font-size:10px;padding:2px 6px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.06);color:#fca5a5;cursor:pointer;margin-left:auto;">✕</button>`:""}
-            </div>`;
-          }).join("")}
-        </div>
-      </div>
-      <div style="border-top:1px solid var(--faint);padding-top:14px;">
-        <div style="font-size:11px;color:var(--dim);margin-bottom:8px;">Add / update mode change:</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:12px;color:var(--dim);">From Year</span>
-            <input type="number" id="pmYear-${clientId}" min="1" max="30" value="${_policyYr+1}" class="inp" style="width:70px;padding:6px 10px;"/>
-          </div>
-          <select id="pmMode-${clientId}" class="sel" style="flex:1;min-width:140px;">
-            ${Object.entries(PAYMENT_MODES).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join("")}
-          </select>
-          <button onclick="savePaymentMode('${clientId}')" class="btn-pri" style="padding:8px 18px;white-space:nowrap;">💾 Save</button>
-        </div>
-        <div id="pmErr-${clientId}" style="display:none;font-size:12px;color:var(--red);margin-top:6px;"></div>
-      </div>
-    </div>`;
-  }
 
   if(!hasPrices&&hasTxs){
     html+=`<div class="card" style="border-color:rgba(245,158,11,0.3);text-align:center;padding:24px;">
