@@ -1742,7 +1742,7 @@ function buildClientList(list){
           :"")
       +"</div>"
       +"<div style=\"display:flex;gap:16px;font-size:12px;color:var(--dim);flex-wrap:wrap;\">"
-        +(c.policyNo?"<span>📋 "+esc(c.policyNo)+"</span>":"")
+        +(c.policyNo?"<span>📋 <span class=\"name-blur\">"+esc(c.policyNo)+"</span></span>":"")
         +(bdayBadge?bdayBadge:"")
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
@@ -2020,7 +2020,7 @@ function renderClientDetail(clientId){
   <div id="printHeader" style="display:none;padding:0 0 16px;border-bottom:2px solid #e2e8f0;margin-bottom:16px;">
     <div style="font-size:10px;color:#64748b;margin-bottom:4px;">ILP Portfolio Report · Generated ${new Date().toLocaleDateString("en-SG",{day:"2-digit",month:"short",year:"numeric"})}</div>
     <div style="font-size:22px;font-weight:900;">${esc(c.name)}</div>
-    <div style="font-size:12px;color:#64748b;">${esc(c.product)} · Policy ${esc(c.policyNo||"—")} · Since ${fmtDate(c.startDate)}</div>
+    <div style="font-size:12px;color:#64748b;">${esc(c.product)} · Policy <span class="name-blur">${esc(c.policyNo||"—")}</span> · Since ${fmtDate(c.startDate)}</div>
   </div>`;
 
   // Sub-tab bar
@@ -2056,7 +2056,7 @@ function renderClientDetail(clientId){
       <button onclick="openEditClientInfo('${clientId}')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);color:var(--gold);cursor:pointer;">✏️ Edit Info</button>
     </div>
     <div class="g3" style="margin-bottom:0;">
-      <div><div class="stat-lbl">Policy No.</div><div style="font-weight:700;">${esc(c.policyNo||"—")}</div></div>
+      <div><div class="stat-lbl">Policy No.</div><div class="name-blur" style="font-weight:700;">${esc(c.policyNo||"—")}</div></div>
       <div><div class="stat-lbl">Started</div><div style="font-weight:700;">${fmtDate(c.startDate)}</div></div>
       <div><div class="stat-lbl">Term</div><div style="font-weight:700;">${c.term} years</div></div>
       <div><div class="stat-lbl">Annual Premium</div><div style="font-weight:700;color:var(--gold);">${$f(c.annualPremium)}</div></div>
