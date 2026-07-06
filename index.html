@@ -902,6 +902,8 @@ let currentClientTab="overview"; // "overview" | "notes"
 let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest first
 let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
+// Fund switch state
+let swOutFund="",swInFund="",swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
 let _blurTimer=null;
 let unsubs=[],charts={};
 
@@ -1530,7 +1532,7 @@ function startListeners(){
 // ── Rendering ──
 function renderAll(){renderTabs();renderPage();}
 function renderTabs(){
-  const TABS=[["dashboard","🏠 Clients"],["prices","💹 Fund Prices"],["calc","🧮 Calculator"],["addclient","+ Add Client"]];
+  const TABS=[["dashboard","🏠 Clients"],["prices","💹 Fund Prices"],["switch","🔄 Fund Switch"],["calc","🧮 Calculator"],["addclient","+ Add Client"]];
   const activeTab=tab==="client"?"dashboard":tab;
   document.getElementById("tabBar").innerHTML=
     TABS.map(([k,v])=>`<button class="tab-btn${activeTab===k?" active":""}" onclick="setTab('${k}')">${v}</button>`).join("");
@@ -1546,6 +1548,7 @@ function renderPage(){
   if(tab==="dashboard")el.innerHTML=renderDashboard();
   else if(tab==="prices")el.innerHTML=renderPrices();
   else if(tab==="calc"){el.innerHTML=renderCalculator();setTimeout(()=>drawCalcChart(),60);}
+  else if(tab==="switch")el.innerHTML=renderFundSwitch();
   else if(tab==="addclient")el.innerHTML=renderAddClientForm();
   else if(tab==="client"&&currentClientId){el.innerHTML=renderClientDetail(currentClientId);setTimeout(()=>initCharts(currentClientId),50);}
   else{tab="dashboard";el.innerHTML=renderDashboard();}
@@ -1829,6 +1832,151 @@ window.filterClients=q=>{
 
 // ── Add Client Form ──
 let pendingClientTxs=[];
+
+// ── Fund Switch ──
+function renderFundSwitch(){
+  const fundList=Object.keys(fundPrices).sort();
+  let html=`<div class="sec-title">🔄 Fund Switch</div>`;
+
+  // ── Config card ──
+  html+=`<div class="card card-gold" style="margin-bottom:16px;">
+    <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select the fund to switch out of, the destination fund, and the % of each client's holding to move. Then scan to find all matching clients.</div>
+    <div class="g2" style="margin-bottom:12px;">
+      <div>
+        <label class="lbl">Switch OUT of</label>
+        <select class="sel" id="swOutSel">
+          <option value="">-- Select fund --</option>
+          ${fundList.map(f=>`<option value="${f}"${swOutFund===f?" selected":""}>${f}</option>`).join("")}
+        </select>
+      </div>
+      <div>
+        <label class="lbl">Switch INTO</label>
+        <select class="sel" id="swInSel">
+          <option value="">-- Select fund --</option>
+          ${fundList.map(f=>`<option value="${f}"${swInFund===f?" selected":""}>${f}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+      <div>
+        <label class="lbl">Switch % (of that fund's current value)</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" class="inp" id="swPctIn" min="1" max="100" value="${swPct}" style="width:88px;"/>
+          <span style="color:var(--dim);font-size:13px;">% of fund value</span>
+        </div>
+      </div>
+    </div>
+    <button class="btn-pri" id="swFindBtn" onclick="doFindSwitchClients()">🔍 Find Matching Clients</button>
+    ${swScanned&&swResults.length===0?`<div style="margin-top:12px;font-size:13px;color:var(--dim);">No clients currently hold <strong style="color:var(--text);">${esc(swOutFund)}</strong> with a known value.</div>`:""}
+  </div>`;
+
+  if(!swScanned||swResults.length===0)return html;
+
+  // ── Client list ──
+  const selCount=swResults.filter(r=>swSelected.has(r.cid)).length;
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+    <div class="sec-title" style="margin:0;">Clients Holding This Fund <span style="font-size:12px;font-weight:400;color:var(--dim);" id="swCount">(${selCount} of ${swResults.length} selected)</span></div>
+    <div style="display:flex;gap:6px;">
+      <button onclick="swSelectAll(true)" class="btn-sec" style="font-size:12px;padding:5px 12px;">✅ Select All</button>
+      <button onclick="swSelectAll(false)" class="btn-sec" style="font-size:12px;padding:5px 12px;">⬜ Deselect All</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px;padding:12px;">
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${swResults.map(r=>{
+        const on=swSelected.has(r.cid);
+        return`<div id="swRow-${r.cid}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid ${on?"var(--gold-border)":"rgba(255,255,255,0.06)"};">
+          <input type="checkbox" ${on?"checked":""} onchange="swToggle('${r.cid}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold);flex-shrink:0;"/>
+          <div style="flex:1;min-width:0;">
+            <div class="name-blur" style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:1px;">Fund value: <strong style="color:var(--text);">${$f(r.val)}</strong> → Switch out: <strong style="color:var(--gold);">${$f(r.amt)}</strong> · Remaining: ${$f(r.val-r.amt)}</div>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+
+  // ── Summary (only when at least one selected) ──
+  const sel=swResults.filter(r=>swSelected.has(r.cid));
+  if(sel.length===0){html+=`<div style="font-size:13px;color:var(--dim);text-align:center;padding:16px;">Select at least one client to generate the switch summary.</div>`;return html;}
+  const totalOut=sel.reduce((s,r)=>s+r.amt,0);
+  html+=`<div class="sec-title">📋 Switch Summary</div>
+  <div class="card" style="margin-bottom:8px;">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--faint);">
+      <div><div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Switch Out</div><div style="font-weight:700;color:var(--red-l,#fca5a5);font-size:13px;">${esc(swOutFund)}</div></div>
+      <div style="display:flex;align-items:center;font-size:18px;color:var(--gold);">→</div>
+      <div><div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Switch Into</div><div style="font-weight:700;color:var(--green);font-size:13px;">${esc(swInFund)}</div></div>
+      <div style="margin-left:auto;text-align:right;">
+        <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Total Switching</div>
+        <div style="font-weight:900;color:var(--gold);font-size:18px;">${$f(totalOut)}</div>
+        <div style="font-size:11px;color:var(--dim);">${sel.length} client${sel.length===1?"":"s"} · ${swPct}% per holding</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">Client</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">Policy No.</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--dim);font-weight:600;">Fund Value</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--dim);font-weight:600;">Switch Out (${swPct}%)</th>
+            <th style="text-align:right;padding:6px 10px;color:var(--dim);font-weight:600;">Remaining</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sel.map(r=>`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td class="name-blur" style="padding:7px 10px;font-weight:600;">${esc(r.name)}</td>
+            <td class="name-blur" style="padding:7px 10px;color:var(--dim);">${esc(r.policyNo||"—")}</td>
+            <td style="padding:7px 10px;text-align:right;">${$f(r.val)}</td>
+            <td style="padding:7px 10px;text-align:right;font-weight:700;color:var(--gold);">${$f(r.amt)}</td>
+            <td style="padding:7px 10px;text-align:right;color:var(--dim);">${$f(r.val-r.amt)}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--dim);margin-bottom:24px;">Values based on current fund prices. Upload the Income fund switch form here to auto-fill — coming soon.</div>`;
+
+  return html;
+}
+
+window.doFindSwitchClients=async()=>{
+  const out=document.getElementById("swOutSel")?.value||"";
+  const into=document.getElementById("swInSel")?.value||"";
+  const pct=parseFloat(document.getElementById("swPctIn")?.value)||20;
+  if(!out){showToast("⚠️ Select a fund to switch out of.");return;}
+  if(!into){showToast("⚠️ Select a fund to switch into.");return;}
+  if(out===into){showToast("⚠️ Switch-out and switch-in funds must be different.");return;}
+  swOutFund=out;swInFund=into;swPct=pct;swResults=[];swSelected=new Set();swScanned=false;
+  const btn=document.getElementById("swFindBtn");
+  if(btn){btn.textContent="⏳ Scanning…";btn.disabled=true;}
+  const toLoad=clients.filter(c=>!clientTxs[c.fid]);
+  if(toLoad.length>0)await Promise.all(toLoad.map(c=>loadClientTxs(c.fid)));
+  const res=[];
+  for(const c of clients){
+    const txs=clientTxs[c.fid]||[];if(!txs.length)continue;
+    const fd=calcPortfolio(txs)[out];
+    if(!fd||fd.netUnits<=0)continue;
+    const price=fundPrices[out]||0;if(!price)continue;
+    const val=fd.netUnits*price;
+    res.push({cid:c.fid,name:c.name,policyNo:c.policyNo||"",val,amt:val*pct/100});
+    swSelected.add(c.fid);
+  }
+  res.sort((a,b)=>b.val-a.val);
+  swResults=res;swScanned=true;
+  renderPage();
+};
+window.swToggle=(id,checked)=>{
+  checked?swSelected.add(id):swSelected.delete(id);
+  const row=document.getElementById("swRow-"+id);
+  if(row)row.style.borderColor=checked?"var(--gold-border)":"rgba(255,255,255,0.06)";
+  const ct=document.getElementById("swCount");
+  if(ct)ct.textContent=`(${swResults.filter(r=>swSelected.has(r.cid)).length} of ${swResults.length} selected)`;
+};
+window.swSelectAll=(all)=>{
+  swResults.forEach(r=>all?swSelected.add(r.cid):swSelected.delete(r.cid));
+  renderPage();
+};
 
 function renderAddClientForm(){
   return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
