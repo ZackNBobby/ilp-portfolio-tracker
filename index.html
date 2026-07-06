@@ -1840,34 +1840,29 @@ function renderFundSwitch(){
 
   // ── Config card ──
   html+=`<div class="card card-gold" style="margin-bottom:16px;">
-    <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select the fund to switch out of, the destination fund, and the % of each client's holding to move. Then scan to find all matching clients.</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select both funds and the % — clients will appear automatically.</div>
     <div class="g2" style="margin-bottom:12px;">
       <div>
         <label class="lbl">Switch OUT of</label>
-        <select class="sel" id="swOutSel">
+        <select class="sel" id="swOutSel" onchange="onSwFundChange()">
           <option value="">-- Select fund --</option>
           ${fundList.map(f=>`<option value="${f}"${swOutFund===f?" selected":""}>${f}</option>`).join("")}
         </select>
       </div>
       <div>
         <label class="lbl">Switch INTO</label>
-        <select class="sel" id="swInSel">
+        <select class="sel" id="swInSel" onchange="onSwFundChange()">
           <option value="">-- Select fund --</option>
           ${fundList.map(f=>`<option value="${f}"${swInFund===f?" selected":""}>${f}</option>`).join("")}
         </select>
       </div>
     </div>
-    <div style="margin-bottom:16px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
-      <div>
-        <label class="lbl">Switch % (of that fund's current value)</label>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="number" class="inp" id="swPctIn" min="1" max="100" value="${swPct}" style="width:88px;"/>
-          <span style="color:var(--dim);font-size:13px;">% of fund value</span>
-        </div>
-      </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label class="lbl" style="margin:0;white-space:nowrap;">Switch %</label>
+      <input type="number" class="inp" id="swPctIn" min="1" max="100" value="${swPct}" style="width:88px;" oninput="onSwPctChange(this.value)"/>
+      <span style="color:var(--dim);font-size:13px;">% of fund value</span>
+      ${swScanned&&swResults.length===0?`<span style="font-size:12px;color:var(--dim);margin-left:8px;">No clients hold <strong>${esc(swOutFund)}</strong> with a known price.</span>`:""}
     </div>
-    <button class="btn-pri" id="swFindBtn" onclick="doFindSwitchClients()">🔍 Find Matching Clients</button>
-    ${swScanned&&swResults.length===0?`<div style="margin-top:12px;font-size:13px;color:var(--dim);">No clients currently hold <strong style="color:var(--text);">${esc(swOutFund)}</strong> with a known value.</div>`:""}
   </div>`;
 
   if(!swScanned||swResults.length===0)return html;
@@ -1941,15 +1936,10 @@ function renderFundSwitch(){
 }
 
 window.doFindSwitchClients=async()=>{
-  const out=document.getElementById("swOutSel")?.value||"";
-  const into=document.getElementById("swInSel")?.value||"";
-  const pct=parseFloat(document.getElementById("swPctIn")?.value)||20;
-  if(!out){showToast("⚠️ Select a fund to switch out of.");return;}
-  if(!into){showToast("⚠️ Select a fund to switch into.");return;}
-  if(out===into){showToast("⚠️ Switch-out and switch-in funds must be different.");return;}
+  const out=swOutFund||document.getElementById("swOutSel")?.value||"";
+  const into=swInFund||document.getElementById("swInSel")?.value||"";
+  const pct=swPct||parseFloat(document.getElementById("swPctIn")?.value)||20;
   swOutFund=out;swInFund=into;swPct=pct;swResults=[];swSelected=new Set();swScanned=false;
-  const btn=document.getElementById("swFindBtn");
-  if(btn){btn.textContent="⏳ Scanning…";btn.disabled=true;}
   const toLoad=clients.filter(c=>!clientTxs[c.fid]);
   if(toLoad.length>0)await Promise.all(toLoad.map(c=>loadClientTxs(c.fid)));
   const res=[];
@@ -1975,6 +1965,22 @@ window.swToggle=(id,checked)=>{
 };
 window.swSelectAll=(all)=>{
   swResults.forEach(r=>all?swSelected.add(r.cid):swSelected.delete(r.cid));
+  renderPage();
+};
+window.onSwFundChange=()=>{
+  const out=document.getElementById("swOutSel")?.value||"";
+  const into=document.getElementById("swInSel")?.value||"";
+  if(!out||!into||out===into){
+    swOutFund=out;swInFund=into;swResults=[];swSelected=new Set();swScanned=false;
+    renderPage();return;
+  }
+  doFindSwitchClients();
+};
+window.onSwPctChange=(val)=>{
+  const p=Math.min(100,Math.max(1,parseFloat(val)||swPct));
+  swPct=p;
+  // Recalculate amounts in-place — no rescan needed
+  swResults.forEach(r=>{r.amt=r.val*p/100;});
   renderPage();
 };
 
