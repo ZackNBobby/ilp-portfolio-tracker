@@ -1880,11 +1880,26 @@ function renderFundSwitch(){
     <div style="display:flex;flex-direction:column;gap:6px;">
       ${swResults.map(r=>{
         const on=swSelected.has(r.cid);
-        return`<div id="swRow-${r.cid}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid ${on?"var(--gold-border)":"rgba(255,255,255,0.06)"};">
+        const le=r.lastEntry;
+        const leLabel=le?(le.type==="switch_in"?"Last switched in":"Last premium"):"";
+        const leDate=le?fmtDate(le.date):"";
+        const lePrice=le?`$${le.price.toFixed(4)}`:"";
+        const curPrice=fundPrices[swOutFund]||0;
+        const leChg=le&&le.chgPct!=null?le.chgPct:null;
+        const leColor=leChg===null?"var(--dim)":leChg>=0?"var(--green)":"var(--red)";
+        const leSign=leChg===null?"":leChg>=0?"+":"";
+        return`<div id="swRow-${r.cid}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid ${on?"var(--gold-border)":"rgba(255,255,255,0.06)"};">
           <input type="checkbox" ${on?"checked":""} onchange="swToggle('${r.cid}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold);flex-shrink:0;"/>
           <div style="flex:1;min-width:0;">
             <div class="name-blur" style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</div>
-            <div style="font-size:11px;color:var(--dim);margin-top:1px;">Fund value: <strong style="color:var(--text);">${$f(r.val)}</strong> → Switch out: <strong style="color:var(--gold);">${$f(r.amt)}</strong> · Remaining: ${$f(r.val-r.amt)}</div>
+            <div style="font-size:11px;color:var(--dim);margin-top:2px;">Fund value: <strong style="color:var(--text);">${$f(r.val)}</strong> → Switch out: <strong style="color:var(--gold);">${$f(r.amt)}</strong> · Remaining: ${$f(r.val-r.amt)}</div>
+            ${le?`<div style="font-size:11px;margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="color:var(--dim);">${leLabel}:</span>
+              <span style="color:var(--text);">${leDate} @ ${lePrice}</span>
+              <span style="color:var(--dim);">→ Now $${curPrice.toFixed(4)}</span>
+              <span style="font-weight:700;color:${leColor};">${leSign}${leChg!==null?leChg.toFixed(1)+"%":"—"}</span>
+              ${leChg!==null?`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:${leChg>=0?"rgba(34,197,94,0.12)":"rgba(239,68,68,0.12)"};color:${leColor};">${leChg>=0?"▲ In profit":"▼ At loss"}</span>`:""}
+            </div>`:""}
           </div>
         </div>`;
       }).join("")}
@@ -1949,7 +1964,15 @@ window.doFindSwitchClients=async()=>{
     if(!fd||fd.netUnits<=0)continue;
     const price=fundPrices[out]||0;if(!price)continue;
     const val=fd.netUnits*price;
-    res.push({cid:c.fid,name:c.name,policyNo:c.policyNo||"",val,amt:val*pct/100});
+    // Determine the most recent entry event for the switch-out fund
+    const ep=calcEntryPrices(txs)[out]||{premiums:[],switchIns:[],avgCost:0,changePct:null};
+    const lastSI=ep.switchIns.length?ep.switchIns[ep.switchIns.length-1]:null;
+    const lastPrem=ep.premiums.length?ep.premiums[ep.premiums.length-1]:null;
+    let lastEntry=null;
+    if(lastSI&&lastPrem){lastEntry=lastSI.date>=lastPrem.date?{...lastSI,type:"switch_in"}:{...lastPrem,type:"premium"};}
+    else if(lastSI){lastEntry={...lastSI,type:"switch_in"};}
+    else if(lastPrem){lastEntry={...lastPrem,type:"premium"};}
+    res.push({cid:c.fid,name:c.name,policyNo:c.policyNo||"",val,amt:val*pct/100,lastEntry,avgCost:ep.avgCost,changePct:ep.changePct});
     swSelected.add(c.fid);
   }
   res.sort((a,b)=>b.val-a.val);
