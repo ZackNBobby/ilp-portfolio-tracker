@@ -1951,9 +1951,9 @@ function renderFundSwitch(){
 }
 
 window.doFindSwitchClients=async()=>{
-  const out=swOutFund||document.getElementById("swOutSel")?.value||"";
-  const into=swInFund||document.getElementById("swInSel")?.value||"";
-  const pct=swPct||parseFloat(document.getElementById("swPctIn")?.value)||20;
+  const out=document.getElementById("swOutSel")?.value||swOutFund||"";
+  const into=document.getElementById("swInSel")?.value||swInFund||"";
+  const pct=parseFloat(document.getElementById("swPctIn")?.value)||swPct||20;
   swOutFund=out;swInFund=into;swPct=pct;swResults=[];swSelected=new Set();swScanned=false;
   const toLoad=clients.filter(c=>!clientTxs[c.fid]);
   if(toLoad.length>0)await Promise.all(toLoad.map(c=>loadClientTxs(c.fid)));
