@@ -2007,7 +2007,12 @@ window.doFindSwitchClients=async()=>{
   renderPage();
 };
 window.swToggle=(id,checked)=>{
+  const wasZero=swSelected.size===0;
   checked?swSelected.add(id):swSelected.delete(id);
+  const isZero=swSelected.size===0;
+  // If summary visibility changed (0↔1), do a full re-render so the summary appears/disappears
+  if(wasZero!==isZero){renderPage();return;}
+  // Otherwise patch inline for performance
   const row=document.getElementById("swRow-"+id);
   if(row)row.style.borderColor=checked?"var(--gold-border)":"rgba(255,255,255,0.06)";
   const ct=document.getElementById("swCount");
