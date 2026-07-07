@@ -6,6 +6,7 @@
 <title>ILP Portfolio Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 button,input,select,textarea{font-family:inherit;}
@@ -803,6 +804,7 @@ body{
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import{getAuth,signInWithPopup,GoogleAuthProvider,onAuthStateChanged,signOut as fbSignOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getStorage,ref as sRef,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 
 // ══════════════════════════════════════
 // 🔧 FIREBASE CONFIG — Replace with your project config from console.firebase.google.com
@@ -820,6 +822,7 @@ const FB={
 const fbApp=initializeApp(FB);
 const db=getFirestore(fbApp);
 const auth=getAuth(fbApp);
+const storage=getStorage(fbApp);
 let currentUser=null;
 const OWNER="ilp_owner";
 
@@ -904,6 +907,7 @@ let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
 // Fund switch state
 let swOutFund="",swInFund="",swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
+let swTemplatePdfBytes=null; // cached template bytes
 let _blurTimer=null;
 let unsubs=[],charts={};
 
@@ -1838,6 +1842,24 @@ function renderFundSwitch(){
   const fundList=Object.keys(fundPrices).sort();
   let html=`<div class="sec-title">🔄 Fund Switch</div>`;
 
+  // ── PDF Template card ──
+  const tmplReady=!!localStorage.getItem("swTemplatePath");
+  html+=`<div class="card" style="margin-bottom:16px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:180px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:4px;">📄 Fund Switch Form Template</div>
+      ${tmplReady
+        ?`<div style="font-size:12px;color:var(--green);">✅ Template loaded — ready to generate filled forms</div>`
+        :`<div style="font-size:12px;color:var(--dim);">Upload the blank Income fund switch form (PDF) once. It will auto-fill per client.</div>`}
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <label style="cursor:pointer;">
+        <input type="file" accept=".pdf" style="display:none;" onchange="uploadSwTemplate(this.files[0])"/>
+        <span class="btn-sec" style="font-size:12px;padding:7px 14px;display:inline-block;cursor:pointer;">${tmplReady?"🔄 Re-upload":"📤 Upload Template"}</span>
+      </label>
+      ${tmplReady?`<button class="btn-sec" style="font-size:12px;padding:7px 14px;" onclick="inspectSwTemplate()">🔍 Inspect Fields</button>`:""}
+    </div>
+  </div>`;
+
   // ── Config card ──
   html+=`<div class="card card-gold" style="margin-bottom:16px;">
     <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select both funds and the % — clients will appear automatically.</div>
@@ -1945,7 +1967,12 @@ function renderFundSwitch(){
       </table>
     </div>
   </div>
-  <div style="font-size:11px;color:var(--dim);margin-bottom:24px;">Values based on current fund prices. Upload the Income fund switch form here to auto-fill — coming soon.</div>`;
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+    ${tmplReady
+      ?`<button onclick="generateFundSwitchForms()" style="background:linear-gradient(135deg,var(--gold-d),var(--gold));color:#000;border:none;border-radius:10px;padding:11px 26px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.02em;">🖨 Generate Forms (${sel.length} client${sel.length===1?"":"s"})</button>`
+      :`<button disabled style="background:var(--faint);color:var(--dim);border:none;border-radius:10px;padding:11px 26px;font-size:14px;font-weight:700;cursor:not-allowed;">🖨 Generate Forms — upload template first</button>`}
+    <span style="font-size:11px;color:var(--dim);">Values based on current fund prices. One PDF per client, ready to send for signing.</span>
+  </div>`;
 
   return html;
 }
@@ -2006,6 +2033,187 @@ window.onSwPctChange=(val)=>{
   swResults.forEach(r=>{r.amt=r.val*p/100;});
   renderPage();
 };
+
+// ══════════════════════════════════════
+// 📄 Fund Switch PDF Auto-Fill
+// ══════════════════════════════════════
+
+window.uploadSwTemplate=async(file)=>{
+  if(!file)return;
+  showToast("Uploading template…");
+  const buf=await file.arrayBuffer();
+  swTemplatePdfBytes=new Uint8Array(buf);
+  const path=`${OWNER}/templates/fund-switch-form.pdf`;
+  const storageRef=sRef(storage,path);
+  await uploadBytes(storageRef,buf);
+  localStorage.setItem("swTemplatePath",path);
+  showToast("Template saved ✅");
+  renderPage();
+};
+
+window.loadSwTemplate=async()=>{
+  if(swTemplatePdfBytes)return swTemplatePdfBytes;
+  const path=localStorage.getItem("swTemplatePath");
+  if(!path)return null;
+  try{
+    const url=await getDownloadURL(sRef(storage,path));
+    const res=await fetch(url);
+    const bytes=new Uint8Array(await res.arrayBuffer());
+    swTemplatePdfBytes=bytes;
+    return bytes;
+  }catch(e){console.error("Template load failed:",e);return null;}
+};
+
+window.inspectSwTemplate=async()=>{
+  const bytes=await loadSwTemplate();
+  if(!bytes){showToast("No template found — upload first.");return;}
+  const{PDFDocument}=PDFLib;
+  let pdfDoc;
+  try{pdfDoc=await PDFDocument.load(bytes,{ignoreEncryption:true});}
+  catch(e){showToast("Could not read PDF: "+e.message);return;}
+  const form=pdfDoc.getForm();
+  const fields=form.getFields();
+  const info=fields.map(f=>{
+    let val="—";
+    try{
+      if(f.constructor.name.includes("Text"))val=f.getText()||"(empty)";
+      else if(f.constructor.name.includes("Check"))val=f.isChecked()?"☑ checked":"☐ unchecked";
+      else if(f.constructor.name.includes("Radio"))val="(radio)";
+      else if(f.constructor.name.includes("Dropdown"))val=f.getSelected().join(",")||"(empty)";
+    }catch(e){}
+    return{name:f.getName(),type:f.constructor.name.replace("PDF",""),val};
+  });
+  // Remove any existing modal
+  document.getElementById("swFieldModal")?.remove();
+  const modal=document.createElement("div");
+  modal.id="swFieldModal";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  modal.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--gold-border);border-radius:16px;padding:24px;max-width:720px;width:100%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0;">
+      <div style="font-weight:700;font-size:15px;">🔍 PDF Form Fields — ${fields.length} found</div>
+      <button onclick="document.getElementById('swFieldModal').remove()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:22px;line-height:1;">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      ${fields.length===0
+        ?`<div style="color:var(--dim);font-size:13px;padding:16px 0;">No AcroForm fields detected — the PDF may be flat (scanned/printed). Coordinate-based overlay will be needed.</div>`
+        :`<table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="border-bottom:1px solid var(--faint);position:sticky;top:0;background:var(--bg2);">
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">#</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">Field Name</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">Type</th>
+            <th style="text-align:left;padding:6px 10px;color:var(--dim);font-weight:600;">Current Value</th>
+          </tr></thead>
+          <tbody>${info.map((f,i)=>`<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td style="padding:6px 10px;color:var(--dim);">${i+1}</td>
+            <td style="padding:6px 10px;font-family:monospace;color:var(--gold);word-break:break-all;">${esc(f.name)}</td>
+            <td style="padding:6px 10px;color:var(--dim);">${esc(f.type)}</td>
+            <td style="padding:6px 10px;color:var(--text);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(String(f.val).slice(0,80))}</td>
+          </tr>`).join("")}</tbody>
+        </table>`}
+    </div>
+    <div style="margin-top:14px;font-size:11px;color:var(--dim);flex-shrink:0;">Share these field names so the form mapping can be finalised.</div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click",e=>{if(e.target===modal)modal.remove();});
+};
+
+window.generateFundSwitchForms=async()=>{
+  const bytes=await loadSwTemplate();
+  if(!bytes){showToast("Upload form template first");return;}
+  const sel=swResults.filter(r=>swSelected.has(r.cid));
+  if(!sel.length){showToast("Select at least one client");return;}
+  showToast(`Generating ${sel.length} form${sel.length>1?"s":""}…`);
+  let ok=0;
+  for(const r of sel){
+    const c=clients.find(x=>x.fid===r.cid);
+    if(!c)continue;
+    try{
+      const filled=await _fillClientPdf(bytes,c);
+      _downloadFilledPdf(filled,`FundSwitch_${(c.policyNo||c.name).replace(/[^a-zA-Z0-9_-]/g,"_")}.pdf`);
+      // Stagger downloads so browser doesn't block them
+      await new Promise(res=>setTimeout(res,350));
+      ok++;
+    }catch(err){
+      console.error("Fill error for",c.name,err);
+      showToast(`Error for ${c.name}: ${err.message}`);
+    }
+  }
+  if(ok>0)showToast(`✅ ${ok} form${ok>1?"s":""} downloaded`);
+};
+
+async function _fillClientPdf(templateBytes,c){
+  const{PDFDocument,StandardFonts,rgb}=PDFLib;
+  const pdfDoc=await PDFDocument.load(templateBytes,{ignoreEncryption:true});
+  const font=await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  const age=getAge(c.dob);
+  const today=new Date();
+  const dd=String(today.getDate()).padStart(2,"0");
+  const mm=String(today.getMonth()+1).padStart(2,"0");
+  const yyyy=today.getFullYear();
+  const todayStr=`${dd}/${mm}/${yyyy}`;
+
+  const form=pdfDoc.getForm();
+  const fields=form.getFields();
+
+  if(fields.length>0){
+    // ── AcroForm filling ──
+    // Smart keyword matcher — Income Insurance field names will be mapped here
+    // once confirmed via Inspect Fields. Current names are placeholders.
+    const _set=(names,val)=>{
+      for(const n of names){
+        try{form.getTextField(n).setText(val||"");return true;}catch(e){}
+      }
+      return false;
+    };
+    const _check=(names,on)=>{
+      for(const n of names){
+        try{on?form.getCheckBox(n).check():form.getCheckBox(n).uncheck();return true;}catch(e){}
+      }
+      return false;
+    };
+
+    // ── AFF Form fields ──
+    _set(SW_FIELD_MAP.clientName, c.name);
+    _set(SW_FIELD_MAP.nric, c.nric||"");
+    _set(SW_FIELD_MAP.age, age!=null?String(age):"");
+    _set(SW_FIELD_MAP.policyNo, c.policyNo||"");
+    _set(SW_FIELD_MAP.date, todayStr);
+    // Section 1A — fund switch
+    _set(SW_FIELD_MAP.fundOut1, swOutFund);
+    _set(SW_FIELD_MAP.pctOut1, String(swPct));
+    _set(SW_FIELD_MAP.fundIn1, swInFund);
+    _set(SW_FIELD_MAP.pctIn1, "100");
+
+    // Flatten so pre-filled advisor/risk-profile values are locked in
+    try{form.flatten();}catch(e){}
+  }
+
+  return await pdfDoc.save();
+}
+
+// ── Field name map — UPDATE these after running Inspect Fields ──
+// Each entry is an array of candidate names to try (first match wins).
+const SW_FIELD_MAP={
+  clientName:["Full Name","Name","Policyholder Name","Policyholder's Name","Name of Policyholder","Name as in NRIC"],
+  nric:["NRIC","NRIC/Passport/FIN","NRIC / Passport No. / FIN","IC No","NRIC No","Passport/FIN"],
+  age:["Age","Current Age","Age (Years)","Q2","Age_Q2"],
+  policyNo:["Policy Number","Policy No.","Policy No","PolicyNo","Policy Number/s"],
+  date:["Date","Signed Date","Form Date","Today's Date","Submission Date"],
+  fundOut1:["Fund Out 1","Switch Out Fund 1","Fund_Out_1","Fund to Switch Out 1","Switch Out (Fund Name) 1","FundOut1"],
+  pctOut1:["% Out 1","Pct Out 1","Percentage Out 1","Switch Out % 1","PctOut1","% to switch out 1"],
+  fundIn1:["Fund In 1","Switch In Fund 1","Fund_In_1","Fund to Switch In 1","Switch In (Fund Name) 1","FundIn1"],
+  pctIn1:["% In 1","Pct In 1","Percentage In 1","Switch In % 1","PctIn1","% to switch in 1"],
+};
+
+function _downloadFilledPdf(bytes,filename){
+  const blob=new Blob([bytes],{type:"application/pdf"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
 
 function renderAddClientForm(){
   return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
