@@ -190,10 +190,6 @@ body{
 .sens-wrap{display:flex;align-items:center;gap:6px;}
 .sens-wrap .inp{flex:1;}
 .inp.sens-blurred{filter:blur(5px);user-select:none;pointer-events:none;}
-.sens-eye{background:none;border:1px solid rgba(255,255,255,0.12);border-radius:8px;
-  padding:5px 8px;cursor:pointer;font-size:13px;color:var(--dim);flex-shrink:0;
-  transition:border-color 0.15s,color 0.15s;}
-.sens-eye:hover{border-color:var(--gold-border);color:var(--gold-l);}
 /* ── KYC drop zone ── */
 .kyc-drop{border:2px dashed rgba(245,158,11,0.35);border-radius:14px;
   padding:18px 20px;text-align:center;cursor:pointer;transition:all 0.2s;
@@ -1672,13 +1668,14 @@ window.toggleNames=()=>{
   if(!namesBlurred)_startBlurTimer();
   else clearTimeout(_blurTimer);
 };
-// Spacebar toggles name visibility — invisible shortcut, no button shown
+// Spacebar: toggles sensitive fields in Add Client form, OR name blur on dashboard
 document.addEventListener("keydown",e=>{
   if(e.code!=="Space")return;
   const tag=(e.target.tagName||"").toUpperCase();
   if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||e.target.isContentEditable)return;
   e.preventDefault();
-  toggleNames();
+  if(document.getElementById("cNRIC"))_toggleSensFields();
+  else toggleNames();
 });
 // Set up inactivity listeners once
 ["mousemove","keydown","touchstart","click"].forEach(ev=>
@@ -2242,18 +2239,24 @@ async function _fillClientPdf(templateBytes,c){
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
   // Check/uncheck a checkbox — silently ignores if field doesn't exist
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
+  // Select a radio group option by export value
+  const _radio=(name,value)=>{try{form.getRadioGroup(name).select(value);return true;}catch(e){return false;}};
 
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICFIN numsdfghber", c.nric||"");
-  _chk("62 years of age or olderfgh%^&", is62Plus);
+  _radio("62 years of age or olderfgh%^&", is62Plus?"1":"2");
   _set("Policy numbersdfgh", c.policyNo||"");
   // AFF policy list slot #1 — fields "1","2","3","4" are the four policy slots
   _set("1", c.policyNo||"");
 
-  // ── PAGE 2: Section A Q2 — current age only; rest pre-filled in template ──
-  // "2" = AFF policy list slot #2 (NOT Q2); "2_2" is the Q2 current age answer field
-  _set("2_2", age!==null?String(age):"");
+  // ── PAGE 2: Section A Q2 — current age ──
+  _set("years_2sdfgh", age!==null?String(age):"");
+
+  // ── Education level (from KYC) ──
+  const _eduMap={"Below O Level":"1","O Level / N Level":"3","A Level / Diploma":"5","Degree":"6","Post-Graduate":"7"};
+  const _eduVal=_eduMap[c.educationLevel||""];
+  if(_eduVal)_radio("undefined_3gh$%^&*(", _eduVal);
 
   // ── PAGE 4: Section C — Declaration (no advice) ──
   _set("Name ofsdfg Policyholder or Assignee2", c.name);
@@ -2343,17 +2346,11 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div>
         <label class="lbl">NRIC <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
-        <div class="sens-wrap">
-          <input class="inp sens-blurred" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" autocomplete="off"/>
-          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cNRIC',this)">👁</button>
-        </div>
+        <input class="inp sens-blurred" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" autocomplete="off"/>
       </div>
       <div>
         <label class="lbl">Date of Birth <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
-        <div class="sens-wrap">
-          <input class="inp sens-blurred" id="cDOB" type="text" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)" autocomplete="off"/>
-          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cDOB',this)">👁</button>
-        </div>
+        <input class="inp sens-blurred" id="cDOB" type="text" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)" autocomplete="off"/>
       </div>
     </div>
 
@@ -2361,17 +2358,11 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div>
         <label class="lbl">Mobile No. <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
-        <div class="sens-wrap">
-          <input class="inp sens-blurred" id="cContact" type="tel" placeholder="e.g. 91234567" maxlength="15" autocomplete="off"/>
-          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cContact',this)">👁</button>
-        </div>
+        <input class="inp sens-blurred" id="cContact" type="tel" placeholder="e.g. 91234567" maxlength="15" autocomplete="off"/>
       </div>
       <div>
         <label class="lbl">Email <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
-        <div class="sens-wrap">
-          <input class="inp sens-blurred" id="cEmail" type="email" placeholder="e.g. client@email.com" autocomplete="off"/>
-          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cEmail',this)">👁</button>
-        </div>
+        <input class="inp sens-blurred" id="cEmail" type="email" placeholder="e.g. client@email.com" autocomplete="off"/>
       </div>
     </div>
 
@@ -2480,14 +2471,17 @@ window.handleAddClientFile=async(input)=>{
 };
 
 // ── KYC PDF auto-fill ──
-window.toggleSensField=(id,btn)=>{
-  const inp=document.getElementById(id);
-  if(!inp)return;
-  const isBlurred=inp.classList.contains("sens-blurred");
-  inp.classList.toggle("sens-blurred",!isBlurred);
-  inp.style.pointerEvents=isBlurred?"":"none";
-  btn.textContent=isBlurred?"🙈":"👁";
-  btn.title=isBlurred?"Hide":"Reveal";
+// Spacebar reveals/hides sensitive fields in Add Client form (no visible button)
+const _toggleSensFields=()=>{
+  const fields=document.querySelectorAll(".sens-blurred, #cNRIC, #cDOB, #cContact, #cEmail");
+  const anyRevealed=[...document.querySelectorAll("#cNRIC,#cDOB,#cContact,#cEmail")]
+    .some(el=>!el.classList.contains("sens-blurred"));
+  ["cNRIC","cDOB","cContact","cEmail"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.classList.toggle("sens-blurred",anyRevealed);
+    el.style.pointerEvents=anyRevealed?"none":"";
+  });
 };
 
 window.handleKycDrop=async(e)=>{
