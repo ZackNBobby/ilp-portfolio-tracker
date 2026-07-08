@@ -2205,7 +2205,7 @@ function _swErrModal(title,detail){
 }
 
 async function _fillClientPdf(templateBytes,c){
-  const{PDFDocument,StandardFonts}=PDFLib;
+  const{PDFDocument}=PDFLib;
   const pdfDoc=await PDFDocument.load(templateBytes,{ignoreEncryption:true});
 
   const age=getAge(c.dob);
@@ -2213,128 +2213,80 @@ async function _fillClientPdf(templateBytes,c){
   const today=new Date();
   const todayStr=`${String(today.getDate()).padStart(2,"0")}/${String(today.getMonth()+1).padStart(2,"0")}/${today.getFullYear()}`;
   const isLegacy=c.product==="Legacy Flex Solitaire";
-  const hasRegular=!isLegacy; // Invest Flex / Vantage / TriVantage
+  const hasRegular=!isLegacy;
+  const isSG=!c.nationality||c.nationality==="Singaporean";
 
   const form=pdfDoc.getForm();
   const fields=form.getFields();
-  if(fields.length===0)return await pdfDoc.save(); // flat PDF — nothing to fill yet
+  if(fields.length===0)return await pdfDoc.save();
 
-  const _set=(names,val)=>{
-    for(const n of names){try{form.getTextField(n).setText(val||"");return true;}catch(e){}}
-    return false;
-  };
-  const _chk=(names,on)=>{
-    for(const n of names){try{on?form.getCheckBox(n).check():form.getCheckBox(n).uncheck();return true;}catch(e){}}
-    return false;
-  };
+  // Set a single text field by exact name
+  const _set=(name,val)=>{try{form.getTextField(name).setText(val||"");return true;}catch(e){return false;}};
+  // Try a list of exact names — first match wins
+  const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
+  // Check/uncheck a checkbox — silently ignores if field doesn't exist
+  const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
 
   // ── PAGE 1: AFF — Policyholder particulars ──
-  _set(SW_FIELD_MAP.p1_name,   c.name);
-  _set(SW_FIELD_MAP.p1_nric,   c.nric||"");
-  _chk(SW_FIELD_MAP.p1_62plus, is62Plus);
-  _set(SW_FIELD_MAP.p1_policyNo, c.policyNo||"");
-  // Education level: add c.educationLevel to client profile to enable
-  // (checkbox field names to be confirmed after Inspect Fields)
+  _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
+  _set("NRICFIN numsdfghber", c.nric||"");
+  _chk("62 years of age or olderfgh%^&", is62Plus);
+  _set("Policy numbersdfgh", c.policyNo||"");
 
-  // ── PAGE 2: Section A — current age Q2 only; rest pre-filled ──
-  _set(SW_FIELD_MAP.p2_age, age!==null?String(age):"");
+  // ── PAGE 2: Section A Q2 — current age only; rest pre-filled in template ──
+  _try(["2","2_2"], age!==null?String(age):"");
 
   // ── PAGE 4: Section C — Declaration (no advice) ──
-  _set(SW_FIELD_MAP.p4_name,  c.name);
-  _set(SW_FIELD_MAP.p4_nric,  c.nric||"");
-  _set(SW_FIELD_MAP.p4_date,  todayStr);
+  _set("Name ofsdfg Policyholder or Assignee2", c.name);
+  _set("NRICFIN number_2", c.nric||"");
+  _set("Date ddmmyyyy", todayStr);
 
   // ── PAGE 7: Policyholder acknowledgement + Advisor date ──
-  _set(SW_FIELD_MAP.p7_clientName, c.name);
-  _set(SW_FIELD_MAP.p7_clientNric, c.nric||"");
-  _set(SW_FIELD_MAP.p7_clientDate, todayStr);
-  _set(SW_FIELD_MAP.p7_advisorDate, todayStr);
+  _set("Name of Policyholder or Assignee9", c.name);
+  _set("NRICPassport n567umberFIN", c.nric||"");
+  _set("Date ddmmyyyy_2", todayStr);   // client signed date
+  _set("Date ddmmyyyy_3", todayStr);   // advisor signed date
 
-  // ── PAGE 10: Fund Switch Form — Policyholder details ──
-  // Fields below marked (*) need to be added to the client profile.
-  // Until added, nationality/country default to Singapore values; others are blank.
-  _set(SW_FIELD_MAP.p10_name,        c.name);
-  _set(SW_FIELD_MAP.p10_nric,        c.nric||"");
-  _set(SW_FIELD_MAP.p10_policyNo,    c.policyNo||"");
-  _set(SW_FIELD_MAP.p10_nationality, c.nationality||"Singaporean"); // (*)
-  _set(SW_FIELD_MAP.p10_country,     c.countryOfResidence||"Singapore"); // (*)
-  _set(SW_FIELD_MAP.p10_occupation,  c.occupation||""); // (*)
-  _set(SW_FIELD_MAP.p10_natureOfWork,c.natureOfWork||""); // (*)
-  _set(SW_FIELD_MAP.p10_annualIncome,c.annualIncome||""); // (*)
+  // ── PAGE 10: Fund Switch form — Policyholder details ──
+  _set("Full name as insdfgh NRICPassportLongTerm Pass", c.name);
+  _set("NRICpassport number", c.nric||"");
+  // Nationality checkboxes (defaults to Singaporean if not stored on client)
+  _chk("Singaporean#$%FGH", isSG);
+  _chk("Singaporean$%^&\\_2", isSG);
+  // Country / City of residence
+  _try(["Country of residencesdfgh","Country of residfghdence_2"], c.countryOfResidence||"Singapore");
+  _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
+  // Occupation / nature of work / income — blank until added to client profile (*)
+  _set("Occufghpation", c.occupation||"");
+  _set("Nature of worksdfg", c.natureOfWork||"");
+  _set("Annual incomsdfge S", c.annualIncome||"");
+  // Tick the "Fund switch" transaction type checkbox on the cover
+  _chk("Fund switch or change in fund percentage", true);
 
-  // ── PAGE 11: Section 1A — all ILP except Legacy Flex Solitaire ──
+  // ── PAGE 11: Section 1A — fund switch (all ILP except Legacy Flex Solitaire) ──
   if(hasRegular){
-    _set(SW_FIELD_MAP.p11_1a_fundOut, swOutFund);
-    _set(SW_FIELD_MAP.p11_1a_pctOut,  String(swPct));
-    _set(SW_FIELD_MAP.p11_1a_fundIn,  swInFund);
-    _set(SW_FIELD_MAP.p11_1a_pctIn,   "100");
+    _set("Switch out from Please state Fund nameRow1", swOutFund);
+    _set("Percentage to switch outRow1", String(swPct));
+    _set("Switch in to Please state Fund nameRow1", swInFund);
+    _set("Percentage to switch inRow1", "100");
   }
 
   // ── PAGE 11: Section 1B — Legacy Flex Solitaire only ──
   if(isLegacy){
-    _set(SW_FIELD_MAP.p11_1b_fundOut, swOutFund);
-    _set(SW_FIELD_MAP.p11_1b_pctOut,  String(swPct));
-    _set(SW_FIELD_MAP.p11_1b_fundIn,  swInFund);
-    _set(SW_FIELD_MAP.p11_1b_pctIn,   "100");
+    _set("Switch out from Please state Fund nameRow1_2", swOutFund);
+    _set("Percentage to switch outRow1_2", String(swPct));
+    _set("Switch in to Please state Fund nameRow1_2", swInFund);
+    _set("Percentage to switch inRow1_2", "100");
   }
 
-  // ── PAGE 16: Today's date for policyholder signature ──
-  _set(SW_FIELD_MAP.p16_date, todayStr);
+  // ── PAGE 16: Today's date for policyholder signature block ──
+  _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
   try{form.flatten();}catch(e){}
   return await pdfDoc.save();
 }
 
-// ── Field name map ──
-// Each entry = array of candidate AcroForm field names (first match wins).
-// Run 🔍 Inspect Fields after uploading the template — share the output
-// and these will be updated with the exact names from the PDF.
-const SW_FIELD_MAP={
-  // PAGE 1 — AFF Policyholder particulars
-  p1_name:          ["Full Name","Name of Policyholder","Policyholder Name","Name"],
-  p1_nric:          ["NRIC/Passport/FIN","NRIC","NRIC No","IC No"],
-  p1_62plus:        ["62 Years and Above","Age 62 or Above","62 or above","Age 62+"],
-  p1_policyNo:      ["Policy No. 1","AFF Policy No 1","Policy Number 1","Policy No 1"],
-
-  // PAGE 2 — Section A Q2 only
-  p2_age:           ["Current Age","Age","Q2 Age","Age (Years)"],
-
-  // PAGE 4 — Section C Declaration
-  p4_name:          ["Sec C Name","Section C Name","Declaration Name","Name_SecC"],
-  p4_nric:          ["Sec C NRIC","Section C NRIC","Declaration NRIC","NRIC_SecC"],
-  p4_date:          ["Sec C Date","Section C Date","Declaration Date","Date_SecC"],
-
-  // PAGE 7 — Acknowledgement + Advisor date
-  p7_clientName:    ["Client Name P7","Acknowledgement Name","Policyholder Name P7"],
-  p7_clientNric:    ["Client NRIC P7","Acknowledgement NRIC","Policyholder NRIC P7"],
-  p7_clientDate:    ["Client Date P7","Acknowledgement Date","Client Signed Date"],
-  p7_advisorDate:   ["Advisor Date P7","Advisor Signed Date","Advisor Declaration Date"],
-
-  // PAGE 10 — Fund Switch form Policyholder details
-  p10_name:         ["Policyholder Full Name SW","Policyholder Name SW","Full Name SW"],
-  p10_nric:         ["Policyholder NRIC SW","NRIC SW","NRIC/Passport SW"],
-  p10_policyNo:     ["Policy No SW","Policy Number SW","Policy No. SW"],
-  p10_nationality:  ["Nationality","Nationality SW"],
-  p10_country:      ["Country of Residence","Country/City of Residence"],
-  p10_occupation:   ["Occupation","Occupation SW"],
-  p10_natureOfWork: ["Nature of Work","Nature of Business","Nature of Work SW"],
-  p10_annualIncome: ["Annual Income","Annual Salary","Annual Income SW"],
-
-  // PAGE 11 — Section 1A (non-Legacy ILP)
-  p11_1a_fundOut:   ["1A Fund Out 1","Section 1A Fund Out","Fund Switch Out 1A"],
-  p11_1a_pctOut:    ["1A % Out 1","Section 1A % Out","Pct Out 1A"],
-  p11_1a_fundIn:    ["1A Fund In 1","Section 1A Fund In","Fund Switch In 1A"],
-  p11_1a_pctIn:     ["1A % In 1","Section 1A % In","Pct In 1A"],
-
-  // PAGE 11 — Section 1B (Legacy Flex Solitaire)
-  p11_1b_fundOut:   ["1B Fund Out 1","Section 1B Fund Out","Legacy Fund Out 1"],
-  p11_1b_pctOut:    ["1B % Out 1","Section 1B % Out","Legacy % Out 1"],
-  p11_1b_fundIn:    ["1B Fund In 1","Section 1B Fund In","Legacy Fund In 1"],
-  p11_1b_pctIn:     ["1B % In 1","Section 1B % In","Legacy % In 1"],
-
-  // PAGE 16 — Policyholder signature date
-  p16_date:         ["Signature Date P16","Policyholder Signature Date","Date P16","Date of Signing"],
-};
+// SW_FIELD_MAP no longer needed — all field names are exact from PDF inspection.
 
 function _downloadFilledPdf(bytes,filename){
   const blob=new Blob([bytes],{type:"application/pdf"});
