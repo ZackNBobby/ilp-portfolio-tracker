@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 button,input,select,textarea{font-family:inherit;}
@@ -184,6 +185,21 @@ body{
   color:rgba(245,158,11,0.65);transition:all 0.18s;margin-left:auto;
 }
 .blur-toggle-btn:hover{background:rgba(245,158,11,0.12);color:var(--gold-l);}
+
+/* ── Sensitive field blur (Add Client form) ── */
+.sens-wrap{display:flex;align-items:center;gap:6px;}
+.sens-wrap .inp{flex:1;}
+.inp.sens-blurred{filter:blur(5px);user-select:none;pointer-events:none;}
+.sens-eye{background:none;border:1px solid rgba(255,255,255,0.12);border-radius:8px;
+  padding:5px 8px;cursor:pointer;font-size:13px;color:var(--dim);flex-shrink:0;
+  transition:border-color 0.15s,color 0.15s;}
+.sens-eye:hover{border-color:var(--gold-border);color:var(--gold-l);}
+/* ── KYC drop zone ── */
+.kyc-drop{border:2px dashed rgba(245,158,11,0.35);border-radius:14px;
+  padding:18px 20px;text-align:center;cursor:pointer;transition:all 0.2s;
+  background:rgba(245,158,11,0.03);margin-bottom:18px;}
+.kyc-drop:hover,.kyc-drop.drag-over{border-color:var(--gold);background:rgba(245,158,11,0.07);}
+.kyc-drop.kyc-done{border-color:rgba(34,197,94,0.5);background:rgba(34,197,94,0.05);}
 
 /* ── Period selector ── */
 .period-bar{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
@@ -2303,18 +2319,88 @@ function _downloadFilledPdf(bytes,filename){
 function renderAddClientForm(){
   return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
     <div class="sec-title">👤 New Client Profile</div>
+
+    <!-- KYC auto-fill drop zone -->
+    <div class="kyc-drop" id="kycDrop"
+      onclick="document.getElementById('kycFileInput').click()"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="handleKycDrop(event)">
+      <div style="font-size:22px;margin-bottom:4px;">📋</div>
+      <div style="font-size:13px;font-weight:700;color:var(--gold);">Drop KYC PDF here to auto-fill</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:3px;">Drop the "My Financial Portfolio" PDF — personal details will be extracted automatically</div>
+      <input type="file" id="kycFileInput" accept=".pdf" style="display:none" onchange="handleKycFile(this)"/>
+    </div>
+    <div id="kycStatus" style="display:none;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:14px;"></div>
+
+    <!-- Name + Policy -->
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">Full Name *</label><input class="inp" id="cName" placeholder="Client's Name"/></div>
       <div><label class="lbl">Policy Number</label><input class="inp" id="cPolicy" placeholder="Policy No."/></div>
     </div>
+
+    <!-- NRIC + DOB (blurred by default) -->
     <div class="g2" style="margin-bottom:12px;">
-      <div><label class="lbl">NRIC (confidential)</label><input class="inp" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;"/></div>
-      <div><label class="lbl">Date of Birth (confidential)</label><input class="inp" id="cDOB" type="text" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)"/></div>
+      <div>
+        <label class="lbl">NRIC <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
+        <div class="sens-wrap">
+          <input class="inp sens-blurred" id="cNRIC" placeholder="e.g. S1234567A" style="letter-spacing:0.05em;" autocomplete="off"/>
+          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cNRIC',this)">👁</button>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">Date of Birth <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
+        <div class="sens-wrap">
+          <input class="inp sens-blurred" id="cDOB" type="text" placeholder="DD/MM/YYYY" maxlength="10" oninput="normalizeDobInput(this)" autocomplete="off"/>
+          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cDOB',this)">👁</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Contact + Email (blurred) -->
+    <div class="g2" style="margin-bottom:12px;">
+      <div>
+        <label class="lbl">Mobile No. <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
+        <div class="sens-wrap">
+          <input class="inp sens-blurred" id="cContact" type="tel" placeholder="e.g. 91234567" maxlength="15" autocomplete="off"/>
+          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cContact',this)">👁</button>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">Email <span style="font-size:10px;color:var(--dim);">(confidential)</span></label>
+        <div class="sens-wrap">
+          <input class="inp sens-blurred" id="cEmail" type="email" placeholder="e.g. client@email.com" autocomplete="off"/>
+          <button class="sens-eye" title="Reveal" onclick="toggleSensField('cEmail',this)">👁</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nationality + Country of Residence -->
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">Nationality</label><input class="inp" id="cNationality" placeholder="e.g. Singaporean"/></div>
+      <div><label class="lbl">Country of Residence</label><input class="inp" id="cCountry" placeholder="e.g. Singapore"/></div>
+    </div>
+
+    <!-- Occupation + Nature of Work -->
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">Occupation</label><input class="inp" id="cOccupation" placeholder="e.g. Executive (office based)"/></div>
+      <div><label class="lbl">Nature of Work</label><input class="inp" id="cNatureOfWork" placeholder="e.g. Corporate Sales"/></div>
+    </div>
+
+    <!-- Education Level -->
     <div style="margin-bottom:12px;">
-      <label class="lbl">Contact No. (confidential)</label>
-      <input class="inp" id="cContact" type="tel" placeholder="e.g. 91234567" maxlength="15"/>
+      <label class="lbl">Education Level</label>
+      <select class="sel" id="cEducation">
+        <option value="">-- Select --</option>
+        <option>Below O Level</option>
+        <option>O Level / N Level</option>
+        <option>A Level / Diploma</option>
+        <option>Degree</option>
+        <option>Post-Graduate</option>
+      </select>
     </div>
+
+    <!-- Product + Term -->
     <div class="g2" style="margin-bottom:12px;">
       <div>
         <label class="lbl">Product *</label>
@@ -2334,10 +2420,14 @@ function renderAddClientForm(){
         </select>
       </div>
     </div>
+
+    <!-- Start Date + Annual Premium -->
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">Policy Start Date *</label><input class="inp" id="cStart" type="text" placeholder="DD-MM-YYYY" maxlength="10"/></div>
       <div><label class="lbl">Annual Premium (SGD) *</label><input class="inp" id="cAP" type="number" placeholder="Annual Premium" oninput="updateBonusDisplay()"/></div>
     </div>
+
+    <!-- Payment Mode -->
     <div style="margin-bottom:12px;">
       <label class="lbl">Payment Mode (Year 1)</label>
       <select class="sel" id="cPayMode">
@@ -2388,6 +2478,121 @@ window.handleAddClientFile=async(input)=>{
   const file=input.files?.[0];
   if(file)await processAddClientExcel(file);
 };
+
+// ── KYC PDF auto-fill ──
+window.toggleSensField=(id,btn)=>{
+  const inp=document.getElementById(id);
+  if(!inp)return;
+  const isBlurred=inp.classList.contains("sens-blurred");
+  inp.classList.toggle("sens-blurred",!isBlurred);
+  inp.style.pointerEvents=isBlurred?"":"none";
+  btn.textContent=isBlurred?"🙈":"👁";
+  btn.title=isBlurred?"Hide":"Reveal";
+};
+
+window.handleKycDrop=async(e)=>{
+  e.preventDefault();
+  document.getElementById("kycDrop")?.classList.remove("drag-over");
+  const file=e.dataTransfer?.files?.[0];
+  if(file)await processKycPdf(file);
+};
+window.handleKycFile=async(input)=>{
+  const file=input.files?.[0];
+  if(file)await processKycPdf(file);
+};
+
+async function parseKycPdf(file){
+  if(!window.pdfjsLib)throw new Error("PDF.js not loaded");
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  // Scan first 8 pages — personal info is on page 4 of the KYC
+  const items=[];
+  const limit=Math.min(pdf.numPages,8);
+  for(let p=1;p<=limit;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    for(const it of content.items){
+      const t=it.str?.trim();
+      if(!t)continue;
+      items.push({text:t,x:Math.round(it.transform[4]),y:Math.round(it.transform[5]),page:p});
+    }
+  }
+  // Find the value that sits to the right of a label on the same row
+  const getValue=(labelFrag)=>{
+    const matches=items.filter(it=>it.text.toLowerCase().includes(labelFrag.toLowerCase()));
+    for(const lbl of matches){
+      const sameRow=items.filter(it=>
+        it.page===lbl.page&&
+        Math.abs(it.y-lbl.y)<=6&&
+        it.x>lbl.x+40&&
+        it.text!=="-"&&
+        it.text.length>0
+      );
+      if(!sameRow.length)continue;
+      sameRow.sort((a,b)=>a.x-b.x);
+      const val=sameRow[0].text;
+      if(val&&val!=="-")return val;
+    }
+    return"";
+  };
+  const raw={
+    name:       getValue("Name (as in NRIC"),
+    nric:       getValue("NRIC / FIN / Passport no"),
+    dob:        getValue("Date of birth"),
+    nationality:getValue("Nationality"),
+    country:    getValue("Country of residence"),
+    phone:      getValue("Mobile number"),
+    email:      getValue("Email"),
+    education:  getValue("Education level"),
+    occupation: getValue("Occupation"),
+    natureOfWork:getValue("Business nature of job"),
+  };
+  // Clean DOB — strip "(41 years old)" suffix if present
+  if(raw.dob)raw.dob=raw.dob.replace(/\s*\(\d+\s+years?\s+old\)/i,"").trim();
+  return raw;
+}
+
+async function processKycPdf(file){
+  const statusEl=document.getElementById("kycStatus");
+  const drop=document.getElementById("kycDrop");
+  const setStatus=(msg,color,bg)=>{
+    if(!statusEl)return;
+    statusEl.style.display="block";
+    statusEl.style.color=color;
+    statusEl.style.background=bg;
+    statusEl.style.border=`1px solid ${color}40`;
+    statusEl.innerHTML=msg;
+  };
+  setStatus("⏳ Reading KYC PDF…","var(--gold)","rgba(245,158,11,0.06)");
+  try{
+    const data=await parseKycPdf(file);
+    // Fill form fields
+    const _fill=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
+    _fill("cName",data.name);
+    _fill("cNRIC",data.nric);
+    _fill("cDOB",data.dob);
+    _fill("cContact",data.phone);
+    _fill("cEmail",data.email);
+    _fill("cNationality",data.nationality);
+    _fill("cCountry",data.country);
+    _fill("cOccupation",data.occupation);
+    _fill("cNatureOfWork",data.natureOfWork);
+    // Education: match select option
+    if(data.education){
+      const sel=document.getElementById("cEducation");
+      if(sel){
+        const opt=[...sel.options].find(o=>o.value.toLowerCase()===data.education.toLowerCase()||o.text.toLowerCase()===data.education.toLowerCase());
+        if(opt)sel.value=opt.value;
+      }
+    }
+    const filled=Object.values(data).filter(v=>v&&v.length>0).length;
+    setStatus(`✅ ${filled} fields auto-filled from KYC — sensitive fields are blurred. Click 👁 to reveal.`,"var(--green)","rgba(34,197,94,0.06)");
+    if(drop)drop.classList.add("kyc-done");
+  }catch(e){
+    setStatus(`❌ Could not read KYC PDF: ${e.message}`,"var(--red)","rgba(239,68,68,0.06)");
+  }
+}
 
 function calcAllocFromTxs(txs){
   const byFund={};let total=0;
@@ -2505,6 +2710,12 @@ window.doAddClient=async()=>{
   if(errEl){if(errs.length){errEl.textContent=errs.join(" ");errEl.style.display="block";return;}errEl.style.display="none";}
   const funds=calcAllocFromTxs(pendingClientTxs);
   const contactNo=(document.getElementById("cContact")?.value||"").trim();
+  const email=(document.getElementById("cEmail")?.value||"").trim();
+  const nationality=(document.getElementById("cNationality")?.value||"").trim();
+  const countryOfResidence=(document.getElementById("cCountry")?.value||"").trim();
+  const occupation=(document.getElementById("cOccupation")?.value||"").trim();
+  const natureOfWork=(document.getElementById("cNatureOfWork")?.value||"").trim();
+  const educationLevel=(document.getElementById("cEducation")?.value||"").trim();
   const obj={
     uid:OWNER,name,policyNo,product,strategy:getStrategy(product),
     startDate,term:parseInt(term),annualPremium:parseFloat(ap),
@@ -2512,6 +2723,12 @@ window.doAddClient=async()=>{
     ...(nric?{nric}:{}),
     ...(dob?{dob}:{}),
     ...(contactNo?{contactNo}:{}),
+    ...(email?{email}:{}),
+    ...(nationality?{nationality}:{}),
+    ...(countryOfResidence?{countryOfResidence}:{}),
+    ...(occupation?{occupation}:{}),
+    ...(natureOfWork?{natureOfWork}:{}),
+    ...(educationLevel?{educationLevel}:{}),
     paymentModeHistory:[{effectiveYear:1,mode:payMode}],
     funds,notes,createdAt:new Date().toISOString()
   };
