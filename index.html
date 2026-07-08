@@ -2182,7 +2182,7 @@ window.generateFundSwitchForms=async()=>{
     const c=clients.find(x=>x.fid===r.cid);
     if(!c)continue;
     try{
-      const filled=await _fillClientPdf(bytes,c);
+      const filled=await _fillClientPdf(bytes.slice(0),c);
       _downloadFilledPdf(filled,`FundSwitch_${(c.policyNo||c.name).replace(/[^a-zA-Z0-9_-]/g,"_")}.pdf`);
       await new Promise(res=>setTimeout(res,350));
       ok++;
