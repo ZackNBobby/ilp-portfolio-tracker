@@ -2232,9 +2232,12 @@ async function _fillClientPdf(templateBytes,c){
   _set("NRICFIN numsdfghber", c.nric||"");
   _chk("62 years of age or olderfgh%^&", is62Plus);
   _set("Policy numbersdfgh", c.policyNo||"");
+  // AFF policy list slot #1 — fields "1","2","3","4" are the four policy slots
+  _set("1", c.policyNo||"");
 
   // ── PAGE 2: Section A Q2 — current age only; rest pre-filled in template ──
-  _try(["2","2_2"], age!==null?String(age):"");
+  // "2" = AFF policy list slot #2 (NOT Q2); "2_2" is the Q2 current age answer field
+  _set("2_2", age!==null?String(age):"");
 
   // ── PAGE 4: Section C — Declaration (no advice) ──
   _set("Name ofsdfg Policyholder or Assignee2", c.name);
