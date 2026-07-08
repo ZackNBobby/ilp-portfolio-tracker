@@ -2205,68 +2205,135 @@ function _swErrModal(title,detail){
 }
 
 async function _fillClientPdf(templateBytes,c){
-  const{PDFDocument,StandardFonts,rgb}=PDFLib;
+  const{PDFDocument,StandardFonts}=PDFLib;
   const pdfDoc=await PDFDocument.load(templateBytes,{ignoreEncryption:true});
-  const font=await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   const age=getAge(c.dob);
+  const is62Plus=age!==null&&age>=62;
   const today=new Date();
-  const dd=String(today.getDate()).padStart(2,"0");
-  const mm=String(today.getMonth()+1).padStart(2,"0");
-  const yyyy=today.getFullYear();
-  const todayStr=`${dd}/${mm}/${yyyy}`;
+  const todayStr=`${String(today.getDate()).padStart(2,"0")}/${String(today.getMonth()+1).padStart(2,"0")}/${today.getFullYear()}`;
+  const isLegacy=c.product==="Legacy Flex Solitaire";
+  const hasRegular=!isLegacy; // Invest Flex / Vantage / TriVantage
 
   const form=pdfDoc.getForm();
   const fields=form.getFields();
+  if(fields.length===0)return await pdfDoc.save(); // flat PDF — nothing to fill yet
 
-  if(fields.length>0){
-    // ── AcroForm filling ──
-    // Smart keyword matcher — Income Insurance field names will be mapped here
-    // once confirmed via Inspect Fields. Current names are placeholders.
-    const _set=(names,val)=>{
-      for(const n of names){
-        try{form.getTextField(n).setText(val||"");return true;}catch(e){}
-      }
-      return false;
-    };
-    const _check=(names,on)=>{
-      for(const n of names){
-        try{on?form.getCheckBox(n).check():form.getCheckBox(n).uncheck();return true;}catch(e){}
-      }
-      return false;
-    };
+  const _set=(names,val)=>{
+    for(const n of names){try{form.getTextField(n).setText(val||"");return true;}catch(e){}}
+    return false;
+  };
+  const _chk=(names,on)=>{
+    for(const n of names){try{on?form.getCheckBox(n).check():form.getCheckBox(n).uncheck();return true;}catch(e){}}
+    return false;
+  };
 
-    // ── AFF Form fields ──
-    _set(SW_FIELD_MAP.clientName, c.name);
-    _set(SW_FIELD_MAP.nric, c.nric||"");
-    _set(SW_FIELD_MAP.age, age!=null?String(age):"");
-    _set(SW_FIELD_MAP.policyNo, c.policyNo||"");
-    _set(SW_FIELD_MAP.date, todayStr);
-    // Section 1A — fund switch
-    _set(SW_FIELD_MAP.fundOut1, swOutFund);
-    _set(SW_FIELD_MAP.pctOut1, String(swPct));
-    _set(SW_FIELD_MAP.fundIn1, swInFund);
-    _set(SW_FIELD_MAP.pctIn1, "100");
+  // ── PAGE 1: AFF — Policyholder particulars ──
+  _set(SW_FIELD_MAP.p1_name,   c.name);
+  _set(SW_FIELD_MAP.p1_nric,   c.nric||"");
+  _chk(SW_FIELD_MAP.p1_62plus, is62Plus);
+  _set(SW_FIELD_MAP.p1_policyNo, c.policyNo||"");
+  // Education level: add c.educationLevel to client profile to enable
+  // (checkbox field names to be confirmed after Inspect Fields)
 
-    // Flatten so pre-filled advisor/risk-profile values are locked in
-    try{form.flatten();}catch(e){}
+  // ── PAGE 2: Section A — current age Q2 only; rest pre-filled ──
+  _set(SW_FIELD_MAP.p2_age, age!==null?String(age):"");
+
+  // ── PAGE 4: Section C — Declaration (no advice) ──
+  _set(SW_FIELD_MAP.p4_name,  c.name);
+  _set(SW_FIELD_MAP.p4_nric,  c.nric||"");
+  _set(SW_FIELD_MAP.p4_date,  todayStr);
+
+  // ── PAGE 7: Policyholder acknowledgement + Advisor date ──
+  _set(SW_FIELD_MAP.p7_clientName, c.name);
+  _set(SW_FIELD_MAP.p7_clientNric, c.nric||"");
+  _set(SW_FIELD_MAP.p7_clientDate, todayStr);
+  _set(SW_FIELD_MAP.p7_advisorDate, todayStr);
+
+  // ── PAGE 10: Fund Switch Form — Policyholder details ──
+  // Fields below marked (*) need to be added to the client profile.
+  // Until added, nationality/country default to Singapore values; others are blank.
+  _set(SW_FIELD_MAP.p10_name,        c.name);
+  _set(SW_FIELD_MAP.p10_nric,        c.nric||"");
+  _set(SW_FIELD_MAP.p10_policyNo,    c.policyNo||"");
+  _set(SW_FIELD_MAP.p10_nationality, c.nationality||"Singaporean"); // (*)
+  _set(SW_FIELD_MAP.p10_country,     c.countryOfResidence||"Singapore"); // (*)
+  _set(SW_FIELD_MAP.p10_occupation,  c.occupation||""); // (*)
+  _set(SW_FIELD_MAP.p10_natureOfWork,c.natureOfWork||""); // (*)
+  _set(SW_FIELD_MAP.p10_annualIncome,c.annualIncome||""); // (*)
+
+  // ── PAGE 11: Section 1A — all ILP except Legacy Flex Solitaire ──
+  if(hasRegular){
+    _set(SW_FIELD_MAP.p11_1a_fundOut, swOutFund);
+    _set(SW_FIELD_MAP.p11_1a_pctOut,  String(swPct));
+    _set(SW_FIELD_MAP.p11_1a_fundIn,  swInFund);
+    _set(SW_FIELD_MAP.p11_1a_pctIn,   "100");
   }
 
+  // ── PAGE 11: Section 1B — Legacy Flex Solitaire only ──
+  if(isLegacy){
+    _set(SW_FIELD_MAP.p11_1b_fundOut, swOutFund);
+    _set(SW_FIELD_MAP.p11_1b_pctOut,  String(swPct));
+    _set(SW_FIELD_MAP.p11_1b_fundIn,  swInFund);
+    _set(SW_FIELD_MAP.p11_1b_pctIn,   "100");
+  }
+
+  // ── PAGE 16: Today's date for policyholder signature ──
+  _set(SW_FIELD_MAP.p16_date, todayStr);
+
+  try{form.flatten();}catch(e){}
   return await pdfDoc.save();
 }
 
-// ── Field name map — UPDATE these after running Inspect Fields ──
-// Each entry is an array of candidate names to try (first match wins).
+// ── Field name map ──
+// Each entry = array of candidate AcroForm field names (first match wins).
+// Run 🔍 Inspect Fields after uploading the template — share the output
+// and these will be updated with the exact names from the PDF.
 const SW_FIELD_MAP={
-  clientName:["Full Name","Name","Policyholder Name","Policyholder's Name","Name of Policyholder","Name as in NRIC"],
-  nric:["NRIC","NRIC/Passport/FIN","NRIC / Passport No. / FIN","IC No","NRIC No","Passport/FIN"],
-  age:["Age","Current Age","Age (Years)","Q2","Age_Q2"],
-  policyNo:["Policy Number","Policy No.","Policy No","PolicyNo","Policy Number/s"],
-  date:["Date","Signed Date","Form Date","Today's Date","Submission Date"],
-  fundOut1:["Fund Out 1","Switch Out Fund 1","Fund_Out_1","Fund to Switch Out 1","Switch Out (Fund Name) 1","FundOut1"],
-  pctOut1:["% Out 1","Pct Out 1","Percentage Out 1","Switch Out % 1","PctOut1","% to switch out 1"],
-  fundIn1:["Fund In 1","Switch In Fund 1","Fund_In_1","Fund to Switch In 1","Switch In (Fund Name) 1","FundIn1"],
-  pctIn1:["% In 1","Pct In 1","Percentage In 1","Switch In % 1","PctIn1","% to switch in 1"],
+  // PAGE 1 — AFF Policyholder particulars
+  p1_name:          ["Full Name","Name of Policyholder","Policyholder Name","Name"],
+  p1_nric:          ["NRIC/Passport/FIN","NRIC","NRIC No","IC No"],
+  p1_62plus:        ["62 Years and Above","Age 62 or Above","62 or above","Age 62+"],
+  p1_policyNo:      ["Policy No. 1","AFF Policy No 1","Policy Number 1","Policy No 1"],
+
+  // PAGE 2 — Section A Q2 only
+  p2_age:           ["Current Age","Age","Q2 Age","Age (Years)"],
+
+  // PAGE 4 — Section C Declaration
+  p4_name:          ["Sec C Name","Section C Name","Declaration Name","Name_SecC"],
+  p4_nric:          ["Sec C NRIC","Section C NRIC","Declaration NRIC","NRIC_SecC"],
+  p4_date:          ["Sec C Date","Section C Date","Declaration Date","Date_SecC"],
+
+  // PAGE 7 — Acknowledgement + Advisor date
+  p7_clientName:    ["Client Name P7","Acknowledgement Name","Policyholder Name P7"],
+  p7_clientNric:    ["Client NRIC P7","Acknowledgement NRIC","Policyholder NRIC P7"],
+  p7_clientDate:    ["Client Date P7","Acknowledgement Date","Client Signed Date"],
+  p7_advisorDate:   ["Advisor Date P7","Advisor Signed Date","Advisor Declaration Date"],
+
+  // PAGE 10 — Fund Switch form Policyholder details
+  p10_name:         ["Policyholder Full Name SW","Policyholder Name SW","Full Name SW"],
+  p10_nric:         ["Policyholder NRIC SW","NRIC SW","NRIC/Passport SW"],
+  p10_policyNo:     ["Policy No SW","Policy Number SW","Policy No. SW"],
+  p10_nationality:  ["Nationality","Nationality SW"],
+  p10_country:      ["Country of Residence","Country/City of Residence"],
+  p10_occupation:   ["Occupation","Occupation SW"],
+  p10_natureOfWork: ["Nature of Work","Nature of Business","Nature of Work SW"],
+  p10_annualIncome: ["Annual Income","Annual Salary","Annual Income SW"],
+
+  // PAGE 11 — Section 1A (non-Legacy ILP)
+  p11_1a_fundOut:   ["1A Fund Out 1","Section 1A Fund Out","Fund Switch Out 1A"],
+  p11_1a_pctOut:    ["1A % Out 1","Section 1A % Out","Pct Out 1A"],
+  p11_1a_fundIn:    ["1A Fund In 1","Section 1A Fund In","Fund Switch In 1A"],
+  p11_1a_pctIn:     ["1A % In 1","Section 1A % In","Pct In 1A"],
+
+  // PAGE 11 — Section 1B (Legacy Flex Solitaire)
+  p11_1b_fundOut:   ["1B Fund Out 1","Section 1B Fund Out","Legacy Fund Out 1"],
+  p11_1b_pctOut:    ["1B % Out 1","Section 1B % Out","Legacy % Out 1"],
+  p11_1b_fundIn:    ["1B Fund In 1","Section 1B Fund In","Legacy Fund In 1"],
+  p11_1b_pctIn:     ["1B % In 1","Section 1B % In","Legacy % In 1"],
+
+  // PAGE 16 — Policyholder signature date
+  p16_date:         ["Signature Date P16","Policyholder Signature Date","Date P16","Date of Signing"],
 };
 
 function _downloadFilledPdf(bytes,filename){
