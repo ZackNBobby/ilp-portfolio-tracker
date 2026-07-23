@@ -5647,7 +5647,7 @@ onAuthStateChanged(auth,user=>{
 // 🧮 SCENARIO CALCULATOR
 // ══════════════════════════════════════════════════════════════════════════════
 let _calcSubTab="planner",_calcChart2=null;
-let _ilp={premium:20000,mip:15,investReturn:8,fundMgmt:0,charge1to10:2.5,charge11plus:0.5};
+let _ilp={premium:20000,mip:15,investReturn:8,fundMgmt:0,charge1to10:2.5,charge11plus:0.5,displayYears:20};
 let _calcS=[
   {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:0.05},
   {name:"Investments",           startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:8.0}
@@ -5878,17 +5878,17 @@ function buildCalcProjection(s1,s2){
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB thresholds differ per MIP period
 const _ILP_MIP_CFG={
-  15:{subTiers:[{min:9600,pct:0.45},{min:3600,pct:0.15}],label:"15 MIP",
+  15:{subTiers:[{min:9600,pct:0.45},{min:3600,pct:0.15}],label:"15 MIP",defaultYears:20,extYears:[20,25,30],
       scenarios:[
-        {label:"Pay 15 Years",        col:"#06b6d4",   payFn:y=>y<=15},
-        {label:"Pay 10 · Holiday 5",  col:"var(--gold)",payFn:y=>y<=10},
-        {label:"5 Pay · 5 Hol · 5 Pay",col:"#a78bfa", payFn:y=>y<=5||(y>=11&&y<=15)},
-      ],displayYears:20},
-  10:{subTiers:[{min:9600,pct:0.25},{min:6000,pct:0.10}],label:"10 MIP",
+        {label:"Pay 15 Years",          col:"#06b6d4",   payFn:y=>y<=15},
+        {label:"Pay 10 · Holiday 5",    col:"var(--gold)",payFn:y=>y<=10},
+        {label:"5 Pay · 5 Hol · 5 Pay",col:"#a78bfa",   payFn:y=>y<=5||(y>=11&&y<=15)},
+      ]},
+  10:{subTiers:[{min:9600,pct:0.25},{min:6000,pct:0.10}],label:"10 MIP",defaultYears:15,extYears:[15,20,25],
       scenarios:[
-        {label:"Pay 10 Years",        col:"#06b6d4",   payFn:y=>y<=10},
-        {label:"Pay 5 · Holiday 5",   col:"var(--gold)",payFn:y=>y<=5},
-      ],displayYears:15},
+        {label:"Pay 10 Years",      col:"#06b6d4",   payFn:y=>y<=10},
+        {label:"Pay 5 · Holiday 5", col:"var(--gold)",payFn:y=>y<=5},
+      ]},
 };
 
 function _ilpSUB(p,mip){
@@ -5898,10 +5898,10 @@ function _ilpSUB(p,mip){
 }
 
 function _computeILP(){
-  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
+  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus,displayYears}=_ilp;
   const cfg=_ILP_MIP_CFG[mip]||_ILP_MIP_CFG[15];
   const sub=_ilpSUB(premium,mip);
-  const YEARS=cfg.displayYears;
+  const YEARS=displayYears;
   return cfg.scenarios.map(sc=>{
     let val=0,paid=0;
     const rows=[];
@@ -5919,11 +5919,11 @@ function _computeILP(){
 }
 
 function buildCalcILP(){
-  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
+  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus,displayYears}=_ilp;
   const cfg=_ILP_MIP_CFG[mip]||_ILP_MIP_CFG[15];
   const sub=_ilpSUB(premium,mip);
   const scenarios=_computeILP();
-  const DY=cfg.displayYears;
+  const DY=displayYears;
   const lastPayYear=mip; // last year any scenario could be paying
   const MILESTONES=new Set([1,5,10,15,20].filter(v=>v<=DY));
   const subTierStr=cfg.subTiers.map(t=>`≥$${t.min.toLocaleString()} → ${(t.pct*100).toFixed(0)}%`).join(" &nbsp;|&nbsp; ");
@@ -5943,12 +5943,20 @@ function buildCalcILP(){
       </div>
     </div>
 
+    <!-- Display years dropdown -->
+    <div style="margin-bottom:14px;">
+      <div class="ilp-lbl" style="margin-bottom:6px;">Show Projection For</div>
+      <select class="sel" style="width:100%;font-size:12px;" onchange="ilpSet('displayYears',+this.value)">
+        ${cfg.extYears.map(y=>`<option value="${y}"${displayYears===y?" selected":""}>${y} Years</option>`).join("")}
+      </select>
+    </div>
+
     <div class="ilp-grid">
       <div class="ilp-section-lbl">Premium</div>
       <div class="ilp-field">
         <label class="ilp-lbl">Annual Premium</label>
         <div class="calc-ip-wrap"><span class="calc-ip-sym left">$</span>
-          <input class="calc-ip-input pl" type="number" min="1200" step="1000" value="${premium}" oninput="ilpSet('premium',+this.value)"/>
+          <input class="calc-ip-input pl" type="number" min="1200" step="1000" value="${premium}" onchange="ilpSet('premium',+this.value)"/>
         </div>
       </div>
       <div class="ilp-field">
@@ -5959,25 +5967,25 @@ function buildCalcILP(){
       <div class="ilp-field">
         <label class="ilp-lbl">Investment Return</label>
         <div class="calc-ip-wrap"><span class="calc-ip-sym right">%</span>
-          <input class="calc-ip-input pr" type="number" min="0" max="30" step="0.5" value="${investReturn}" oninput="ilpSet('investReturn',+this.value)"/>
+          <input class="calc-ip-input pr" type="number" min="0" max="30" step="0.5" value="${investReturn}" onchange="ilpSet('investReturn',+this.value)"/>
         </div>
       </div>
       <div class="ilp-field">
         <label class="ilp-lbl">Fund Mgmt Charge</label>
         <div class="calc-ip-wrap"><span class="calc-ip-sym right">%</span>
-          <input class="calc-ip-input pr" type="number" min="0" max="5" step="0.1" value="${fundMgmt}" oninput="ilpSet('fundMgmt',+this.value)"/>
+          <input class="calc-ip-input pr" type="number" min="0" max="5" step="0.1" value="${fundMgmt}" onchange="ilpSet('fundMgmt',+this.value)"/>
         </div>
       </div>
       <div class="ilp-field">
         <label class="ilp-lbl">Policy Charge Y1–10</label>
         <div class="calc-ip-wrap"><span class="calc-ip-sym right">%</span>
-          <input class="calc-ip-input pr" type="number" min="0" max="10" step="0.1" value="${charge1to10}" oninput="ilpSet('charge1to10',+this.value)"/>
+          <input class="calc-ip-input pr" type="number" min="0" max="10" step="0.1" value="${charge1to10}" onchange="ilpSet('charge1to10',+this.value)"/>
         </div>
       </div>
       <div class="ilp-field">
         <label class="ilp-lbl">Policy Charge Y11+</label>
         <div class="calc-ip-wrap"><span class="calc-ip-sym right">%</span>
-          <input class="calc-ip-input pr" type="number" min="0" max="5" step="0.1" value="${charge11plus}" oninput="ilpSet('charge11plus',+this.value)"/>
+          <input class="calc-ip-input pr" type="number" min="0" max="5" step="0.1" value="${charge11plus}" onchange="ilpSet('charge11plus',+this.value)"/>
         </div>
       </div>
     </div>
@@ -6040,6 +6048,7 @@ function buildCalcILP(){
 
 window.ilpSet=(field,val)=>{
   _ilp[field]=val;
+  if(field==="mip")_ilp.displayYears=(_ILP_MIP_CFG[val]||_ILP_MIP_CFG[15]).defaultYears;
   document.getElementById("app").innerHTML=renderCalculator();
 };
 
