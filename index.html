@@ -756,8 +756,7 @@ body{
 .ilp-tbl tbody tr:hover td{background:rgba(255,255,255,0.02);}
 .ilp-tbl tbody tr.proj-milestone td{background:rgba(245,158,11,0.04);}
 .ilp-tbl tbody tr.ilp-divider td{background:rgba(255,255,255,0.02);font-size:10px;color:var(--dim);text-align:center;border-top:1px dashed rgba(255,255,255,0.1);padding:3px 8px;}
-.ilp-hol-tag{font-size:9px;font-weight:700;color:#64748b;background:rgba(100,116,139,0.15);border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle;}
-.ilp-sub-head{font-size:9px;color:var(--dim);font-weight:400;}
+.ilp-hol-cell{background:rgba(148,163,184,0.07)!important;}
 .ilp-roi{font-size:9px;color:#64748b;display:block;font-weight:400;}
 .ilp-roi.pos{color:#22c55e;}
 </style>
@@ -5648,7 +5647,7 @@ onAuthStateChanged(auth,user=>{
 // 🧮 SCENARIO CALCULATOR
 // ══════════════════════════════════════════════════════════════════════════════
 let _calcSubTab="planner",_calcChart2=null;
-let _ilp={premium:20000,investReturn:8,fundMgmt:0,charge1to10:2.5,charge11plus:0.5};
+let _ilp={premium:20000,mip:15,investReturn:8,fundMgmt:0,charge1to10:2.5,charge11plus:0.5};
 let _calcS=[
   {name:"Bank / Savings Account",startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:0.05},
   {name:"Investments",           startAge:30,endAge:65,mode:"monthly",amount:0,lump:0,rate:8.0}
@@ -5877,19 +5876,33 @@ function buildCalcProjection(s1,s2){
 // ─────────────────────────────────────────────────────────────────────────────
 // InvestFlex Illustration
 // ─────────────────────────────────────────────────────────────────────────────
-function _ilpSUB(p){return p>=9600?0.45:p>=3600?0.15:0;}
+// SUB thresholds differ per MIP period
+const _ILP_MIP_CFG={
+  15:{subTiers:[{min:9600,pct:0.45},{min:3600,pct:0.15}],label:"15 MIP",
+      scenarios:[
+        {label:"Pay 15 Years",        col:"#06b6d4",   payFn:y=>y<=15},
+        {label:"Pay 10 · Holiday 5",  col:"var(--gold)",payFn:y=>y<=10},
+        {label:"5 Pay · 5 Hol · 5 Pay",col:"#a78bfa", payFn:y=>y<=5||(y>=11&&y<=15)},
+      ],displayYears:20},
+  10:{subTiers:[{min:9600,pct:0.25},{min:6000,pct:0.10}],label:"10 MIP",
+      scenarios:[
+        {label:"Pay 10 Years",        col:"#06b6d4",   payFn:y=>y<=10},
+        {label:"Pay 5 · Holiday 5",   col:"var(--gold)",payFn:y=>y<=5},
+      ],displayYears:15},
+};
+
+function _ilpSUB(p,mip){
+  const tiers=(_ILP_MIP_CFG[mip]||_ILP_MIP_CFG[15]).subTiers;
+  for(const t of tiers)if(p>=t.min)return t.pct;
+  return 0;
+}
 
 function _computeILP(){
-  const{premium,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
-  const sub=_ilpSUB(premium);
-  const YEARS=20;
-  // Three 15-MIP scenarios
-  const scenarios=[
-    {label:"Pay 15 Years",      col:"#06b6d4",   payFn:y=>y>=1&&y<=15},
-    {label:"Pay 10 · Holiday 5",col:"var(--gold)",payFn:y=>y>=1&&y<=10},
-    {label:"5 Pay · 5 Hol · 5 Pay",col:"#a78bfa",payFn:y=>(y>=1&&y<=5)||(y>=11&&y<=15)},
-  ];
-  return scenarios.map(sc=>{
+  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
+  const cfg=_ILP_MIP_CFG[mip]||_ILP_MIP_CFG[15];
+  const sub=_ilpSUB(premium,mip);
+  const YEARS=cfg.displayYears;
+  return cfg.scenarios.map(sc=>{
     let val=0,paid=0;
     const rows=[];
     for(let y=1;y<=YEARS;y++){
@@ -5906,15 +5919,30 @@ function _computeILP(){
 }
 
 function buildCalcILP(){
-  const{premium,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
-  const sub=_ilpSUB(premium);
+  const{premium,mip,investReturn,fundMgmt,charge1to10,charge11plus}=_ilp;
+  const cfg=_ILP_MIP_CFG[mip]||_ILP_MIP_CFG[15];
+  const sub=_ilpSUB(premium,mip);
   const scenarios=_computeILP();
-  const MILESTONES=new Set([1,5,10,15,20]);
+  const DY=cfg.displayYears;
+  const lastPayYear=mip; // last year any scenario could be paying
+  const MILESTONES=new Set([1,5,10,15,20].filter(v=>v<=DY));
+  const subTierStr=cfg.subTiers.map(t=>`≥$${t.min.toLocaleString()} → ${(t.pct*100).toFixed(0)}%`).join(" &nbsp;|&nbsp; ");
+  const colspan=2+scenarios.length;
 
   // ── Input panel ──
   let h=`<div class="ilp-wrap">
   <div class="ilp-inputs card">
-    <div class="sec-title" style="margin-bottom:14px;font-size:14px;">⚙ InvestFlex Parameters</div>
+    <div class="sec-title" style="margin-bottom:12px;font-size:14px;">⚙ InvestFlex Parameters</div>
+
+    <!-- MIP toggle -->
+    <div style="margin-bottom:14px;">
+      <div class="ilp-lbl" style="margin-bottom:6px;">MIP Period</div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="ilpSet('mip',15)" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid ${mip===15?"var(--gold-border)":"rgba(255,255,255,0.1)"};background:${mip===15?"rgba(245,158,11,0.15)":"var(--faint)"};color:${mip===15?"var(--gold)":"var(--dim)"};cursor:pointer;">15 MIP</button>
+        <button onclick="ilpSet('mip',10)" style="flex:1;padding:8px 0;font-size:12px;font-weight:700;border-radius:8px;border:1px solid ${mip===10?"var(--gold-border)":"rgba(255,255,255,0.1)"};background:${mip===10?"rgba(245,158,11,0.15)":"var(--faint)"};color:${mip===10?"var(--gold)":"var(--dim)"};cursor:pointer;">10 MIP</button>
+      </div>
+    </div>
+
     <div class="ilp-grid">
       <div class="ilp-section-lbl">Premium</div>
       <div class="ilp-field">
@@ -5954,8 +5982,8 @@ function buildCalcILP(){
       </div>
     </div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);font-size:10px;color:var(--dim);line-height:1.7;">
-      <span style="color:var(--gold);">SUB thresholds:</span> ≥$9,600 → 45% &nbsp;|&nbsp; ≥$3,600 → 15%<br>
-      Based on Income InvestFlex 15 MIP product.<br>
+      <span style="color:var(--gold);">SUB (${cfg.label}):</span> ${subTierStr}<br>
+      <span style="color:rgba(148,163,184,0.5);">Shaded rows = Premium Holiday</span><br>
       <span style="color:#ef4444;">Not financial advice — for illustration only.</span>
     </div>
   </div>
@@ -5972,16 +6000,19 @@ function buildCalcILP(){
       </thead>
       <tbody>`;
 
-  for(let i=0;i<20;i++){
+  for(let i=0;i<DY;i++){
     const y=i+1;
     const isMile=MILESTONES.has(y);
+    const anyPaying=scenarios.some(sc=>sc.rows[i].paying);
+    const allHol=!anyPaying&&scenarios[0].rows[i].paid>0;
     const paidDisplay="$"+(scenarios[0].rows[i].paid).toLocaleString();
 
-    if(y===16){
-      h+=`<tr class="ilp-divider"><td colspan="5">─── All premiums paid · policy continues to grow ───</td></tr>`;
+    // Divider after the last MIP payment year
+    if(y===lastPayYear+1){
+      h+=`<tr class="ilp-divider"><td colspan="${colspan}">─── All premiums paid · policy continues to grow ───</td></tr>`;
     }
 
-    h+=`<tr class="${isMile?"proj-milestone":""}">
+    h+=`<tr class="${isMile?"proj-milestone":""}${allHol?" ilp-all-hol":""}">
       <td><strong>${y}</strong>${isMile?` <span style="color:var(--gold);font-size:9px;">●</span>`:""}</td>
       <td style="color:var(--dim);">${paidDisplay}</td>`;
 
@@ -5989,8 +6020,8 @@ function buildCalcILP(){
       const row=sc.rows[i];
       const roi=row.paid>0?((row.value-row.paid)/row.paid*100):0;
       const isHol=!row.paying&&row.paid>0;
-      h+=`<td style="color:${sc.col};font-weight:${isMile?700:500};">
-        $${row.value.toLocaleString()}${isHol?`<span class="ilp-hol-tag">HOL</span>`:""}
+      h+=`<td style="color:${sc.col};font-weight:${isMile?700:500};${isHol?"background:rgba(148,163,184,0.07);":""}" class="${isHol?"ilp-hol-cell":""}">
+        $${row.value.toLocaleString()}
         ${isMile&&row.paid>0?`<span class="ilp-roi${roi>0?" pos":""}">${roi>=0?"+":""}${roi.toFixed(1)}% ROI</span>`:""}
       </td>`;
     });
@@ -6000,9 +6031,8 @@ function buildCalcILP(){
 
   h+=`</tbody></table></div></div>
   <div class="calc-disclaimer" style="margin-top:8px;">
-    ● = milestone years. HOL = Premium Holiday (no premium paid, policy still grows). ROI = return on total premiums paid.
+    ● = milestone years. Shaded cells = Premium Holiday (no premium paid, policy still grows). ROI = return on total premiums paid.
     Charges deducted annually. Start Up Bonus applied in Year 1 only. Values are illustrative — not guaranteed.
-    Income InvestFlex 15 MIP: if annual premium ≥ $9,600, SUB = 45%; if ≥ $3,600, SUB = 15%.
   </div>`;
 
   return h;
