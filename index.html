@@ -756,7 +756,7 @@ body{
 .ilp-tbl tbody tr:hover td{background:rgba(255,255,255,0.02);}
 .ilp-tbl tbody tr.proj-milestone td{background:rgba(245,158,11,0.04);}
 .ilp-tbl tbody tr.ilp-divider td{background:rgba(255,255,255,0.02);font-size:10px;color:var(--dim);text-align:center;border-top:1px dashed rgba(255,255,255,0.1);padding:3px 8px;}
-.ilp-hol-cell{background:rgba(148,163,184,0.07)!important;}
+.ilp-hol-cell{background:rgba(148,163,184,0.18)!important;}
 .ilp-roi{font-size:9px;color:#64748b;display:block;font-weight:400;}
 .ilp-roi.pos{color:#22c55e;}
 </style>
@@ -6028,7 +6028,7 @@ function buildCalcILP(){
       const row=sc.rows[i];
       const roi=row.paid>0?((row.value-row.paid)/row.paid*100):0;
       const isHol=!row.paying&&row.paid>0;
-      h+=`<td style="color:${sc.col};font-weight:${isMile?700:500};${isHol?"background:rgba(148,163,184,0.07);":""}" class="${isHol?"ilp-hol-cell":""}">
+      h+=`<td style="color:${sc.col};font-weight:${isMile?700:500};${isHol?"background:rgba(148,163,184,0.18);":""}" class="${isHol?"ilp-hol-cell":""}">
         $${row.value.toLocaleString()}
         ${isMile&&row.paid>0?`<span class="ilp-roi${roi>0?" pos":""}">${roi>=0?"+":""}${roi.toFixed(1)}% ROI</span>`:""}
       </td>`;
