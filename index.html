@@ -3067,7 +3067,7 @@ function renderClientDetail(clientId){
       </div>
       <div class="card" style="margin-bottom:14px;">
         <div class="sec-title" style="margin-bottom:10px;">📈 Goal Progression Chart</div>
-        <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Amber = actual value · Blue dotted = projected at current rate · Green dashed = required trajectory</div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Amber = actual value · Blue dotted = projected at 8% p.a. · Green dashed = required trajectory</div>
         <canvas id="goal-${clientId}" height="200"></canvas>
       </div>
       <div class="card">
@@ -3083,7 +3083,7 @@ function renderClientDetail(clientId){
           </div>
           <div>
             <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Assumed Growth Rate (%/yr)</label>
-            <input id="goalGrowthRate" type="number" placeholder="5" value="5" step="0.5" min="1" max="20"
+            <input id="goalGrowthRate" type="number" placeholder="8" value="8" step="0.5" min="1" max="20"
               oninput="updateGoalCalc('${clientId}')"
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
           </div>
@@ -4379,7 +4379,7 @@ function initCharts(clientId){
     const startYear=parseInt((c.startDate||todayStr).split("-")[0]);
     const startMD=c.startDate?(c.startDate.slice(5)):"01-01";
     const labels=[],goalLine=[],actualLine=[],projLine=[];
-    const rDef=0.05;
+    const rDef=0.08;
     const AP=c.annualPremium||0;
     const totalYears=targetYear-startYear;
     for(let yr=startYear;yr<=targetYear;yr++){
@@ -4408,7 +4408,7 @@ function initCharts(clientId){
         labels,
         datasets:[
           {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.08)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:4,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
-          {label:"At Current Rate (5% p.a.)",data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:"#60a5fa",spanGaps:false},
+          {label:"At Current Rate (8% p.a.)",data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:"#60a5fa",spanGaps:false},
           {label:`Goal: ${$f(goal.targetAmount)} by Age ${goal.targetAge}`,data:goalLine,borderColor:"#4ade80",borderDash:[8,5],borderWidth:2,fill:false,tension:0,pointRadius:0,pointHoverRadius:5,pointBackgroundColor:"#4ade80"}
         ]
       },
