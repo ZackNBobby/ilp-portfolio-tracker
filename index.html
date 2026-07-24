@@ -1663,6 +1663,92 @@ window.saveClientNotes=async(clientId)=>{
   const el=document.getElementById("notesSaveStatus");
   if(el){el.textContent="✓ Saved";setTimeout(()=>{if(el)el.textContent="";},2000);}
 };
+window.saveClientGoal=async(clientId)=>{
+  const tA=parseFloat(document.getElementById("goalTargetAmount")?.value);
+  const tAge=parseInt(document.getElementById("goalTargetAge")?.value);
+  const lbl=(document.getElementById("goalLabel")?.value||"").trim();
+  if(!tA||!tAge||isNaN(tA)||isNaN(tAge)){
+    alert("Please enter a valid target amount and target age.");return;
+  }
+  const goal={targetAmount:tA,targetAge:tAge,goalLabel:lbl};
+  await setDoc(doc(db,"clients",clientId),{goal},{merge:true});
+  const c=clients.find(x=>x.fid===clientId);
+  if(c)c.goal=goal;
+  renderPage();
+};
+window.clearClientGoal=async(clientId)=>{
+  if(!confirm("Clear this client's goal?"))return;
+  await setDoc(doc(db,"clients",clientId),{goal:{}},{merge:true});
+  const c=clients.find(x=>x.fid===clientId);
+  if(c)c.goal={};
+  renderPage();
+};
+window.updateGoalCalc=(clientId)=>{
+  const c=clients.find(x=>x.fid===clientId);
+  if(!c)return;
+  const goal=c.goal||{};
+  const el=document.getElementById("goalCalcResult");
+  if(!el)return;
+  const tA=parseFloat(document.getElementById("goalTargetAmount")?.value)||goal.targetAmount;
+  const tAge=parseInt(document.getElementById("goalTargetAge")?.value)||goal.targetAge;
+  const desiredAge=parseInt(document.getElementById("goalDesiredAge")?.value);
+  const r=(parseFloat(document.getElementById("goalGrowthRate")?.value)||5)/100;
+  const AP=parseFloat(document.getElementById("goalAnnualPremium")?.value)||c.annualPremium||0;
+  const cAge=getAge(c.dob);
+  if(!tA||!tAge||!desiredAge||cAge===null){
+    el.innerHTML=`<div style="color:var(--dim);font-size:12px;">Enter your desired target age above to see the calculation.</div>`;return;
+  }
+  if(desiredAge>=tAge){
+    el.innerHTML=`<div style="color:var(--dim);font-size:12px;">⚠️ Desired age must be earlier than the target age (${tAge}).</div>`;return;
+  }
+  if(desiredAge<=cAge){
+    el.innerHTML=`<div style="color:var(--dim);font-size:12px;">⚠️ Desired age must be in the future (currently ${cAge}).</div>`;return;
+  }
+  const txs=clientTxs[clientId]||[];
+  const V=portfolioTotals(calcPortfolio(txs)).totalValue;
+  const n2=desiredAge-cAge;
+  const gf=Math.pow(1+r,n2);
+  const af=(gf-1)/r;
+  const neededAnnual=(tA-V*gf)/af;
+  const extraAnnual=neededAnnual-AP;
+  const extraMonthly=extraAnnual/12;
+  const yearsSaved=tAge-desiredAge;
+  // also project at original timeline to show trajectory context
+  const n_orig=tAge-cAge;
+  const gf_orig=Math.pow(1+r,n_orig);
+  const af_orig=(gf_orig-1)/r;
+  const projOrig=V*gf_orig+AP*af_orig;
+  if(extraAnnual<=0){
+    el.innerHTML=`<div style="display:flex;align-items:flex-start;gap:12px;">
+      <span style="font-size:28px;line-height:1;">🎉</span>
+      <div>
+        <div style="font-weight:700;color:var(--green);font-size:14px;margin-bottom:4px;">Already on track!</div>
+        <div style="font-size:12px;color:var(--dim);line-height:1.6;">At <strong style="color:var(--text);">${(r*100).toFixed(1)}%</strong> growth you should reach <strong style="color:var(--gold-l);">${$f(tA)}</strong> by age <strong style="color:var(--gold-l);">${desiredAge}</strong> — <strong style="color:#4ade80;">${yearsSaved} year${yearsSaved!==1?"s":""} early</strong> — without any additional investment.<br>
+        Projected at original age ${tAge}: <strong style="color:var(--green);">${$f(projOrig)}</strong></div>
+      </div>
+    </div>`;
+  } else {
+    el.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Extra Monthly</div>
+        <div style="font-size:22px;font-weight:900;color:var(--gold);">${$f(extraMonthly)}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:3px;">per month on top of current</div>
+      </div>
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Extra Annual</div>
+        <div style="font-size:22px;font-weight:900;color:var(--gold);">${$f(extraAnnual)}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:3px;">per year on top of current</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--dim);line-height:1.7;">
+      Invest an extra <strong style="color:var(--gold-l);">${$f(extraMonthly)}/mo</strong> (${$f(extraAnnual)}/yr) on top of your current
+      <strong style="color:var(--text);">${$f(AP)}/yr</strong> at <strong style="color:var(--text);">${(r*100).toFixed(1)}%</strong> p.a. to reach
+      <strong style="color:var(--gold-l);">${$f(tA)}</strong> by age <strong style="color:var(--gold-l);">${desiredAge}</strong> —
+      <strong style="color:#4ade80;">${yearsSaved} year${yearsSaved!==1?"s":""} earlier</strong> than your original plan.
+      At your current rate, your original age-${tAge} projection is <strong style="color:var(--green);">${$f(projOrig)}</strong>.
+    </div>`;
+  }
+};
 window.markPremiumPaid=async(e,fid,year)=>{
   e.stopPropagation();
   await setDoc(doc(db,"clients",fid),{premiumPaidYear:year},{merge:true});
@@ -2806,6 +2892,7 @@ function renderClientDetail(clientId){
     <button class="client-subtab${currentClientTab==="overview"?" active":""}" onclick="setClientTab('overview')">📊 Overview</button>
     <button class="client-subtab${currentClientTab==="payments"?" active":""}" onclick="setClientTab('payments')">💳 Payments</button>
     <button class="client-subtab${currentClientTab==="notes"?" active":""}" onclick="setClientTab('notes')">📝 Notes</button>
+    <button class="client-subtab${currentClientTab==="goals"?" active":""}" onclick="setClientTab('goals')">🎯 Goals</button>
   </div>`;
 
   // ── Payments tab ──
@@ -2894,6 +2981,130 @@ function renderClientDetail(clientId){
         oninput="notesChanged()"
         onblur="saveClientNotes('${clientId}')">${esc(c.notes||"")}</textarea>
     </div>`;
+    return html;
+  }
+
+  // ── Goals tab ──
+  if(currentClientTab==="goals"){
+    const goal=c.goal||{};
+    const hasGoal=!!(goal.targetAmount&&goal.targetAge);
+    const _cAge=getAge(c.dob);
+    const _goalTxs=clientTxs[clientId]||[];
+    const _goalFundData=calcPortfolio(_goalTxs);
+    const _goalTotals=portfolioTotals(_goalFundData);
+    const _goalCurVal=_goalTotals.totalValue;
+    html+=`<div class="card" style="margin-bottom:14px;">
+      <div class="sec-title" style="margin-bottom:12px;">🎯 Goal Setup</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div>
+          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Goal Label</label>
+          <input id="goalLabel" type="text" placeholder="e.g. Retirement"
+            value="${esc(goal.goalLabel||'')}"
+            style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Target Amount ($)</label>
+          <input id="goalTargetAmount" type="number" placeholder="e.g. 500000"
+            value="${goal.targetAmount||''}"
+            style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Target Age</label>
+          <input id="goalTargetAge" type="number" placeholder="e.g. 65"
+            value="${goal.targetAge||''}"
+            style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="saveClientGoal('${clientId}')"
+          style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--gold);border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer;font-weight:600;">
+          💾 Save Goal
+        </button>
+        ${hasGoal?`<button onclick="clearClientGoal('${clientId}')"
+          style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;">
+          ✕ Clear Goal
+        </button>`:""}
+      </div>
+    </div>`;
+    if(hasGoal){
+      const _gPct=_goalCurVal>0?Math.min((_goalCurVal/goal.targetAmount)*100,100):0;
+      const _gGap=Math.max(0,goal.targetAmount-_goalCurVal);
+      const _gYrsLeft=_cAge!==null?Math.max(0,goal.targetAge-_cAge):null;
+      const _gCol=_gPct>=100?"var(--green)":_gPct>=50?"var(--gold)":"#f87171";
+      html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
+        <div class="stat-card card-gold">
+          <div class="stat-lbl">Target</div>
+          <div class="stat-val gold">${$f(goal.targetAmount)}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${esc(goal.goalLabel||'Goal')} · Age ${goal.targetAge}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Current Value</div>
+          <div class="stat-val">${$f(_goalCurVal)}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_cAge!==null?"Age "+_cAge:"—"}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Progress</div>
+          <div class="stat-val" style="color:${_gCol};">${_gPct.toFixed(1)}%</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_gYrsLeft!==null?_gYrsLeft+" yrs left":"—"}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Gap to Goal</div>
+          <div class="stat-val" style="color:${_gGap<=0?"var(--green)":"#f87171"};">${_gGap<=0?"✓ Done":$f(_gGap)}</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_gGap<=0?"Goal reached!":"Still needed"}</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:var(--dim);">${esc(goal.goalLabel||'Goal')} Progress</span>
+          <span style="font-size:13px;font-weight:700;color:${_gCol};">${_gPct.toFixed(1)}%</span>
+        </div>
+        <div style="height:12px;background:var(--bg3);border-radius:99px;overflow:hidden;">
+          <div style="height:100%;width:${_gPct.toFixed(1)}%;background:${_gPct>=100?"var(--green)":_gPct>=50?"linear-gradient(90deg,#f59e0b,#fbbf24)":"linear-gradient(90deg,#ef4444,#f59e0b)"};border-radius:99px;transition:width 0.6s ease;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--dim);">
+          <span>${$f(0)}</span><span>${$f(goal.targetAmount)}</span>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="sec-title" style="margin-bottom:10px;">📈 Goal Progression Chart</div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Amber = actual value · Blue dotted = projected at current rate · Green dashed = required trajectory</div>
+        <canvas id="goal-${clientId}" height="200"></canvas>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:6px;">🚀 Speed Up Calculator</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Find out how much extra to invest each month to reach your goal earlier.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Reach Goal By Age</label>
+            <input id="goalDesiredAge" type="number" placeholder="e.g. ${Math.max((_cAge||0)+1,goal.targetAge-5)}"
+              value="${Math.max((_cAge||0)+1,goal.targetAge-5)}"
+              oninput="updateGoalCalc('${clientId}')"
+              style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Assumed Growth Rate (%/yr)</label>
+            <input id="goalGrowthRate" type="number" placeholder="5" value="5" step="0.5" min="1" max="20"
+              oninput="updateGoalCalc('${clientId}')"
+              style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Current Annual Premium ($)</label>
+            <input id="goalAnnualPremium" type="number" value="${c.annualPremium||0}"
+              oninput="updateGoalCalc('${clientId}')"
+              style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
+          </div>
+        </div>
+        <div id="goalCalcResult" style="background:var(--bg3);border-radius:10px;padding:14px 16px;min-height:60px;">
+          <div style="color:var(--dim);font-size:12px;">Adjust the inputs above to see the calculation.</div>
+        </div>
+      </div>`;
+    } else {
+      html+=`<div class="card" style="text-align:center;padding:36px 20px;border-style:dashed;">
+        <div style="font-size:36px;margin-bottom:10px;">🎯</div>
+        <div style="font-weight:700;color:var(--gold-l);margin-bottom:6px;">No goal set yet</div>
+        <div style="font-size:12px;color:var(--dim);">Fill in the goal details above and click <strong>Save Goal</strong> to get started.</div>
+      </div>`;
+    }
     return html;
   }
 
@@ -4150,6 +4361,72 @@ function initCharts(clientId){
         plugins:[xhairPlugin]
       });
     }
+  }
+
+  // Goal progression chart
+  const goalEl=document.getElementById(`goal-${clientId}`);
+  const _gc=clients.find(x=>x.fid===clientId);
+  if(goalEl&&_gc&&_gc.goal&&_gc.goal.targetAmount&&_gc.goal.targetAge&&_gc.dob){
+    destroyChart(`goal-${clientId}`);
+    const c=_gc;
+    const goal=c.goal;
+    const pts=calcTimeSeries(txs);
+    const currentVal=portfolioTotals(fundData).totalValue;
+    const today=new Date();
+    const todayStr=today.toISOString().split("T")[0];
+    const dobParts=c.dob.split("-");
+    const targetYear=parseInt(dobParts[0])+goal.targetAge;
+    const startYear=parseInt((c.startDate||todayStr).split("-")[0]);
+    const startMD=c.startDate?(c.startDate.slice(5)):"01-01";
+    const labels=[],goalLine=[],actualLine=[],projLine=[];
+    const rDef=0.05;
+    const AP=c.annualPremium||0;
+    const totalYears=targetYear-startYear;
+    for(let yr=startYear;yr<=targetYear;yr++){
+      const dateStr=`${yr}-${startMD}`;
+      labels.push(String(yr));
+      goalLine.push(totalYears>0?+(goal.targetAmount*((yr-startYear)/totalYears)).toFixed(2):goal.targetAmount);
+      if(dateStr<=todayStr){
+        let closest=null;
+        for(const pt of pts){if(pt.date<=dateStr)closest=pt;else break;}
+        actualLine.push(closest?+closest.value.toFixed(2):null);
+        projLine.push(null);
+      } else {
+        actualLine.push(null);
+        const t=(new Date(`${yr}-${startMD}`)-today)/(365.25*24*3600*1000);
+        const gfT=Math.pow(1+rDef,t);
+        const afT=(gfT-1)/rDef;
+        projLine.push(+(currentVal*gfT+AP*afT).toFixed(2));
+      }
+    }
+    // Bridge: connect actual to projection at today
+    const todayIdx=labels.indexOf(String(today.getFullYear()));
+    if(todayIdx>0&&currentVal>0){projLine[todayIdx]=+currentVal.toFixed(2);}
+    charts[`goal-${clientId}`]=new Chart(goalEl.getContext("2d"),{
+      type:"line",
+      data:{
+        labels,
+        datasets:[
+          {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.08)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:4,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
+          {label:"At Current Rate (5% p.a.)",data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:"#60a5fa",spanGaps:false},
+          {label:`Goal: ${$f(goal.targetAmount)} by Age ${goal.targetAge}`,data:goalLine,borderColor:"#4ade80",borderDash:[8,5],borderWidth:2,fill:false,tension:0,pointRadius:0,pointHoverRadius:5,pointBackgroundColor:"#4ade80"}
+        ]
+      },
+      options:{
+        responsive:true,
+        interaction:{mode:"index",intersect:false},
+        scales:{
+          x:{ticks:{color:"#64748b",font:{size:10},maxTicksLimit:12},grid:{color:"rgba(30,41,59,0.3)"}},
+          y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.35)"}}
+        },
+        plugins:{
+          legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:18}},
+          tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${$f(ctx.parsed.y)}`}}
+        },
+        animation:{duration:1200,easing:"easeInOutQuart"}
+      },
+      plugins:[xhairPlugin]
+    });
   }
 }
 
