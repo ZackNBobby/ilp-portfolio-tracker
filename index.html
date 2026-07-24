@@ -37,8 +37,8 @@ button,input,select,textarea{font-family:inherit;}
   66%{transform:translate(-20px,15px) scale(0.97);}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
-@keyframes goalPulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.7);}70%{box-shadow:0 0 0 14px rgba(245,158,11,0);}100%{box-shadow:0 0 0 0 rgba(245,158,11,0);}}
-.goal-glow-dot{width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #07101e;animation:goalPulse 2s ease-out infinite;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
+@keyframes goalPulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.8),0 0 6px 2px rgba(245,158,11,.4);}70%{box-shadow:0 0 0 18px rgba(245,158,11,0),0 0 6px 2px rgba(245,158,11,.2);}100%{box-shadow:0 0 0 0 rgba(245,158,11,0),0 0 6px 2px rgba(245,158,11,.4);}}
+.goal-glow-dot{width:14px;height:14px;border-radius:50%;background:#f59e0b;border:2.5px solid #07101e;animation:goalPulse 1.8s ease-out infinite;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:10;overflow:visible;}
 @keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(6,182,212,0.6);}50%{opacity:0.85;box-shadow:0 0 0 5px rgba(6,182,212,0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
 @keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
@@ -1675,19 +1675,22 @@ function _getGoals(c){
 function _placeGlowDot(clientId){
   const chart=charts[`goal-${clientId}`];
   if(!chart)return;
-  const ds=chart.data.datasets.find(d=>d.label==="Actual Portfolio");
-  if(!ds)return;
-  let lastIdx=-1,lastVal=null;
-  for(let i=ds.data.length-1;i>=0;i--){if(ds.data[i]!=null){lastIdx=i;lastVal=ds.data[i];break;}}
+  const dsIdx=chart.data.datasets.findIndex(d=>d.label==="Actual Portfolio");
+  if(dsIdx<0)return;
+  const ds=chart.data.datasets[dsIdx];
+  let lastIdx=-1;
+  for(let i=ds.data.length-1;i>=0;i--){if(ds.data[i]!=null){lastIdx=i;break;}}
   if(lastIdx<0)return;
+  // Use chart meta for accurate canvas pixel position
+  const meta=chart.getDatasetMeta(dsIdx);
+  const pt=meta.data[lastIdx];
+  if(!pt)return;
   const wrap=document.getElementById(`goal-wrap-${clientId}`);
   if(!wrap)return;
   document.getElementById(`glow-dot-${clientId}`)?.remove();
-  const x=chart.scales.x.getPixelForIndex(lastIdx);
-  const y=chart.scales.y.getPixelForValue(lastVal);
   const dot=document.createElement("div");
   dot.id=`glow-dot-${clientId}`;
-  dot.style.cssText=`position:absolute;left:${x}px;top:${y}px;`;
+  dot.style.cssText=`position:absolute;left:${pt.x}px;top:${pt.y}px;width:0;height:0;overflow:visible;pointer-events:none;z-index:10;`;
   dot.innerHTML=`<div class="goal-glow-dot"></div>`;
   wrap.appendChild(dot);
 }
@@ -1804,7 +1807,7 @@ function _reDrawGoalChart(clientId){
     },
     plugins:[xhairPlugin]
   });
-  setTimeout(()=>_placeGlowDot(clientId),80);
+  setTimeout(()=>_placeGlowDot(clientId),250);
 }
 window.saveClientGoal=async(clientId)=>{
   const tA=parseFloat(document.getElementById("goalTargetAmount")?.value);
@@ -3290,7 +3293,7 @@ function renderClientDetail(clientId){
           <span style="color:#60a5fa;">- -</span> Projected (8% p.a.) &nbsp;
           ${milestones.map((m,i)=>`<span style="color:${MILESTONE_COLORS[i%MILESTONE_COLORS.length]};">- - -</span> ${esc(m.label)}`).join(" &nbsp; ")}
         </div>
-        <div id="goal-wrap-${clientId}" style="position:relative;">
+        <div id="goal-wrap-${clientId}" style="position:relative;overflow:visible;">
           <canvas id="goal-${clientId}" height="220"></canvas>
         </div>
       </div>`;
