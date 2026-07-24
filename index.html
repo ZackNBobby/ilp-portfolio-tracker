@@ -37,6 +37,8 @@ button,input,select,textarea{font-family:inherit;}
   66%{transform:translate(-20px,15px) scale(0.97);}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes goalPulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.7);}70%{box-shadow:0 0 0 14px rgba(245,158,11,0);}100%{box-shadow:0 0 0 0 rgba(245,158,11,0);}}
+.goal-glow-dot{width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #07101e;animation:goalPulse 2s ease-out infinite;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:5;}
 @keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(6,182,212,0.6);}50%{opacity:0.85;box-shadow:0 0 0 5px rgba(6,182,212,0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
 @keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
@@ -1663,25 +1665,179 @@ window.saveClientNotes=async(clientId)=>{
   const el=document.getElementById("notesSaveStatus");
   if(el){el.textContent="✓ Saved";setTimeout(()=>{if(el)el.textContent="";},2000);}
 };
+// ── Goal / Milestone helpers ──
+const MILESTONE_COLORS=['#4ade80','#c084fc','#38bdf8','#fb923c','#f472b6','#a78bfa'];
+function _getGoals(c){
+  if(c.goals&&c.goals.length)return c.goals;
+  if(c.goal&&c.goal.targetAmount&&c.goal.targetAge)return[{...c.goal,id:"ms_0"}];
+  return[];
+}
+function _placeGlowDot(clientId){
+  const chart=charts[`goal-${clientId}`];
+  if(!chart)return;
+  const ds=chart.data.datasets.find(d=>d.label==="Actual Portfolio");
+  if(!ds)return;
+  let lastIdx=-1,lastVal=null;
+  for(let i=ds.data.length-1;i>=0;i--){if(ds.data[i]!=null){lastIdx=i;lastVal=ds.data[i];break;}}
+  if(lastIdx<0)return;
+  const wrap=document.getElementById(`goal-wrap-${clientId}`);
+  if(!wrap)return;
+  document.getElementById(`glow-dot-${clientId}`)?.remove();
+  const x=chart.scales.x.getPixelForIndex(lastIdx);
+  const y=chart.scales.y.getPixelForValue(lastVal);
+  const dot=document.createElement("div");
+  dot.id=`glow-dot-${clientId}`;
+  dot.style.cssText=`position:absolute;left:${x}px;top:${y}px;`;
+  dot.innerHTML=`<div class="goal-glow-dot"></div>`;
+  wrap.appendChild(dot);
+}
+function _reDrawGoalChart(clientId){
+  const goalEl=document.getElementById(`goal-${clientId}`);
+  if(!goalEl)return;
+  const c=clients.find(x=>x.fid===clientId);
+  if(!c)return;
+  const milestones=_getGoals(c);
+  if(!milestones.length)return;
+  const txs=clientTxs[clientId]||[];
+  const currentVal=portfolioTotals(calcPortfolio(txs)).totalValue;
+  const AP=c.annualPremium||0;
+  const r=(parseFloat(document.getElementById("goalGrowthRate")?.value)||8)/100;
+  const newTarget=parseFloat(document.getElementById("goalNewTarget")?.value)||null;
+  const newAge=parseInt(document.getElementById("goalDesiredAge")?.value)||null;
+  const today=new Date();
+  const todayStr=today.toISOString().split("T")[0];
+  const pts=calcTimeSeries(txs);
+  const dobParts=(c.dob||"1990-01-01").split("-");
+  const dobYear=parseInt(dobParts[0]);
+  const startYear=parseInt((c.startDate||todayStr).split("-")[0]);
+  const startMD=c.startDate?c.startDate.slice(5):"01-01";
+  const _payPeriod=c.term?Math.max(0,c.term-5):null;
+  const _polYrNow=c.startDate?Math.floor((Date.now()-new Date(c.startDate).getTime())/(365.25*24*3600*1000))+1:1;
+  const _remPay=_payPeriod!==null?Math.max(0,_payPeriod-(_polYrNow-1)):null;
+  // Determine x-axis extent: cover all milestones + what-if age
+  const maxMsYear=Math.max(...milestones.map(m=>dobYear+m.targetAge));
+  const whatIfYear=newAge?dobYear+newAge:null;
+  const maxYear=whatIfYear?Math.max(maxMsYear,whatIfYear):maxMsYear;
+  const labels=[],actualLine=[],projLine=[];
+  const msLines=milestones.map(()=>[]);
+  const whatIfLine=[];
+  const totalYearsArr=milestones.map(m=>(dobYear+m.targetAge)-startYear);
+  for(let yr=startYear;yr<=maxYear;yr++){
+    const dateStr=`${yr}-${startMD}`;
+    labels.push(String(yr));
+    // Actual
+    if(dateStr<=todayStr){
+      let closest=null;
+      for(const pt of pts){if(pt.date<=dateStr)closest=pt;else break;}
+      actualLine.push(closest?+closest.value.toFixed(2):null);
+      projLine.push(null);
+    } else {
+      actualLine.push(null);
+      const t=(new Date(`${yr}-${startMD}`)-today)/(365.25*24*3600*1000);
+      let projected;
+      if(_remPay!==null){
+        const payT=Math.min(t,_remPay);const accT=Math.max(0,t-_remPay);
+        const gfP=Math.pow(1+r,payT);
+        const v1=currentVal*gfP+(payT>0?AP*(gfP-1)/r:0);
+        projected=v1*Math.pow(1+r,accT);
+      } else {
+        const gfT=Math.pow(1+r,t);projected=currentVal*gfT+AP*(gfT-1)/r;
+      }
+      projLine.push(+projected.toFixed(2));
+    }
+    // Per-milestone goal lines (linear ramp 0 → targetAmount at targetYear)
+    milestones.forEach((m,i)=>{
+      const tYr=dobYear+m.targetAge;
+      const span=totalYearsArr[i];
+      const frac=span>0?(yr-startYear)/span:1;
+      msLines[i].push(yr<=tYr?+(m.targetAmount*Math.min(1,frac)).toFixed(2):null);
+    });
+    // What-if line
+    if(newTarget&&newAge){
+      const tYr2=dobYear+newAge;
+      const span2=tYr2-startYear;
+      const frac2=span2>0?(yr-startYear)/span2:1;
+      whatIfLine.push(yr<=tYr2?+(newTarget*Math.min(1,frac2)).toFixed(2):null);
+    }
+  }
+  // Bridge actual → projection at today's year
+  const todayIdx=labels.indexOf(String(today.getFullYear()));
+  if(todayIdx>=0&&currentVal>0)projLine[todayIdx]=+currentVal.toFixed(2);
+  destroyChart(`goal-${clientId}`);
+  const datasets=[
+    {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.07)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:3,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
+    {label:`Projected (${(r*100).toFixed(0)}% p.a.)`,data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:0,pointHoverRadius:6,spanGaps:false},
+    ...milestones.map((m,i)=>({
+      label:`${m.label||"Goal "+(i+1)}: ${$f(m.targetAmount)} @ Age ${m.targetAge}`,
+      data:msLines[i],
+      borderColor:MILESTONE_COLORS[i%MILESTONE_COLORS.length],
+      borderDash:[7,4],borderWidth:2,fill:false,tension:0,
+      pointRadius:0,pointHoverRadius:5,spanGaps:false
+    }))
+  ];
+  if(newTarget&&newAge&&(newTarget!==milestones[0]?.targetAmount||newAge!==milestones[0]?.targetAge)){
+    const selMs=milestones.find(m=>m.id===document.getElementById("goalMsSelect")?.value)||milestones[0];
+    const origTarget=selMs?.targetAmount;const origAge2=selMs?.targetAge;
+    datasets.push({
+      label:`What-If: ${$f(newTarget)} @ Age ${newAge}`,
+      data:whatIfLine,
+      borderColor:"#e879f9",
+      borderDash:[4,3],borderWidth:2.5,fill:false,tension:0,
+      pointRadius:0,pointHoverRadius:5,spanGaps:false
+    });
+  }
+  charts[`goal-${clientId}`]=new Chart(goalEl.getContext("2d"),{
+    type:"line",
+    data:{labels,datasets},
+    options:{
+      responsive:true,
+      interaction:{mode:"index",intersect:false},
+      scales:{
+        x:{ticks:{color:"#64748b",font:{size:10},maxTicksLimit:14},grid:{color:"rgba(30,41,59,0.3)"}},
+        y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.35)"}}
+      },
+      plugins:{
+        legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:16}},
+        tooltip:{callbacks:{label:ctx=>ctx.parsed.y!=null?` ${ctx.dataset.label}: ${$f(ctx.parsed.y)}`:null,filter:item=>item.parsed.y!=null}}
+      },
+      animation:{duration:500,easing:"easeInOutQuart"}
+    },
+    plugins:[xhairPlugin]
+  });
+  setTimeout(()=>_placeGlowDot(clientId),80);
+}
 window.saveClientGoal=async(clientId)=>{
   const tA=parseFloat(document.getElementById("goalTargetAmount")?.value);
   const tAge=parseInt(document.getElementById("goalTargetAge")?.value);
   const lbl=(document.getElementById("goalLabel")?.value||"").trim();
-  if(!tA||!tAge||isNaN(tA)||isNaN(tAge)){
-    alert("Please enter a valid target amount and target age.");return;
-  }
+  if(!tA||!tAge||isNaN(tA)||isNaN(tAge)){alert("Please enter a valid target amount and target age.");return;}
   const goal={targetAmount:tA,targetAge:tAge,goalLabel:lbl};
   await setDoc(doc(db,"clients",clientId),{goal},{merge:true});
-  const c=clients.find(x=>x.fid===clientId);
-  if(c)c.goal=goal;
-  renderPage();
+  const c=clients.find(x=>x.fid===clientId);if(c)c.goal=goal;renderPage();
 };
 window.clearClientGoal=async(clientId)=>{
   if(!confirm("Clear this client's goal?"))return;
   await setDoc(doc(db,"clients",clientId),{goal:{}},{merge:true});
-  const c=clients.find(x=>x.fid===clientId);
-  if(c)c.goal={};
-  renderPage();
+  const c=clients.find(x=>x.fid===clientId);if(c)c.goal={};renderPage();
+};
+window.addMilestone=async(clientId)=>{
+  const lbl=(document.getElementById("msLabel")?.value||"").trim();
+  const amt=parseFloat(document.getElementById("msAmount")?.value);
+  const age=parseInt(document.getElementById("msAge")?.value);
+  if(!amt||!age){alert("Enter a target amount and age.");return;}
+  const c=clients.find(x=>x.fid===clientId);if(!c)return;
+  const existing=_getGoals(c);
+  const ms={id:`ms_${Date.now()}`,label:lbl||`Goal ${existing.length+1}`,targetAmount:amt,targetAge:age};
+  const newGoals=[...existing,ms];
+  await setDoc(doc(db,"clients",clientId),{goals:newGoals},{merge:true});
+  c.goals=newGoals;renderPage();
+};
+window.deleteMilestone=async(clientId,msId)=>{
+  if(!confirm("Remove this milestone?"))return;
+  const c=clients.find(x=>x.fid===clientId);if(!c)return;
+  const newGoals=_getGoals(c).filter(m=>m.id!==msId);
+  await setDoc(doc(db,"clients",clientId),{goals:newGoals},{merge:true});
+  c.goals=newGoals;renderPage();
 };
 window.updateGoalCalc=(clientId)=>{
   const c=clients.find(x=>x.fid===clientId);
@@ -1689,12 +1845,16 @@ window.updateGoalCalc=(clientId)=>{
   const goal=c.goal||{};
   const el=document.getElementById("goalCalcResult");
   if(!el)return;
-  const tA=parseFloat(document.getElementById("goalNewTarget")?.value)||goal.targetAmount;
-  const origTarget=goal.targetAmount;
-  const origAge=goal.targetAge;
+  const milestones=_getGoals(c);
+  const selMsId=document.getElementById("goalMsSelect")?.value;
+  const selMs=milestones.find(m=>m.id===selMsId)||milestones[0]||goal;
+  const origTarget=selMs?.targetAmount||goal.targetAmount;
+  const origAge=selMs?.targetAge||goal.targetAge;
+  const tA=parseFloat(document.getElementById("goalNewTarget")?.value)||origTarget;
   const desiredAge=parseInt(document.getElementById("goalDesiredAge")?.value)||origAge;
   const r=(parseFloat(document.getElementById("goalGrowthRate")?.value)||8)/100;
-  const AP=parseFloat(document.getElementById("goalAnnualPremium")?.value)||c.annualPremium||0;
+  const AP=c.annualPremium||0;
+  _reDrawGoalChart(clientId);
   const cAge=getAge(c.dob);
   if(!tA||!desiredAge||cAge===null){
     el.innerHTML=`<div style="color:var(--dim);font-size:12px;">Fill in the inputs above to see the calculation.</div>`;return;
@@ -3038,133 +3198,138 @@ function renderClientDetail(clientId){
 
   // ── Goals tab ──
   if(currentClientTab==="goals"){
-    const goal=c.goal||{};
-    const hasGoal=!!(goal.targetAmount&&goal.targetAge);
     const _cAge=getAge(c.dob);
     const _goalTxs=clientTxs[clientId]||[];
     const _goalFundData=calcPortfolio(_goalTxs);
     const _goalTotals=portfolioTotals(_goalFundData);
     const _goalCurVal=_goalTotals.totalValue;
+    const milestones=_getGoals(c);
+    const _payP=c.term?Math.max(0,c.term-5):null;
+    const _polYrNow=c.startDate?Math.floor((Date.now()-new Date(c.startDate).getTime())/(365.25*24*3600*1000))+1:1;
+    const _remPay=_payP!==null?Math.max(0,_payP-(_polYrNow-1)):null;
+    const _mipLabel=c.term===10?"MIP10":c.term===15?"MIP15":c.term?`MIP${c.term}`:"";
+
+    // ── Milestones list ──
+    if(milestones.length){
+      // Summary bar: current portfolio value + MIP status
+      html+=`<div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:2px;">Current Portfolio</div>
+          <div style="font-size:20px;font-weight:900;color:var(--gold);">${$f(_goalCurVal)}</div>
+          ${_cAge!==null?`<div style="font-size:11px;color:var(--dim);margin-top:2px;">Age ${_cAge}</div>`:""}
+        </div>
+        ${_mipLabel?`<div style="text-align:right;">
+          <div style="font-size:11px;font-weight:700;color:var(--gold);">${_mipLabel}</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:2px;">${_remPay>0?`${_remPay}yr of premiums left`:`Premiums complete ✓`}</div>
+        </div>`:""}
+      </div>`;
+
+      // Milestone cards
+      html+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px;">`;
+      milestones.forEach((m,i)=>{
+        const col=MILESTONE_COLORS[i%MILESTONE_COLORS.length];
+        const pct=_goalCurVal>0?Math.min((_goalCurVal/m.targetAmount)*100,100):0;
+        const gap=Math.max(0,m.targetAmount-_goalCurVal);
+        const yrsLeft=_cAge!==null?Math.max(0,m.targetAge-_cAge):null;
+        const pctCol=pct>=100?"var(--green)":pct>=50?"var(--gold)":"#f87171";
+        html+=`<div class="card" style="border-color:${col}22;position:relative;padding-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+            <div>
+              <div style="font-size:10px;font-weight:700;color:${col};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${esc(m.label)}</div>
+              <div style="font-size:18px;font-weight:900;color:var(--text);">${$f(m.targetAmount)}</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:2px;">by age <strong>${m.targetAge}</strong>${yrsLeft!==null?` · ${yrsLeft}yr left`:""}</div>
+            </div>
+            <button onclick="deleteMilestone('${clientId}','${m.id}')" title="Remove"
+              style="font-size:11px;padding:2px 7px;border-radius:6px;border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.06);color:#f87171;cursor:pointer;flex-shrink:0;">✕</button>
+          </div>
+          <div style="height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;margin-bottom:6px;">
+            <div style="height:100%;width:${pct.toFixed(1)}%;background:${col};border-radius:99px;transition:width .6s ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;">
+            <span style="color:${pctCol};font-weight:700;">${pct.toFixed(1)}%</span>
+            <span style="color:var(--dim);">${gap<=0?"✓ Reached":$f(gap)+" to go"}</span>
+          </div>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+
+    // ── Add milestone form ──
     html+=`<div class="card" style="margin-bottom:14px;">
-      <div class="sec-title" style="margin-bottom:12px;">🎯 Goal Setup</div>
+      <div class="sec-title" style="margin-bottom:12px;">➕ Add Milestone</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
-          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Goal Label</label>
-          <input id="goalLabel" type="text" placeholder="e.g. Retirement"
-            value="${esc(goal.goalLabel||'')}"
+          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Label</label>
+          <input id="msLabel" type="text" placeholder="e.g. Retirement"
             style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
         </div>
         <div>
           <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Target Amount ($)</label>
-          <input id="goalTargetAmount" type="number" placeholder="e.g. 500000"
-            value="${goal.targetAmount||''}"
+          <input id="msAmount" type="number" placeholder="e.g. 300000"
             style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
         </div>
         <div>
           <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Target Age</label>
-          <input id="goalTargetAge" type="number" placeholder="e.g. 65"
-            value="${goal.targetAge||''}"
+          <input id="msAge" type="number" placeholder="e.g. 55"
             style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
         </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="saveClientGoal('${clientId}')"
-          style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--gold);border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer;font-weight:600;">
-          💾 Save Goal
-        </button>
-        ${hasGoal?`<button onclick="clearClientGoal('${clientId}')"
-          style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;">
-          ✕ Clear Goal
-        </button>`:""}
-      </div>
+      <button onclick="addMilestone('${clientId}')"
+        style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:var(--gold);border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer;font-weight:600;">
+        ➕ Add Milestone
+      </button>
+      ${!milestones.length?`<div style="margin-top:12px;font-size:12px;color:var(--dim);">Add your first milestone to see the chart and What-If Calculator.</div>`:""}
     </div>`;
-    if(hasGoal){
-      const _gPct=_goalCurVal>0?Math.min((_goalCurVal/goal.targetAmount)*100,100):0;
-      const _gGap=Math.max(0,goal.targetAmount-_goalCurVal);
-      const _gYrsLeft=_cAge!==null?Math.max(0,goal.targetAge-_cAge):null;
-      const _gCol=_gPct>=100?"var(--green)":_gPct>=50?"var(--gold)":"#f87171";
-      html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
-        <div class="stat-card card-gold">
-          <div class="stat-lbl">Target</div>
-          <div class="stat-val gold">${$f(goal.targetAmount)}</div>
-          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${esc(goal.goalLabel||'Goal')} · Age ${goal.targetAge}</div>
+
+    if(milestones.length){
+      // ── Chart ──
+      html+=`<div class="card" style="margin-bottom:14px;">
+        <div class="sec-title" style="margin-bottom:6px;">📈 Progress Chart</div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:12px;">
+          <span style="color:#f59e0b;">●</span> Actual &nbsp;
+          <span style="color:#60a5fa;">- -</span> Projected (8% p.a.) &nbsp;
+          ${milestones.map((m,i)=>`<span style="color:${MILESTONE_COLORS[i%MILESTONE_COLORS.length]};">- - -</span> ${esc(m.label)}`).join(" &nbsp; ")}
         </div>
-        <div class="stat-card">
-          <div class="stat-lbl">Current Value</div>
-          <div class="stat-val">${$f(_goalCurVal)}</div>
-          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_cAge!==null?"Age "+_cAge:"—"}</div>
+        <div id="goal-wrap-${clientId}" style="position:relative;">
+          <canvas id="goal-${clientId}" height="220"></canvas>
         </div>
-        <div class="stat-card">
-          <div class="stat-lbl">Progress</div>
-          <div class="stat-val" style="color:${_gCol};">${_gPct.toFixed(1)}%</div>
-          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_gYrsLeft!==null?_gYrsLeft+" yrs left":"—"}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-lbl">Gap to Goal</div>
-          <div class="stat-val" style="color:${_gGap<=0?"var(--green)":"#f87171"};">${_gGap<=0?"✓ Done":$f(_gGap)}</div>
-          <div style="font-size:10px;color:var(--dim);margin-top:2px;">${_gGap<=0?"Goal reached!":"Still needed"}</div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;font-weight:600;color:var(--dim);">${esc(goal.goalLabel||'Goal')} Progress</span>
-          <span style="font-size:13px;font-weight:700;color:${_gCol};">${_gPct.toFixed(1)}%</span>
-        </div>
-        <div style="height:12px;background:var(--bg3);border-radius:99px;overflow:hidden;">
-          <div style="height:100%;width:${_gPct.toFixed(1)}%;background:${_gPct>=100?"var(--green)":_gPct>=50?"linear-gradient(90deg,#f59e0b,#fbbf24)":"linear-gradient(90deg,#ef4444,#f59e0b)"};border-radius:99px;transition:width 0.6s ease;"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--dim);">
-          <span>${$f(0)}</span><span>${$f(goal.targetAmount)}</span>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:14px;">
-        <div class="sec-title" style="margin-bottom:10px;">📈 Goal Progression Chart</div>
-        <div style="font-size:11px;color:var(--dim);margin-bottom:10px;">Amber = actual value · Blue dotted = projected at 8% p.a. · Green dashed = required trajectory</div>
-        <canvas id="goal-${clientId}" height="200"></canvas>
-      </div>
-      <div class="card">${(()=>{
-        const _payP=c.term?Math.max(0,c.term-5):null;
-        const _polYrNow=c.startDate?Math.floor((Date.now()-new Date(c.startDate).getTime())/(365.25*24*3600*1000))+1:1;
-        const _remPay=_payP!==null?Math.max(0,_payP-(_polYrNow-1)):null;
-        const _mipLabel=c.term===10?"MIP10":c.term===15?"MIP15":c.term?`MIP${c.term}`:"";
-        const _mipBanner=_mipLabel?`<div style="display:flex;align-items:center;gap:10px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:12px;">
+      </div>`;
+
+      // ── What-If Calculator ──
+      const firstMs=milestones[0];
+      html+=`<div class="card">
+        ${_mipLabel?`<div style="display:flex;align-items:center;gap:10px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:12px;">
           <span style="font-weight:700;color:var(--gold);">${_mipLabel}</span>
           <span style="color:var(--dim);">·</span>
           ${_remPay>0
-            ?`<span style="color:var(--dim);">Premium-paying period: <strong style="color:var(--text);">${_remPay} year${_remPay!==1?"s":""} remaining</strong> (Year ${_polYrNow} of ${_payP})</span>`
-            :`<span style="color:#4ade80;font-weight:600;">✓ Premiums complete — portfolio growing on its own</span>`
-          }
-        </div>`:"";
-        return _mipBanner;
-      })()}
+            ?`<span style="color:var(--dim);">Premium-paying period: <strong style="color:var(--text);">${_remPay} yr remaining</strong> (Year ${_polYrNow} of ${_payP})</span>`
+            :`<span style="color:#4ade80;font-weight:600;">✓ Premiums complete — growing on its own</span>`}
+        </div>`:""}
         <div class="sec-title" style="margin-bottom:6px;">💡 What-If Calculator</div>
-        <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Change your target amount or age and see how much extra to invest monthly.</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:14px;">Adjust target or age to see extra needed. Chart updates live.</div>
+        ${milestones.length>1?`<div style="margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Apply to Milestone</label>
+          <select id="goalMsSelect" onchange="updateGoalCalc('${clientId}')"
+            style="background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;width:100%;">
+            ${milestones.map(m=>`<option value="${m.id}">${esc(m.label)} — ${$f(m.targetAmount)} @ Age ${m.targetAge}</option>`).join("")}
+          </select>
+        </div>`:`<input type="hidden" id="goalMsSelect" value="${firstMs.id}">`}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
           <div>
-            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">New Target Amount ($)</label>
-            <input id="goalNewTarget" type="number" placeholder="${goal.targetAmount}"
-              value="${goal.targetAmount}"
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">New Target ($)</label>
+            <input id="goalNewTarget" type="number" placeholder="${firstMs.targetAmount}" value="${firstMs.targetAmount}"
               oninput="updateGoalCalc('${clientId}')"
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
           </div>
           <div>
             <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">By Age</label>
-            <input id="goalDesiredAge" type="number" placeholder="${goal.targetAge}"
-              value="${goal.targetAge}"
+            <input id="goalDesiredAge" type="number" placeholder="${firstMs.targetAge}" value="${firstMs.targetAge}"
               oninput="updateGoalCalc('${clientId}')"
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
           </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
           <div>
-            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Assumed Growth Rate (%/yr)</label>
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Growth Rate (%/yr)</label>
             <input id="goalGrowthRate" type="number" placeholder="8" value="8" step="0.5" min="1" max="20"
-              oninput="updateGoalCalc('${clientId}')"
-              style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Annual Premium ($)</label>
-            <input id="goalAnnualPremium" type="number" value="${c.annualPremium||0}"
               oninput="updateGoalCalc('${clientId}')"
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
           </div>
@@ -3172,12 +3337,6 @@ function renderClientDetail(clientId){
         <div id="goalCalcResult" style="background:var(--bg3);border-radius:10px;padding:14px 16px;min-height:60px;">
           <div style="color:var(--dim);font-size:12px;">Adjust the inputs above to see the calculation.</div>
         </div>
-      </div>`;
-    } else {
-      html+=`<div class="card" style="text-align:center;padding:36px 20px;border-style:dashed;">
-        <div style="font-size:36px;margin-bottom:10px;">🎯</div>
-        <div style="font-weight:700;color:var(--gold-l);margin-bottom:6px;">No goal set yet</div>
-        <div style="font-size:12px;color:var(--dim);">Fill in the goal details above and click <strong>Save Goal</strong> to get started.</div>
       </div>`;
     }
     return html;
@@ -4438,84 +4597,8 @@ function initCharts(clientId){
     }
   }
 
-  // Goal progression chart
-  const goalEl=document.getElementById(`goal-${clientId}`);
-  const _gc=clients.find(x=>x.fid===clientId);
-  if(goalEl&&_gc&&_gc.goal&&_gc.goal.targetAmount&&_gc.goal.targetAge&&_gc.dob){
-    destroyChart(`goal-${clientId}`);
-    const c=_gc;
-    const goal=c.goal;
-    const pts=calcTimeSeries(txs);
-    const currentVal=portfolioTotals(fundData).totalValue;
-    const today=new Date();
-    const todayStr=today.toISOString().split("T")[0];
-    const dobParts=c.dob.split("-");
-    const targetYear=parseInt(dobParts[0])+goal.targetAge;
-    const startYear=parseInt((c.startDate||todayStr).split("-")[0]);
-    const startMD=c.startDate?(c.startDate.slice(5)):"01-01";
-    const labels=[],goalLine=[],actualLine=[],projLine=[];
-    const rDef=0.08;
-    const AP=c.annualPremium||0;
-    const totalYears=targetYear-startYear;
-    // MIP-aware projection
-    const _payPeriod=c.term?Math.max(0,c.term-5):null;
-    const _polYrNow=c.startDate?Math.floor((Date.now()-new Date(c.startDate).getTime())/(365.25*24*3600*1000))+1:1;
-    const _remainPayYrs=_payPeriod!==null?Math.max(0,_payPeriod-(_polYrNow-1)):null;
-    for(let yr=startYear;yr<=targetYear;yr++){
-      const dateStr=`${yr}-${startMD}`;
-      labels.push(String(yr));
-      goalLine.push(totalYears>0?+(goal.targetAmount*((yr-startYear)/totalYears)).toFixed(2):goal.targetAmount);
-      if(dateStr<=todayStr){
-        let closest=null;
-        for(const pt of pts){if(pt.date<=dateStr)closest=pt;else break;}
-        actualLine.push(closest?+closest.value.toFixed(2):null);
-        projLine.push(null);
-      } else {
-        actualLine.push(null);
-        const t=(new Date(`${yr}-${startMD}`)-today)/(365.25*24*3600*1000);
-        let projected;
-        if(_remainPayYrs!==null){
-          const payT=Math.min(t,_remainPayYrs);
-          const accT=Math.max(0,t-_remainPayYrs);
-          const gfP=Math.pow(1+rDef,payT);
-          const v1=currentVal*gfP+(payT>0?AP*(gfP-1)/rDef:0);
-          projected=v1*Math.pow(1+rDef,accT);
-        } else {
-          const gfT=Math.pow(1+rDef,t);
-          projected=currentVal*gfT+AP*(gfT-1)/rDef;
-        }
-        projLine.push(+projected.toFixed(2));
-      }
-    }
-    // Bridge: connect actual to projection at today
-    const todayIdx=labels.indexOf(String(today.getFullYear()));
-    if(todayIdx>0&&currentVal>0){projLine[todayIdx]=+currentVal.toFixed(2);}
-    charts[`goal-${clientId}`]=new Chart(goalEl.getContext("2d"),{
-      type:"line",
-      data:{
-        labels,
-        datasets:[
-          {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.08)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:4,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
-          {label:"At Current Rate (8% p.a.)",data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:3,pointHoverRadius:6,pointBackgroundColor:"#60a5fa",spanGaps:false},
-          {label:`Goal: ${$f(goal.targetAmount)} by Age ${goal.targetAge}`,data:goalLine,borderColor:"#4ade80",borderDash:[8,5],borderWidth:2,fill:false,tension:0,pointRadius:0,pointHoverRadius:5,pointBackgroundColor:"#4ade80"}
-        ]
-      },
-      options:{
-        responsive:true,
-        interaction:{mode:"index",intersect:false},
-        scales:{
-          x:{ticks:{color:"#64748b",font:{size:10},maxTicksLimit:12},grid:{color:"rgba(30,41,59,0.3)"}},
-          y:{ticks:{color:"#64748b",font:{size:10},callback:v=>"$"+v.toLocaleString()},grid:{color:"rgba(30,41,59,0.35)"}}
-        },
-        plugins:{
-          legend:{labels:{color:"#94a3b8",font:{size:11},boxWidth:18}},
-          tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${$f(ctx.parsed.y)}`}}
-        },
-        animation:{duration:1200,easing:"easeInOutQuart"}
-      },
-      plugins:[xhairPlugin]
-    });
-  }
+  // Goal progression chart — delegate to shared helper
+  if(document.getElementById(`goal-${clientId}`)){_reDrawGoalChart(clientId);}
 }
 
 // ── S&P 500 overlay ──
