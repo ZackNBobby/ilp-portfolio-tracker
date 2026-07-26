@@ -1691,10 +1691,25 @@ function _placeGlowDot(clientId){
   const py=chart.scales.y.getPixelForValue(currentVal);
   if(isNaN(px)||isNaN(py))return;
   document.getElementById(`glow-dot-${clientId}`)?.remove();
+  const gainPct=chart._gainPct||0;
+  const gainColor=gainPct>=0?"#4ade80":"#f87171";
+  const gainStr=gainPct>=0?`+${gainPct.toFixed(1)}%`:`${gainPct.toFixed(1)}%`;
+  // "You are here" vertical line from chart top to dot
+  const chartTop=chart.scales.y.top;
+  const lineH=py-chartTop;
   const dot=document.createElement("div");
   dot.id=`glow-dot-${clientId}`;
-  dot.style.cssText=`position:absolute;left:${px}px;top:${py}px;width:0;height:0;pointer-events:none;`;
-  dot.innerHTML=`<div class="goal-glow-dot"></div><div class="goal-glow-ring"></div>`;
+  dot.style.cssText=`position:absolute;left:${px}px;top:${chartTop}px;width:0;height:0;pointer-events:none;`;
+  dot.innerHTML=`
+    <div style="position:absolute;left:0;top:0;width:1px;height:${lineH}px;background:rgba(245,158,11,0.25);border-left:1px dashed rgba(245,158,11,0.4);"></div>
+    <div style="position:absolute;left:0;top:${lineH}px;width:0;height:0;">
+      <div class="goal-glow-dot"></div>
+      <div class="goal-glow-ring"></div>
+    </div>
+    <div style="position:absolute;left:6px;top:${Math.max(0,lineH-38)}px;background:rgba(7,16,30,0.88);border:1px solid rgba(245,158,11,0.5);border-radius:6px;padding:4px 8px;white-space:nowrap;font-size:11px;line-height:1.5;">
+      <span style="color:#f59e0b;font-weight:700;">${$f(currentVal)}</span>
+      <span style="color:${gainColor};margin-left:5px;font-weight:600;">${gainStr}</span>
+    </div>`;
   wrap.appendChild(dot);
 }
 function _reDrawGoalChart(clientId){
@@ -1705,7 +1720,9 @@ function _reDrawGoalChart(clientId){
   const milestones=_getGoals(c);
   if(!milestones.length)return;
   const txs=clientTxs[clientId]||[];
-  const currentVal=portfolioTotals(calcPortfolio(txs)).totalValue;
+  const _ptotals=portfolioTotals(calcPortfolio(txs));
+  const currentVal=_ptotals.totalValue;
+  const _gainPct=_ptotals.trueGainPct||0;
   const AP=c.annualPremium||0;
   const r=(parseFloat(document.getElementById("goalGrowthRate")?.value)||8)/100;
   const newTarget=parseFloat(document.getElementById("goalNewTarget")?.value)||null;
@@ -1766,9 +1783,12 @@ function _reDrawGoalChart(clientId){
       whatIfLine.push(yr<=tYr2?+(newTarget*Math.min(1,frac2)).toFixed(2):null);
     }
   }
-  // Bridge actual → projection at today's year
+  // Anchor both lines at today's current value so the chart reflects real portfolio gains
   const todayIdx=labels.indexOf(String(today.getFullYear()));
-  if(todayIdx>=0&&currentVal>0)projLine[todayIdx]=+currentVal.toFixed(2);
+  if(todayIdx>=0&&currentVal>0){
+    actualLine[todayIdx]=+currentVal.toFixed(2);  // actual line ends at today's real value
+    projLine[todayIdx]=+currentVal.toFixed(2);    // projected line starts from same point
+  }
   destroyChart(`goal-${clientId}`);
   const datasets=[
     {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.07)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:3,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
@@ -1811,6 +1831,7 @@ function _reDrawGoalChart(clientId){
     plugins:[xhairPlugin]
   });
   charts[`goal-${clientId}`]._portfolioNow=currentVal;
+  charts[`goal-${clientId}`]._gainPct=_gainPct;
   setTimeout(()=>_placeGlowDot(clientId),250);
 }
 window.saveClientGoal=async(clientId)=>{
