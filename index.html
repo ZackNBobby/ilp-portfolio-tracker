@@ -37,8 +37,9 @@ button,input,select,textarea{font-family:inherit;}
   66%{transform:translate(-20px,15px) scale(0.97);}
 }
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
-@keyframes goalPulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.8),0 0 6px 2px rgba(245,158,11,.4);}70%{box-shadow:0 0 0 18px rgba(245,158,11,0),0 0 6px 2px rgba(245,158,11,.2);}100%{box-shadow:0 0 0 0 rgba(245,158,11,0),0 0 6px 2px rgba(245,158,11,.4);}}
-.goal-glow-dot{width:14px;height:14px;border-radius:50%;background:#f59e0b;border:2.5px solid #07101e;animation:goalPulse 1.8s ease-out infinite;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:10;overflow:visible;}
+@keyframes goalRing{0%{transform:translate(-50%,-50%) scale(1);opacity:.85;}100%{transform:translate(-50%,-50%) scale(4);opacity:0;}}
+.goal-glow-dot{width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #07101e;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:11;}
+.goal-glow-ring{width:12px;height:12px;border-radius:50%;border:2.5px solid #f59e0b;position:absolute;transform:translate(-50%,-50%);pointer-events:none;z-index:10;animation:goalRing 1.8s ease-out infinite;}
 @keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(6,182,212,0.6);}50%{opacity:0.85;box-shadow:0 0 0 5px rgba(6,182,212,0);}}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.6;}}
 @keyframes coinFlip{0%,100%{transform:rotateY(0deg);}50%{transform:rotateY(180deg);}}
@@ -1675,23 +1676,25 @@ function _getGoals(c){
 function _placeGlowDot(clientId){
   const chart=charts[`goal-${clientId}`];
   if(!chart)return;
-  const dsIdx=chart.data.datasets.findIndex(d=>d.label==="Actual Portfolio");
-  if(dsIdx<0)return;
-  const ds=chart.data.datasets[dsIdx];
-  let lastIdx=-1;
-  for(let i=ds.data.length-1;i>=0;i--){if(ds.data[i]!=null){lastIdx=i;break;}}
-  if(lastIdx<0)return;
-  // Use chart meta for accurate canvas pixel position
-  const meta=chart.getDatasetMeta(dsIdx);
-  const pt=meta.data[lastIdx];
-  if(!pt)return;
   const wrap=document.getElementById(`goal-wrap-${clientId}`);
   if(!wrap)return;
+  // Compute pixel position from chart scales using stored currentVal + today's date
+  const currentVal=chart._portfolioNow??0;
+  const labels=chart.data.labels||[];
+  if(!labels.length)return;
+  const today=new Date();
+  const todayYrFrac=today.getFullYear()+(today.getMonth()+1)/12;
+  const startYr=parseInt(labels[0]);
+  const endYr=parseInt(labels[labels.length-1]);
+  const decimal=(todayYrFrac-startYr)/Math.max(1,endYr-startYr);
+  const px=chart.scales.x.getPixelForDecimal(Math.max(0,Math.min(1,decimal)));
+  const py=chart.scales.y.getPixelForValue(currentVal);
+  if(isNaN(px)||isNaN(py))return;
   document.getElementById(`glow-dot-${clientId}`)?.remove();
   const dot=document.createElement("div");
   dot.id=`glow-dot-${clientId}`;
-  dot.style.cssText=`position:absolute;left:${pt.x}px;top:${pt.y}px;width:0;height:0;overflow:visible;pointer-events:none;z-index:10;`;
-  dot.innerHTML=`<div class="goal-glow-dot"></div>`;
+  dot.style.cssText=`position:absolute;left:${px}px;top:${py}px;width:0;height:0;pointer-events:none;`;
+  dot.innerHTML=`<div class="goal-glow-dot"></div><div class="goal-glow-ring"></div>`;
   wrap.appendChild(dot);
 }
 function _reDrawGoalChart(clientId){
@@ -1807,6 +1810,7 @@ function _reDrawGoalChart(clientId){
     },
     plugins:[xhairPlugin]
   });
+  charts[`goal-${clientId}`]._portfolioNow=currentVal;
   setTimeout(()=>_placeGlowDot(clientId),250);
 }
 window.saveClientGoal=async(clientId)=>{
