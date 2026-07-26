@@ -1673,24 +1673,6 @@ function _getGoals(c){
   if(c.goal&&c.goal.targetAmount&&c.goal.targetAge)return[{...c.goal,id:"ms_0"}];
   return[];
 }
-function _solveRequiredRate(pv,ap,target,n,remainPay){
-  if(n<=0||target<=0)return null;
-  if(pv>=target)return 0;
-  function fv(r){
-    if(Math.abs(r)<1e-9)return pv+ap*n;
-    if(remainPay!==null){
-      const payT=Math.min(n,remainPay),accT=Math.max(0,n-payT);
-      const gfP=Math.pow(1+r,payT);
-      const v1=pv*gfP+(payT>0?ap*(gfP-1)/r:0);
-      return v1*Math.pow(1+r,accT);
-    }
-    const gf=Math.pow(1+r,n);return pv*gf+ap*(gf-1)/r;
-  }
-  let lo=-0.3,hi=3.0;
-  while(fv(hi)<target&&hi<200)hi*=2;
-  for(let i=0;i<80;i++){const mid=(lo+hi)/2;fv(mid)<target?lo=mid:hi=mid;}
-  return(lo+hi)/2;
-}
 function _placeGlowDot(clientId){
   const chart=charts[`goal-${clientId}`];
   if(!chart)return;
@@ -1755,14 +1737,6 @@ function _reDrawGoalChart(clientId){
   const _payPeriod=c.term?Math.max(0,c.term-5):null;
   const _polYrNow=c.startDate?Math.floor((Date.now()-new Date(c.startDate).getTime())/(365.25*24*3600*1000))+1:1;
   const _remPay=_payPeriod!==null?Math.max(0,_payPeriod-(_polYrNow-1)):null;
-  // Required rate for primary milestone
-  const primaryMs=milestones[0];
-  const goalDate=new Date(`${dobYear+primaryMs.targetAge}-01-01`);
-  const yearsToGoal=Math.max(0,(goalDate-today)/(365.25*24*3600*1000));
-  const reqRate=currentVal>0?_solveRequiredRate(currentVal,AP,primaryMs.targetAmount,yearsToGoal,_remPay):r;
-  const rProj=reqRate!==null?reqRate:r;
-  const reqPct=reqRate!==null?(reqRate*100).toFixed(1):null;
-  const projLabel=reqRate!==null&&reqRate<=0?"Goal Already on Track ✓":reqPct!==null?`Path to Goal (need ${reqPct}%/yr)`:`Projected (${(r*100).toFixed(0)}% p.a.)`;
   // Determine x-axis extent: cover all milestones + what-if age
   const maxMsYear=Math.max(...milestones.map(m=>dobYear+m.targetAge));
   const whatIfYear=newAge?dobYear+newAge:null;
@@ -1786,12 +1760,11 @@ function _reDrawGoalChart(clientId){
       let projected;
       if(_remPay!==null){
         const payT=Math.min(t,_remPay);const accT=Math.max(0,t-_remPay);
-        const gfP=Math.pow(1+rProj,payT);
-        const v1=currentVal*gfP+(payT>0&&Math.abs(rProj)>1e-9?AP*(gfP-1)/rProj:AP*payT);
-        projected=v1*Math.pow(1+rProj,accT);
+        const gfP=Math.pow(1+r,payT);
+        const v1=currentVal*gfP+(payT>0?AP*(gfP-1)/r:0);
+        projected=v1*Math.pow(1+r,accT);
       } else {
-        const gfT=Math.pow(1+rProj,t);
-        projected=Math.abs(rProj)>1e-9?currentVal*gfT+AP*(gfT-1)/rProj:currentVal+AP*t;
+        const gfT=Math.pow(1+r,t);projected=currentVal*gfT+AP*(gfT-1)/r;
       }
       projLine.push(+projected.toFixed(2));
     }
@@ -1819,7 +1792,7 @@ function _reDrawGoalChart(clientId){
   destroyChart(`goal-${clientId}`);
   const datasets=[
     {label:"Actual Portfolio",data:actualLine,borderColor:"#f59e0b",backgroundColor:"rgba(245,158,11,0.07)",borderWidth:2.5,fill:true,tension:0.35,pointRadius:3,pointHoverRadius:7,pointBackgroundColor:"#f59e0b",pointBorderColor:"#07101e",pointBorderWidth:1,spanGaps:false},
-    {label:projLabel,data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:0,pointHoverRadius:6,spanGaps:false},
+    {label:`Projected (${(r*100).toFixed(0)}% p.a.)`,data:projLine,borderColor:"#60a5fa",borderDash:[5,4],borderWidth:2,fill:false,tension:0.35,pointRadius:0,pointHoverRadius:6,spanGaps:false},
     ...milestones.map((m,i)=>({
       label:`${m.label||"Goal "+(i+1)}: ${$f(m.targetAmount)} @ Age ${m.targetAge}`,
       data:msLines[i],
@@ -1859,10 +1832,6 @@ function _reDrawGoalChart(clientId){
   });
   charts[`goal-${clientId}`]._portfolioNow=currentVal;
   charts[`goal-${clientId}`]._gainPct=_gainPct;
-  charts[`goal-${clientId}`]._reqRate=reqRate;
-  // Update static legend label to match
-  const projLegEl=document.getElementById(`proj-legend-${clientId}`);
-  if(projLegEl)projLegEl.textContent=projLabel;
   setTimeout(()=>_placeGlowDot(clientId),250);
 }
 window.saveClientGoal=async(clientId)=>{
@@ -3346,7 +3315,7 @@ function renderClientDetail(clientId){
         <div class="sec-title" style="margin-bottom:6px;">📈 Progress Chart</div>
         <div style="font-size:11px;color:var(--dim);margin-bottom:12px;">
           <span style="color:#f59e0b;">●</span> Actual &nbsp;
-          <span style="color:#60a5fa;">- -</span> <span id="proj-legend-${clientId}">Path to Goal</span> &nbsp;
+          <span style="color:#60a5fa;">- -</span> Projected (8% p.a.) &nbsp;
           ${milestones.map((m,i)=>`<span style="color:${MILESTONE_COLORS[i%MILESTONE_COLORS.length]};">- - -</span> ${esc(m.label)}`).join(" &nbsp; ")}
         </div>
         <div id="goal-wrap-${clientId}" style="position:relative;overflow:visible;">
@@ -3387,7 +3356,7 @@ function renderClientDetail(clientId){
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
           </div>
           <div>
-            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Assumed Growth Rate (%/yr)</label>
+            <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Growth Rate (%/yr)</label>
             <input id="goalGrowthRate" type="number" placeholder="8" value="8" step="0.5" min="1" max="20"
               oninput="updateGoalCalc('${clientId}')"
               style="width:100%;background:var(--bg3);border:1px solid var(--gold-border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;box-sizing:border-box;">
