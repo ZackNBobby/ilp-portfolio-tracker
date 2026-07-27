@@ -4107,13 +4107,18 @@ function renderPrices(){
     const isLive=fundPriceSource[f]==="live";
     const chgBadge=(v,lbl)=>v!=null?`<span style="font-size:10px;font-weight:700;color:${v>=0?'var(--green)':'var(--red)'};">${v>=0?'+':''}${v.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> ${lbl}</span></span>`:'';
     const safeF=esc(f);
+    const _srcPill=(lbl,bg,bc,tc)=>`<span style="display:inline-flex;align-items:center;background:${bg};border:1px solid ${bc};border-radius:20px;padding:1px 6px;font-size:9px;font-weight:700;color:${tc};letter-spacing:0.5px;">${lbl}</span>`;
+    const ntucPill=_srcPill("NTUC","rgba(6,182,212,0.08)","rgba(6,182,212,0.25)","#67e8f9");
+    const undSrcLabel=ftSym?(ftSym.startsWith("ms:")?"MS":"FT"):null;
+    const undPill=undSrcLabel==="FT"?_srcPill("FT","rgba(59,130,246,0.1)","rgba(59,130,246,0.35)","#93c5fd"):undSrcLabel==="MS"?_srcPill("MS","rgba(167,139,250,0.1)","rgba(167,139,250,0.35)","#c4b5fd"):"";
     return`<div class="price-card" draggable="true"
       ondragstart="_pcDragStart('${safeF}',event)" ondragend="_pcDragEnd(event)"
       ondragover="_pcDragOver(event)" ondragleave="_pcDragLeave(event)" ondrop="_pcDrop('${safeF}',event)"
       onclick="openFundDetail('${safeF}')" title="Drag to reorder · Click to view details" style="flex-direction:column;align-items:stretch;gap:5px;cursor:grab;">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3;">${esc(short)}</span>
         ${isLive?`<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.45);border-radius:20px;padding:1px 6px;"><span style="width:6px;height:6px;border-radius:50%;background:#06b6d4;animation:livePulse 2s ease infinite;flex-shrink:0;"></span><span style="font-size:9px;font-weight:700;color:#67e8f9;letter-spacing:0.5px;">LIVE</span></span>`:''}
+        ${ntucPill}${undPill}
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">
         <span style="font-size:10px;color:var(--dim);min-width:70px;">Income Bid</span>
@@ -4235,6 +4240,10 @@ const FUND_UNDERLYING={
   "Income Global Sustainable Fund":             "LU2279689827:SGD",
   "Income Global Dynamic Bond Fund":            "IE00B9HH6X13:SGD",
   "Income Japan Dividend Equity Fund":          "ms:F00000Q3EG",
+  "Income Global Artificial Intelligence":      "ms:F00000ZVQS",
+  "Income Global Gold Equity Fund":             "ms:F0GBR04AR8",
+  "Income US Dividend and Growth Fund":         "ms:F00000Q4B0",
+  "Income US Large Cap Equity Fund":            "ms:F00001QUO7",
 };
 
 // Fetch latest price of an underlying sub-fund via the server-side /api/underlying-price endpoint
@@ -5687,7 +5696,7 @@ window.selectFdmChartTab=(tab)=>{
   if(bi){bi.style.background=tab==="income"?"rgba(16,185,129,0.2)":"rgba(255,255,255,0.04)";bi.style.borderColor=tab==="income"?"rgba(16,185,129,0.5)":"rgba(255,255,255,0.12)";bi.style.color=tab==="income"?"#10b981":"#94a3b8";}
   if(bu){bu.style.background=tab==="underlying"?"rgba(167,139,250,0.2)":"rgba(255,255,255,0.04)";bu.style.borderColor=tab==="underlying"?"rgba(167,139,250,0.5)":"rgba(255,255,255,0.12)";bu.style.color=tab==="underlying"?"#a78bfa":"#94a3b8";}
   if(tab==="income"){
-    const hasIncomeBid=(_fdmHistory&&_fdmHistory.length>=2)||(_fdmData&&_fdmData.chartData&&_fdmData.chartData.length>=2);
+    const hasIncomeBid=(_fdmHistory&&_fdmHistory.length>=1)||(_fdmData&&_fdmData.chartData&&_fdmData.chartData.length>=1);
     if(!hasIncomeBid){
       if(wi)wi.innerHTML=`<div style="padding:30px 20px;text-align:center;color:#6b7280;font-size:12px;">📊 No Income Bid price history yet.<br><br>Click <strong style="color:#f1f5f9;">⟳ Fetch Latest Prices</strong> to start building the chart.<br><span style="display:block;margin-top:4px;font-size:11px;">Prices are saved on each fetch — the chart fills in over time.</span></div>`;
     }else if(!_fdmChart){
@@ -5724,10 +5733,10 @@ function renderFdmBody(){
   else el.innerHTML=renderFdmHistory();
   if(_fdmTab==="performance"){
     const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
-    const hasStored=_fdmHistory&&_fdmHistory.length>=2;
+    const hasStored=_fdmHistory&&_fdmHistory.length>=1;
     const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
-    // Auto-switch to underlying sub-fund chart when bid price history is too short (<20 points)
-    if(hasTS&&_fdmChartTab==="income"&&(!hasStored||(_fdmHistory&&_fdmHistory.length<20))){
+    // Auto-switch to underlying sub-fund chart only when there is zero Income Bid history
+    if(hasTS&&_fdmChartTab==="income"&&(!_fdmHistory||_fdmHistory.length===0)){
       _fdmChartTab="underlying";
     }
     if(hasTS||hasStored||hasLive)setTimeout(()=>drawFdmChart(_fdmPeriod),30);
@@ -5815,7 +5824,7 @@ function renderFdmPerformance(){
     const aum=_fdmMStar.totalAssets?` · AUM SGD ${Number(_fdmMStar.totalAssets).toLocaleString()}M`:"";
     perfSource=`⭐ Morningstar · <strong>underlying sub-fund</strong> · ${esc(_fdmMStar.morningstarName||"")}${aum}${stars?" · "+stars:""}`;
   // Priority 3: Stored Income bid prices
-  }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=2){
+  }else if(storedPerf&&_fdmHistory&&_fdmHistory.length>=1){
     perf=storedPerf;
     // Fill any null periods with the API's live scrape data (it covers ~30 days of history)
     if(livePerf){
@@ -5878,7 +5887,7 @@ function renderFdmPerformance(){
 
   // Price chart — priority: Income bid prices first, Morningstar sub-fund as fallback
   const hasTS=_fdmTimeseries&&_fdmTimeseries.prices&&_fdmTimeseries.prices.length>=2;
-  const hasStored=_fdmHistory&&_fdmHistory.length>=2;
+  const hasStored=_fdmHistory&&_fdmHistory.length>=1;
   const hasLive=_fdmData&&!_fdmData.error&&_fdmData.chartData;
   if(!hasStored&&!hasLive&&_fdmTimeseries===null&&_fdmHistory===null&&!_fdmData){
     h+=`<div class="fdm-loading" style="padding:20px;">⏳ Loading price chart...</div>`;
@@ -5890,9 +5899,9 @@ function renderFdmPerformance(){
     const DAYS={"1M":30,"3M":91,"6M":182,"1Y":365,"3Y":1095,"5Y":1825,"SI":36500};
     const cutoffMs=Date.now()-(DAYS[_fdmPeriod]||365)*864e5;
     let chartSrc=null,chartFmt="iso",chartLabel="Income Bid";
-    if(storedCount2>=2&&storedCount2>=liveCount2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    if(storedCount2>=1&&storedCount2>=liveCount2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
     else if(liveCount2>=2){chartSrc=_fdmData.chartData;chartFmt="dmy";}
-    else if(storedCount2>=2){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
+    else if(storedCount2>=1){chartSrc=_fdmHistory.slice().reverse();chartFmt="iso";}
     else if(hasTS){chartSrc=_fdmTimeseries.prices;chartFmt="iso";chartLabel="Underlying Sub-Fund";}
     const toMs=d=>chartFmt==="iso"?new Date(d.date).getTime():new Date(d.date.split("/").reverse().join("-")).getTime();
     const inPeriod=chartSrc?chartSrc.filter(e=>toMs(e)>=cutoffMs):[];
@@ -6156,11 +6165,11 @@ function drawFdmChart(period){
     const storedCount=_fdmHistory?_fdmHistory.length:0;
     const liveData=_fdmData&&!_fdmData.error&&_fdmData.chartData?_fdmData.chartData:null;
     const liveCount=liveData?liveData.length:0;
-    const hist=storedCount>=2?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
+    const hist=storedCount>=1?_fdmHistory.slice().reverse().map(e=>({date:e.date,price:e.price})):null;
     let inData=null,inFmt="iso";
-    if(storedCount>=2&&storedCount>=liveCount){inData=hist;inFmt="iso";}
+    if(storedCount>=1&&storedCount>=liveCount){inData=hist;inFmt="iso";}
     else if(liveCount>=2){inData=liveData;inFmt="dmy";}
-    else if(storedCount>=2){inData=hist;inFmt="iso";}
+    else if(storedCount>=1){inData=hist;inFmt="iso";}
     if(inData)_fdmChart=_buildChart(canvas,inData,period,inFmt,"Income Bid");
   }
   // === Underlying Sub-Fund chart (Morningstar timeseries) ===
