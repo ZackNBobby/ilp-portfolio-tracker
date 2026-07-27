@@ -16,6 +16,7 @@ const FUND_SECIDS = {
   "Income US Large Cap Equity Fund":            { secId: "F00001QUO7", universe: "FOSGP$$ALL" },
   "Income Global Sustainable Fund":             { secId: "F000016LX1", universe: "FOEUR$$ALL" },
   "Income US Dividend and Growth Fund":         { secId: "F00000Q4B0", universe: "FOSGP$$ALL" },
+  "Income Japan Dividend Equity Fund":          { secId: "F00000Q3EG", universe: "FOSGP$$ALL" },
   // "Income Singapore Dividend Equity Fund" — Amova fund not in any Morningstar universe; no timeseries available
 };
 

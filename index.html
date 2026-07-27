@@ -897,6 +897,7 @@ const DEFAULT_FUNDS=[
   "Income Global Sustainable Fund",
   "Income Global Technology Fund",
   "Income India Equity Fund",
+  "Income Japan Dividend Equity Fund",
   "Income Regional China Fund",
   "Income Singapore Dividend Equity Fund",
   "Income US Dividend and Growth Fund",
@@ -4211,6 +4212,7 @@ const INCOME_SLUGS={
   "Income Global Sustainable Fund":"income-global-sustainable-fund",
   "Income Global Technology Fund":"income-global-technology-fund",
   "Income India Equity Fund":"income-india-equity-fund",
+  "Income Japan Dividend Equity Fund":"income-japan-dividend-equity-fund",
   "Income Regional China Fund":"income-regional-china-fund",
   "Income Singapore Dividend Equity Fund":"income-singapore-dividend-equity-fund",
   "Income US Dividend and Growth Fund":"income-us-dividend-and-growth-fund",
@@ -4232,6 +4234,7 @@ const FUND_UNDERLYING={
   "Income Global Emerging Markets Equity Fund": "LU0890818403:SGD",
   "Income Global Sustainable Fund":             "LU2279689827:SGD",
   "Income Global Dynamic Bond Fund":            "IE00B9HH6X13:SGD",
+  "Income Japan Dividend Equity Fund":          "ms:F00000Q3EG",
 };
 
 // Fetch latest price of an underlying sub-fund via the server-side /api/underlying-price endpoint
@@ -5208,6 +5211,30 @@ const FUND_DB={
       {year:2022,event:"India's stock market surpasses Hong Kong to become the 4th largest globally by market capitalisation"},
       {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
       {year:2023,event:"India becomes the world's most populous nation, surpassing China"},
+    ]
+  },
+  "Income Japan Dividend Equity Fund":{
+    subFund:"Amova Japan Dividend Equity SGD Hedged Class",
+    subAdvisor:"Amova Asset Management Asia Limited (Sumitomo Mitsui Trust Group)",
+    subAdvisorDesc:"Amova Asset Management Asia Limited (formerly Nikko Asset Management Asia Limited) is a Singapore-based fund manager backed by the Sumitomo Mitsui Trust Group — one of Japan's largest trust banking groups with over ¥100 trillion in assets under management. Amova has deep Japan equity expertise, drawing on Sumitomo Mitsui Trust's extensive domestic research capabilities and long-standing relationships with Japanese listed companies. The Japan Dividend Equity strategy focuses on Japanese companies with sustainable dividend characteristics, strong balance sheets, and improving corporate governance — a structural tailwind that has accelerated dramatically under Tokyo Stock Exchange's 2023–2024 governance reform programme. The SGD-hedged (SGD Hdg) share class removes JPY/SGD exchange rate risk, making Japan equity accessible to Singapore investors without currency volatility. ISIN: SG9999010490.",
+    assetClass:"Equity — Japan",geography:"Japan",currency:"SGD (Hedged)",riskLevel:6,
+    dividendFrequency:"None (accumulation fund)",
+    objective:"To achieve long-term capital appreciation and income by investing primarily in Japanese equities with strong dividend characteristics. The fund focuses on financially sound Japanese companies with sustainable dividend payouts, improving shareholder returns, and sound corporate governance.",
+    strategy:"Invests in Japanese listed equities selected for dividend sustainability, balance sheet quality, and corporate governance improvement. Concentrated portfolio of high-conviction Japanese dividend payers across financials, industrials, consumer goods, and technology sectors. The TSE governance reform programme (2023–2024) requiring companies trading below book value to present capital efficiency improvement plans has been a structural tailwind — driving record dividends and buybacks across Japan's historically cash-rich listed companies. The SGD-hedged share class eliminates JPY/SGD currency risk, removing one of the key barriers for Singapore investors considering Japan equity. Sub-advised by Amova Asset Management Asia (formerly Nikko Asset Management Asia), backed by the Sumitomo Mitsui Trust Group's deep Japanese equity research depth.",
+    focus:["Japan Equity","Dividend Income","SGD-Hedged","Corporate Governance"],
+    sellingPts:[
+      {ico:"🇯🇵",text:"Japan's equity renaissance: the Tokyo Stock Exchange's landmark 2023–2024 governance reforms have forced companies trading below book value to return trapped cash to shareholders — driving record dividends and buybacks. Japan Inc is undergoing its most significant transformation in decades. Companies that have historically hoarded cash are now being compelled to deliver real returns, and dividend-focused strategies are ideally positioned to capture this structural shift."},
+      {ico:"💱",text:"SGD-hedged — full Japan equity return with zero JPY currency risk. The Japanese yen is historically volatile, and JPY/SGD swings can dramatically amplify or erase investment returns for unhedged investors. This fund's SGD-hedged share class captures Japan's equity upside while eliminating the currency drag, giving Singapore policyholders a clean, predictable Japan equity exposure."},
+      {ico:"💰",text:"Japan is the world's 4th largest economy with the 3rd most liquid stock market globally. Yet Japanese equities have long traded at discount valuations to global peers. The governance reform wave is finally unlocking this value premium — total shareholder returns (dividends + buybacks) are at all-time highs. Sub-advised by Amova Asset Management Asia, backed by Sumitomo Mitsui Trust Group's century-plus of Japanese market expertise."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded in Singapore"},
+      {year:1985,event:"Plaza Accord triggers JPY appreciation — Japan's industrials begin global expansion, building the conglomerates that anchor the Nikkei today"},
+      {year:1999,event:"Nikko Asset Management Asia establishes Singapore presence — building the Japanese equity investment capability underpinning this fund"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+      {year:2023,event:"Nikko Asset Management Asia rebranded to Amova Asset Management Asia under Sumitomo Mitsui Trust Group ownership"},
+      {year:2023,event:"Tokyo Stock Exchange launches landmark governance reform — requiring below-book-value companies to improve capital efficiency, triggering record dividends and buybacks"},
+      {year:2024,event:"Nikkei 225 surpasses 40,000 for the first time — breaking its 1989 bubble-era peak as Japan's governance transformation drives global investor re-rating"},
     ]
   },
   "Income Regional China Fund":{

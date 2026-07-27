@@ -70,6 +70,11 @@ const FUND_MAP = {
     searchTerm: "Allianz Income and Growth AMi3 SGD",
     note: "Allianz Income and Growth AMi3 (H2-SGD) – ISIN LU0943347566",
   },
+  "Income Japan Dividend Equity Fund": {
+    secId: "F00000Q3EG",
+    searchTerm: "Amova Japan Dividend Equity SGD Hdg",
+    note: "Amova Japan Dividend Equity SGD Hedged Class (formerly Nikko AM Japan Dividend Equity SGD Hdg) – ISIN SG9999010490",
+  },
   // "Income Global Technology Fund" — Wellington-managed direct ILP sub-fund; no underlying UCITS; not in any Morningstar universe
   // "Income Singapore Dividend Equity Fund" — Amova fund ISIN SG9999003826 is not indexed in any Morningstar universe
 };

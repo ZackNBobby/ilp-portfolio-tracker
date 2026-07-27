@@ -1,5 +1,6 @@
-// Fetches the latest price for an underlying institutional fund via FT.com.
-// Called with ?symbol=LU2264538146:SGD (ISIN:currency format from FT.com).
+// Fetches the latest price for an underlying institutional fund.
+// FT.com mode: ?symbol=LU2264538146:SGD (ISIN:currency, for European-domiciled UCITS)
+// Morningstar mode: ?symbol=ms:F00000Q3EG (ms:<SecId>, for SG-domiciled funds not on FT.com)
 
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -56,6 +57,40 @@ async function fetchFromHtmlPage(symbol) {
   throw new Error("Could not find price in FT page HTML");
 }
 
+const MS_TOKEN = "klr5zyak8x";
+const MS_HEADERS = {
+  "Accept": "application/json, */*",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+  "Referer": "https://fundsingapore.com/",
+};
+
+// Fetch the latest NAV from Morningstar timeseries_price endpoint for SG-domiciled funds
+async function fetchMorningstarLatest(secId) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 45); // 45 days back to ensure we get at least one trading day
+  const start = startDate.toISOString().split("T")[0];
+  const universe = "FOSGP%24%24ALL";
+  const url = `https://tools.morningstar.co.uk/api/rest.svc/timeseries_price/${MS_TOKEN}`
+    + `?id=${secId}]2]0]${decodeURIComponent(universe)}`
+    + `&currencyId=SGD&idtype=Morningstar&frequency=daily`
+    + `&startDate=${start}&outputType=json`;
+
+  const r = await fetch(url, { headers: MS_HEADERS, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`Morningstar timeseries HTTP ${r.status}`);
+  const data = await r.json();
+  const history = data?.TimeSeries?.Security?.[0]?.HistoryDetail || [];
+  if (!history.length) throw new Error("No Morningstar price history returned");
+
+  // Take the most recent entry
+  const sorted = history
+    .map(h => ({ date: h.EndDate, price: parseFloat(h.Value) }))
+    .filter(h => h.date && !isNaN(h.price) && h.price > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  if (!sorted.length) throw new Error("No valid Morningstar price entries");
+
+  return { price: sorted[0].price, date: sorted[0].date };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -63,7 +98,22 @@ module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=14400, stale-while-revalidate=86400");
 
   const symbol = (req.query.symbol || "").trim();
-  if (!symbol) return res.status(400).json({ error: "Missing ?symbol= parameter (e.g. LU2264538146:SGD)" });
+  if (!symbol) return res.status(400).json({ error: "Missing ?symbol= parameter (e.g. LU2264538146:SGD or ms:F00000Q3EG)" });
+
+  // Morningstar pathway: symbol starts with "ms:"
+  if (symbol.startsWith("ms:")) {
+    const secId = symbol.slice(3).trim();
+    if (!secId) return res.status(400).json({ error: "Missing SecId after ms: prefix" });
+    try {
+      const result = await fetchMorningstarLatest(secId);
+      return res.status(200).json({
+        symbol, price: result.price, asOf: result.date,
+        source: "Morningstar timeseries", fetchedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      return res.status(503).json({ error: e.message, symbol });
+    }
+  }
 
   const enc = encodeURIComponent(symbol);
 
