@@ -237,6 +237,29 @@ body{
   font-size:12px;color:#fb923c;margin-bottom:12px;
 }
 
+/* ── Birthday banner ── */
+.bday-banner{
+  border-radius:10px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);
+  font-size:12px;margin-bottom:12px;overflow:hidden;
+}
+.bday-banner-hdr{
+  display:flex;align-items:center;justify-content:space-between;padding:8px 14px;
+  cursor:pointer;user-select:none;
+}
+.bday-banner-title{color:#fbbf24;font-weight:700;}
+.bday-banner-chevron{font-size:10px;color:var(--dim);transition:transform 0.2s;}
+.bday-banner-chevron.open{transform:rotate(180deg);}
+.bday-list{padding:0 14px 10px;display:flex;flex-direction:column;gap:6px;}
+.bday-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.03);cursor:pointer;}
+.bday-row:hover{background:rgba(245,158,11,0.08);}
+.bday-name{font-weight:700;font-size:12px;color:var(--text);flex:1;}
+.bday-date{font-size:11px;color:var(--dim);}
+.bday-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;}
+.bday-pill.today{background:rgba(239,68,68,0.2);color:#f87171;}
+.bday-pill.soon{background:rgba(245,158,11,0.18);color:#fbbf24;}
+.bday-pill.upcoming{background:rgba(34,197,94,0.12);color:#4ade80;}
+.bday-age{font-size:11px;color:var(--dim);}
+
 /* ── Client sub-tabs ── */
 .client-subtab-bar{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--gold-border);padding-bottom:0;}
 .client-subtab{
@@ -946,6 +969,7 @@ let namesBlurred=true; // PDPA: names blurred by default
 let swOutFund="",swInFund="",swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
 let swTemplatePdfBytes=null; // cached template bytes
 let _blurTimer=null;
+let _bdayOpen=true; // birthday banner expanded by default
 let unsubs=[],charts={};
 
 // Resolve a fund name from a transaction to a stored price, tolerating missing "Income " prefix.
@@ -2030,6 +2054,11 @@ document.addEventListener("keydown",e=>{
   document.addEventListener(ev,()=>{if(!namesBlurred)_startBlurTimer();})
 );
 
+window.toggleBdayBanner=()=>{
+  _bdayOpen=!_bdayOpen;
+  renderPage();
+};
+window.goClient=fid=>viewClient(fid);
 window.setDashSort=s=>{
   dashSort=s;
   const el=document.getElementById("clientList");
@@ -2097,6 +2126,41 @@ function renderDashboard(){
       ? urgentCount+" client"+(urgentCount>1?"s":"")+" with premium due within 7 days — "+premDueClients.length+" total within 30 days"
       : premDueClients.length+" client"+(premDueClients.length>1?"s":"")+" with annual premium due within 30 days";
     html+=`<div class="prem-banner">⏰ <strong>${msg}</strong></div>`;
+  }
+
+  // Birthday banner — clients with birthday in the next 30 days
+  const bdayClients=clients
+    .map(c=>({c,days:getDaysToBirthday(c.dob)}))
+    .filter(x=>x.days!==null&&x.days<=30)
+    .sort((a,b)=>a.days-b.days);
+  if(bdayClients.length>0){
+    const todayBday=bdayClients.filter(x=>x.days===0).length;
+    const title=todayBday>0
+      ?`🎂 ${todayBday} birthday today · ${bdayClients.length} upcoming in 30 days`
+      :`🎂 ${bdayClients.length} client${bdayClients.length>1?"s":""} with birthday in the next 30 days`;
+    html+=`<div class="bday-banner" id="bdayBanner">
+      <div class="bday-banner-hdr" onclick="toggleBdayBanner()">
+        <span class="bday-banner-title">${title}</span>
+        <span class="bday-banner-chevron${_bdayOpen?" open":""}" id="bdayChevron">▼</span>
+      </div>`;
+    if(_bdayOpen){
+      html+=`<div class="bday-list">`;
+      bdayClients.forEach(({c,days})=>{
+        const age=getAge(c.dob);
+        const turnsAge=age!==null?age+1:null;
+        const pillClass=days===0?"today":days<=7?"soon":"upcoming";
+        const pillLabel=days===0?"Today!":days===1?"Tomorrow":"In "+days+"d";
+        const dobFmt=c.dob?fmtDate(c.dob):"";
+        html+=`<div class="bday-row" onclick="goClient('${c.fid}')">
+          <span style="font-size:16px;">🎂</span>
+          <span class="bday-name">${esc(c.name)}</span>
+          <span class="bday-date">${dobFmt}${turnsAge!==null?` · turns ${turnsAge}`:""}</span>
+          <span class="bday-pill ${pillClass}">${pillLabel}</span>
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+    html+=`</div>`;
   }
 
   html+=`<div class="search-wrap">
