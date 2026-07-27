@@ -5686,7 +5686,14 @@ window.selectFdmChartTab=(tab)=>{
   if(wu)wu.style.display=tab==="underlying"?"block":"none";
   if(bi){bi.style.background=tab==="income"?"rgba(16,185,129,0.2)":"rgba(255,255,255,0.04)";bi.style.borderColor=tab==="income"?"rgba(16,185,129,0.5)":"rgba(255,255,255,0.12)";bi.style.color=tab==="income"?"#10b981":"#94a3b8";}
   if(bu){bu.style.background=tab==="underlying"?"rgba(167,139,250,0.2)":"rgba(255,255,255,0.04)";bu.style.borderColor=tab==="underlying"?"rgba(167,139,250,0.5)":"rgba(255,255,255,0.12)";bu.style.color=tab==="underlying"?"#a78bfa":"#94a3b8";}
-  if(tab==="income"&&!_fdmChart)drawFdmChart(_fdmPeriod);
+  if(tab==="income"){
+    const hasIncomeBid=(_fdmHistory&&_fdmHistory.length>=2)||(_fdmData&&_fdmData.chartData&&_fdmData.chartData.length>=2);
+    if(!hasIncomeBid){
+      if(wi)wi.innerHTML=`<div style="padding:30px 20px;text-align:center;color:#6b7280;font-size:12px;">📊 No Income Bid price history yet.<br><br>Click <strong style="color:#f1f5f9;">⟳ Fetch Latest Prices</strong> to start building the chart.<br><span style="display:block;margin-top:4px;font-size:11px;">Prices are saved on each fetch — the chart fills in over time.</span></div>`;
+    }else if(!_fdmChart){
+      drawFdmChart(_fdmPeriod);
+    }
+  }
   if(tab==="underlying"&&!_fdmChartUnd)drawFdmChart(_fdmPeriod);
 };
 
@@ -5740,13 +5747,17 @@ function renderFdmOverview(){
     h+=`</div>`;
   }
   h+=`<div class="fdm-sec-hd">📋 Fund Facts</div>`;
-  // Sub-Fund row — hyperlink to FT Markets if an underlying symbol is mapped
+  // Sub-Fund row — hyperlink to Morningstar (ms: symbols) or FT Markets (ISIN symbols)
   {
     const ftSym=FUND_UNDERLYING[_fdmFund];
-    const ftUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(ftSym)}`:null;
+    const isMstarSym=ftSym&&ftSym.startsWith("ms:");
+    const ftUrl=isMstarSym
+      ?`https://www.morningstar.sg/sg/funds/snapshot/snapshot.aspx?id=${encodeURIComponent(ftSym.slice(3))}`
+      :ftSym?`https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(ftSym)}`:null;
+    const ftLinkLabel=isMstarSym?"↗ Morningstar":"↗ FT Markets";
     const subFundLabel=info.subFund||"—";
     const subFundHtml=ftUrl
-      ?`<a href="${ftUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;text-underline-offset:3px;word-break:break-word;">${esc(subFundLabel)}</a> <span style="font-size:10px;color:var(--dim);">↗ FT Markets</span>`
+      ?`<a href="${ftUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--gold);text-decoration:underline;text-underline-offset:3px;word-break:break-word;">${esc(subFundLabel)}</a> <span style="font-size:10px;color:var(--dim);">${ftLinkLabel}</span>`
       :esc(subFundLabel);
     h+=`<div class="fdm-kv"><span class="k">Sub-Fund</span><span class="v">${subFundHtml}</span></div>`;
   }
@@ -5981,9 +5992,9 @@ function renderFdmHoldings(){
     if(h.ftHoldings){
       return renderHoldingsData(h.ftHoldings, `📡 Holdings from FT Markets · ${h.ftHoldings.asOf||"latest"}`);
     }
-    // Otherwise show a helpful message with direct FT Markets link
+    // Otherwise show a helpful message with direct link (FT Markets for ISIN funds, factsheet for Morningstar-only)
     const ftSym=FUND_UNDERLYING[_fdmFund];
-    const ftHoldUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
+    const ftHoldUrl=ftSym&&!ftSym.startsWith("ms:")?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
     return`<div style="text-align:center;padding:30px 20px;">
       <div style="font-size:32px;margin-bottom:12px;">📋</div>
       <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Not Available via Morningstar</div>
@@ -6010,7 +6021,7 @@ function renderFdmHoldings(){
     if(!msComplete){
       if(info.staticHoldings) return renderHoldingsData(info.staticHoldings,`📋 As of ${info.staticHoldings.asOf} · Source: ${info.staticHoldings.source}`);
       const ftSym=FUND_UNDERLYING[_fdmFund];
-      const ftHoldUrl=ftSym?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
+      const ftHoldUrl=ftSym&&!ftSym.startsWith("ms:")?`https://markets.ft.com/data/funds/tearsheet/holdings?s=${encodeURIComponent(ftSym)}`:null;
       return`<div style="text-align:center;padding:30px 20px;">
         <div style="font-size:36px;margin-bottom:12px;">📊</div>
         <div style="color:#f1f5f9;font-size:14px;font-weight:700;margin-bottom:8px;">Holdings Not Available via Data Feed</div>
