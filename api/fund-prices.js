@@ -12,6 +12,7 @@ const FUND_SLUGS = {
   "Income Global Sustainable Fund":             "income-global-sustainable-fund",
   "Income Global Technology Fund":              "global-technology-fund",
   "Income India Equity Fund":                   "income-india-equity-fund",
+  "Income Japan Dividend Equity Fund":          "income-japan-dividend-equity-fund",
   "Income Regional China Fund":                 "income-regional-china-fund",
   "Income Singapore Dividend Equity Fund":      "income-singapore-dividend-equity-fund",
   "Income US Dividend and Growth Fund":         "income-us-dividend-and-growth-fund",
