@@ -823,6 +823,12 @@ body{
       <button class="btn-pri" style="flex:1;" onclick="saveEditClientInfo()">💾 Save</button>
       <button class="btn-sec" onclick="closeEditClientInfo()">Cancel</button>
     </div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Update from KYC</div>
+      <input type="file" id="ecKycFileInput" accept=".pdf" style="display:none" onchange="handleKycReupload()"/>
+      <button class="btn-sec" style="width:100%;" onclick="document.getElementById('ecKycFileInput').click()">📋 Re-upload KYC PDF</button>
+      <div id="ecKycStatus" style="display:none;font-size:12px;margin-top:10px;padding:8px 12px;border-radius:8px;line-height:1.5;"></div>
+    </div>
   </div>
 </div>
 
@@ -2510,7 +2516,7 @@ window.loadSwTemplate=async()=>{
   if(swTemplatePdfBytes)return swTemplatePdfBytes;
   // 1. Try loading from the app URL (PDF committed to repo → served by Vercel)
   try{
-    const res=await fetch("./fund-switch-form.pdf",{cache:"default"});
+    const res=await fetch("./fund-switch-form-aug-26.pdf",{cache:"default"});
     if(res.ok){
       const bytes=new Uint8Array(await res.arrayBuffer());
       swTemplatePdfBytes=bytes;
@@ -2650,23 +2656,30 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  _radio("62 years of age or olderfgh%^&", is62Plus?"1":"2");
+  // 62+ Yes/No radio group (parent "Yes#$%YH", option "1"=Yes, "2"=No)
+  _radio("Yes#$%YH", is62Plus?"1":"2");
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
-  // ── Education level (page 1) ──
+  // ── Education level (page 1) — radio group "Primary$%^&", options 1–7 ──
+  // 1=Primary, 2=Secondary, 3=GCE O/N, 4=Pre-U/JC, 5=Diploma, 6=Degree, 7=Post-graduate
   const _eduMap={"Below O Level":"1","O Level / N Level":"3","A Level / Diploma":"5","Degree":"6","Post-Graduate":"7"};
   const _eduVal=_eduMap[c.educationLevel||""];
-  if(_eduVal)_radio("undefined_3gh$%^&*(", _eduVal);
+  if(_eduVal)_radio("Primary$%^&", _eduVal);
 
-  // ── PAGE 2: Section A Q2 — age bracket written as A/B/C/D ──
-  // A=below 30, B=30–49, C=50–59, D=60+
-  const _q2=age===null?"":age<30?"A":age<50?"B":age<60?"C":"D";
-  _set("years_2sdfgh", _q2);
+  // ── PAGE 2: Section A CRPQ answers (explicitly set so flatten() renders them) ──
+  // Q1 (time horizon >10yr) and Q3 (>20% decline) are pre-filled D; re-set so flatten works.
+  // Q2 (age bracket) depends on client DOB. Q4 (buy more) is B. Q5 has no interactive field.
+  _set('dfggfdvbnk":L', "D");   // Q1 answer: D (More than 10 years)
+  // Q2 age bracket: A=Below 21, B=21–39, C=40–59, D=60+
+  const _q2=age===null?"":age<21?"A":age<40?"B":age<60?"C":"D";
+  _set("unde!@#$fined_8", _q2); // Q2 answer field (y≈382, blank in template)
+  _set("undefined_9jHBh", "D"); // Q3 answer: D (More than 20% tolerable decline)
+  _set("undefined_10{_\\", "B");// Q4 answer: B (Buy more to bring down average cost)
 
   // ── PAGE 5: Section C — Client declaration ──
-  _set("Name ofsdfg Policyholder or Assignee2", c.name);
-  _set("NRICFIN numsdfghber", c.nric||"");
+  _set("Name of Policyholder or Assignee2", c.name);
+  _set("NRICFIN number", c.nric||"");
   _set("Date ddmmyyyy", todayStr);
 
   // ── PAGE 10: Client acknowledgement ──
@@ -2992,6 +3005,47 @@ async function processKycPdf(file){
     if(drop)drop.classList.add("kyc-done");
   }catch(e){
     setStatus(`❌ Could not read KYC PDF: ${e.message}`,"var(--red)","rgba(239,68,68,0.06)");
+  }
+}
+
+async function handleKycReupload(){
+  const modal=document.getElementById("editClientModal");
+  const clientId=modal?.dataset.clientId;
+  if(!clientId)return;
+  const fileInput=document.getElementById("ecKycFileInput");
+  const file=fileInput?.files?.[0];
+  if(!file)return;
+  const statusEl=document.getElementById("ecKycStatus");
+  const setStatus=(msg,color,bg)=>{
+    if(!statusEl)return;
+    statusEl.style.display="block";
+    statusEl.style.color=color;
+    statusEl.style.background=bg;
+    statusEl.style.border=`1px solid ${color}40`;
+    statusEl.innerHTML=msg;
+  };
+  setStatus("⏳ Reading KYC PDF…","var(--gold)","rgba(245,158,11,0.06)");
+  try{
+    const data=await parseKycPdf(file);
+    const fields={};
+    if(data.name)fields.name=data.name;
+    if(data.nric)fields.nric=data.nric;
+    if(data.dob){const d=parseDate(data.dob);if(d&&d.match(/^\d{4}-\d{2}-\d{2}$/))fields.dob=d;}
+    if(data.phone)fields.contactNo=data.phone;
+    if(data.email)fields.email=data.email;
+    if(data.nationality)fields.nationality=data.nationality;
+    if(data.country)fields.countryOfResidence=data.country;
+    if(data.occupation)fields.occupation=data.occupation;
+    if(data.natureOfWork)fields.natureOfWork=data.natureOfWork;
+    if(data.education)fields.educationLevel=data.education;
+    const count=Object.keys(fields).length;
+    if(!count){setStatus("⚠️ No fields could be extracted from this KYC PDF.","var(--gold)","rgba(245,158,11,0.06)");return;}
+    await updateClientFields(clientId,fields);
+    const updated=Object.keys(fields).join(", ");
+    setStatus(`✅ Updated: ${updated}.`,"var(--green)","rgba(34,197,94,0.06)");
+    fileInput.value="";
+  }catch(e){
+    setStatus(`❌ Error: ${e.message}`,"var(--red)","rgba(239,68,68,0.06)");
   }
 }
 
