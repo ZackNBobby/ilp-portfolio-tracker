@@ -2645,7 +2645,8 @@ async function _fillClientPdf(templateBytes,c){
   const todayStr=`${String(today.getDate()).padStart(2,"0")}/${String(today.getMonth()+1).padStart(2,"0")}/${today.getFullYear()}`;
   const isLegacy=c.product==="Legacy Flex Solitaire";
   const hasRegular=!isLegacy;
-  const isSG=!c.nationality||c.nationality==="Singaporean";
+  const _nat=(c.nationality||"").toLowerCase();
+  const isSG=!c.nationality||_nat==="singaporean"||_nat.includes("citizen")||_nat==="singapore";
 
   const form=pdfDoc.getForm();
   const fields=form.getFields();
@@ -2655,18 +2656,26 @@ async function _fillClientPdf(templateBytes,c){
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
   // Low-level button setter — works for multi-kid button groups that lack /Ff 49152
-  // (getRadioGroup fails on those; this directly sets /V on the parent and /AS on each kid)
+  // Uses context.lookup() directly to avoid getWidgets() class-wrapper issues with pre-selected kids
   const _setBtn=(name,value)=>{
     try{
-      const{PDFName}=PDFLib;
+      const{PDFName,PDFArray,PDFDict}=PDFLib;
       const vName=PDFName.of(value);
+      const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f)return false;
-      f.acroField.dict.set(PDFName.of('V'),vName);
-      for(const w of f.acroField.getWidgets()){
-        const n=w.getAppearances()?.normal;
-        const on=n&&typeof n.get==='function'&&n.get(vName)!=null;
-        w.setAppearanceState(on?vName:PDFName.of('Off'));
+      const fd=f.acroField.dict;
+      fd.set(PDFName.of('V'),vName);
+      const kids=fd.lookupMaybe(PDFName.of('Kids'),PDFArray);
+      if(!kids)return false;
+      for(let i=0;i<kids.size();i++){
+        const kid=pdfDoc.context.lookup(kids.get(i),PDFDict);
+        if(!kid)continue;
+        const ap=kid.lookupMaybe(PDFName.of('AP'),PDFDict);
+        if(!ap)continue;
+        const n=ap.lookupMaybe(PDFName.of('N'),PDFDict);
+        if(!n)continue;
+        kid.set(PDFName.of('AS'),n.get(vName)!=null?vName:offName);
       }
       return true;
     }catch(e){return false;}
@@ -2724,9 +2733,9 @@ async function _fillClientPdf(templateBytes,c){
   _set("Full name as in NRICPassposdfghrtLongTerm PassCompany Registration", c.name);
   _set("NRICPassportFINUnique Ensdfgtity Number UEN", c.nric||"");
   _set("Policy numbersdfgh", c.policyNo||"");
-  // Nationality: button group (kids 1=Singaporean, 2=SG PR, 3=Others) — no /Ff flag so _setBtn
+  // Nationality: policyholder button group only (kids 1=Singaporean, 2=SG PR, 3=Others)
+  // "Singaporean$%^&\_2" is the insured section — intentionally NOT filled
   _setBtn("Singaporean#$%FGH", isSG?"1":"2");
-  _setBtn("Singaporean$%^&\\_2", isSG?"1":"2");
   _try(["Country of residencesdfgh","Country of residfghdence_2"], c.countryOfResidence||"Singapore");
   _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
   _set("Occufghpation", c.occupation||"");
@@ -2979,6 +2988,14 @@ async function parseKycPdf(file){
     }
     return"";
   };
+  // Normalise nationality so KYC "Singapore Citizen" → "Singaporean" (matches dropdown)
+  const normNat=(v)=>{
+    if(!v)return"";
+    const vl=v.toLowerCase();
+    if(vl.includes("singapore")&&(vl.includes("citizen")||vl==="singaporean"||vl==="singapore"))return"Singaporean";
+    if(vl.includes("permanent resident")||vl.includes(" pr"))return"Singapore PR";
+    return v;
+  };
   // Normalise education to the values stored in Firestore (matching the Add Client dropdown)
   const normEdu=(v)=>{
     if(!v)return"";
@@ -2996,7 +3013,7 @@ async function parseKycPdf(file){
     name:       getValue("Name (as in NRIC"),
     nric:       getValue("NRIC / FIN / Passport no"),
     dob:        getValue("Date of birth"),
-    nationality:getValue("Nationality"),
+    nationality:normNat(getValue("Nationality")),
     country:    getValue("Country of residence"),
     phone:      getValue("Mobile number"),
     email:      getValue("Email"),
