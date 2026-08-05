@@ -825,8 +825,15 @@ body{
     </div>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
       <div style="font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Update from KYC</div>
-      <input type="file" id="ecKycFileInput" accept=".pdf" style="display:none" onchange="handleKycReupload()"/>
-      <button class="btn-sec" style="width:100%;" onclick="document.getElementById('ecKycFileInput').click()">📋 Re-upload KYC PDF</button>
+      <div class="kyc-drop" id="ecKycDrop"
+        onclick="document.getElementById('ecKycFileInput').click()"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleKycReuploadDrop(event)">
+        <div style="font-size:20px;margin-bottom:4px;">📋</div>
+        <div style="font-size:12px;font-weight:700;color:var(--gold);">Drop KYC PDF or click to upload</div>
+        <input type="file" id="ecKycFileInput" accept=".pdf" style="display:none" onchange="handleKycReupload(this)"/>
+      </div>
       <div id="ecKycStatus" style="display:none;font-size:12px;margin-top:10px;padding:8px 12px;border-radius:8px;line-height:1.5;"></div>
     </div>
   </div>
@@ -3008,14 +3015,12 @@ async function processKycPdf(file){
   }
 }
 
-async function handleKycReupload(){
+const _runKycReupload=async(file)=>{
   const modal=document.getElementById("editClientModal");
   const clientId=modal?.dataset.clientId;
-  if(!clientId)return;
-  const fileInput=document.getElementById("ecKycFileInput");
-  const file=fileInput?.files?.[0];
-  if(!file)return;
+  if(!clientId||!file)return;
   const statusEl=document.getElementById("ecKycStatus");
+  const dropEl=document.getElementById("ecKycDrop");
   const setStatus=(msg,color,bg)=>{
     if(!statusEl)return;
     statusEl.style.display="block";
@@ -3041,13 +3046,15 @@ async function handleKycReupload(){
     const count=Object.keys(fields).length;
     if(!count){setStatus("⚠️ No fields could be extracted from this KYC PDF.","var(--gold)","rgba(245,158,11,0.06)");return;}
     await updateClientFields(clientId,fields);
-    const updated=Object.keys(fields).join(", ");
-    setStatus(`✅ Updated: ${updated}.`,"var(--green)","rgba(34,197,94,0.06)");
-    fileInput.value="";
+    if(dropEl)dropEl.classList.add("kyc-done");
+    setStatus(`✅ ${count} field(s) updated from KYC.`,"var(--green)","rgba(34,197,94,0.06)");
+    document.getElementById("ecKycFileInput").value="";
   }catch(e){
     setStatus(`❌ Error: ${e.message}`,"var(--red)","rgba(239,68,68,0.06)");
   }
-}
+};
+window.handleKycReupload=async(input)=>{const file=input?.files?.[0];if(file)await _runKycReupload(file);};
+window.handleKycReuploadDrop=async(e)=>{e.preventDefault();document.getElementById("ecKycDrop")?.classList.remove("drag-over");const file=e.dataTransfer?.files?.[0];if(file)await _runKycReupload(file);};
 
 function calcAllocFromTxs(txs){
   const byFund={};let total=0;
@@ -5009,6 +5016,8 @@ window.openEditClientInfo=(clientId)=>{
   document.getElementById("ecDOB").value=c.dob?fmtDate(c.dob):"";
   document.getElementById("ecContact").value=c.contactNo||"";
   document.getElementById("ecErr").style.display="none";
+  document.getElementById("ecKycStatus").style.display="none";
+  document.getElementById("ecKycDrop").classList.remove("kyc-done");
   mo.style.display="flex";
   setTimeout(()=>document.getElementById("ecNRIC").focus(),50);
 };
