@@ -2649,48 +2649,50 @@ async function _fillClientPdf(templateBytes,c){
 
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
-  _set("NRICFIN numsdfghber", c.nric||"");
+  _set("NRICpassport number", c.nric||"");
   _radio("62 years of age or olderfgh%^&", is62Plus?"1":"2");
-  _set("Policy numbersdfgh", c.policyNo||"");
-  // AFF policy list slot #1 — fields "1","2","3","4" are the four policy slots
+  _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
-  // ── PAGE 2: Section A Q2 — current age ──
-  _set("years_2sdfgh", age!==null?String(age):"");
-
-  // ── Education level (from KYC) ──
+  // ── Education level (page 1) ──
   const _eduMap={"Below O Level":"1","O Level / N Level":"3","A Level / Diploma":"5","Degree":"6","Post-Graduate":"7"};
   const _eduVal=_eduMap[c.educationLevel||""];
   if(_eduVal)_radio("undefined_3gh$%^&*(", _eduVal);
 
-  // ── PAGE 4: Section C — Declaration (no advice) ──
+  // ── PAGE 2: Section A Q2 — age bracket written as A/B/C/D ──
+  // A=below 30, B=30–49, C=50–59, D=60+
+  const _q2=age===null?"":age<30?"A":age<50?"B":age<60?"C":"D";
+  _set("years_2sdfgh", _q2);
+
+  // ── PAGE 5: Section C — Client declaration ──
   _set("Name ofsdfg Policyholder or Assignee2", c.name);
-  _set("NRICFIN number_2", c.nric||"");
+  _set("NRICFIN numsdfghber", c.nric||"");
   _set("Date ddmmyyyy", todayStr);
 
-  // ── PAGE 7: Policyholder acknowledgement + Advisor date ──
+  // ── PAGE 10: Client acknowledgement ──
   _set("Name of Policyholder or Assignee9", c.name);
-  _set("NRICPassport n567umberFIN", c.nric||"");
-  _set("Date ddmmyyyy_2", todayStr);   // client signed date
-  _set("Date ddmmyyyy_3", todayStr);   // advisor signed date
+  _set("NRICFIN number_2", c.nric||"");
+  _set("Date ddmmyyyy_2", todayStr);
 
-  // ── PAGE 10: Fund Switch form — Policyholder details ──
-  _set("Full name as insdfgh NRICPassportLongTerm Pass", c.name);
-  _set("NRICpassport number", c.nric||"");
-  // Nationality checkboxes (defaults to Singaporean if not stored on client)
+  // ── PAGE 11: Advisor signed date ──
+  _set("Date ddmmyyyy_3", todayStr);
+
+  // ── PAGE 13: Supervisor validation date ──
+  _set("Date ddmmyyyy_4", todayStr);
+
+  // ── PAGE 14: Fund switch form — Policyholder details ──
+  _set("Full name as in NRICPassposdfghrtLongTerm PassCompany Registration", c.name);
+  _set("NRICPassportFINUnique Ensdfgtity Number UEN", c.nric||"");
+  _set("Policy numbersdfgh", c.policyNo||"");
   _chk("Singaporean#$%FGH", isSG);
   _chk("Singaporean$%^&\\_2", isSG);
-  // Country / City of residence
   _try(["Country of residencesdfgh","Country of residfghdence_2"], c.countryOfResidence||"Singapore");
   _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
-  // Occupation / nature of work / income — blank until added to client profile (*)
   _set("Occufghpation", c.occupation||"");
   _set("Nature of worksdfg", c.natureOfWork||"");
   _set("Annual incomsdfge S", c.annualIncome||"");
-  // Tick the "Fund switch" transaction type checkbox on the cover
-  _chk("Fund switch or change in fund percentage", true);
 
-  // ── PAGE 11: Section 1A — fund switch (all ILP except Legacy Flex Solitaire) ──
+  // ── PAGE 15: Section 1A — fund switch (all ILP except Legacy Flex Solitaire) ──
   if(hasRegular){
     _set("Switch out from Please state Fund nameRow1", swOutFund);
     _set("Percentage to switch outRow1", String(swPct));
@@ -2698,15 +2700,15 @@ async function _fillClientPdf(templateBytes,c){
     _set("Percentage to switch inRow1", "100");
   }
 
-  // ── PAGE 11: Section 1B — Legacy Flex Solitaire only ──
+  // ── PAGE 15: Section 1B — Legacy Flex Solitaire (premium account) ──
   if(isLegacy){
     _set("Switch out from Please state Fund nameRow1_2", swOutFund);
-    _set("Percentage to switch outRow1_2", String(swPct));
+    _set("Premium accountRow1", String(swPct));
     _set("Switch in to Please state Fund nameRow1_2", swInFund);
-    _set("Percentage to switch inRow1_2", "100");
+    _set("Premium accountRow1_2", "100");
   }
 
-  // ── PAGE 16: Today's date for policyholder signature block ──
+  // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
   try{form.flatten();}catch(e){}
