@@ -2651,28 +2651,45 @@ async function _fillClientPdf(templateBytes,c){
   const fields=form.getFields();
   if(fields.length===0)return await pdfDoc.save();
 
-  // Set a single text field by exact name
   const _set=(name,val)=>{try{form.getTextField(name).setText(val||"");return true;}catch(e){return false;}};
-  // Try a list of exact names — first match wins
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
-  // Check/uncheck a checkbox — silently ignores if field doesn't exist
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
-  // Select a radio group option by export value
-  const _radio=(name,value)=>{try{form.getRadioGroup(name).select(value);return true;}catch(e){return false;}};
+  // Low-level button setter — works for multi-kid button groups that lack /Ff 49152
+  // (getRadioGroup fails on those; this directly sets /V on the parent and /AS on each kid)
+  const _setBtn=(name,value)=>{
+    try{
+      const{PDFName}=PDFLib;
+      const vName=PDFName.of(value);
+      const f=form.getFields().find(f=>f.getName()===name);
+      if(!f)return false;
+      f.acroField.dict.set(PDFName.of('V'),vName);
+      for(const w of f.acroField.getWidgets()){
+        const n=w.getAppearances()?.normal;
+        const on=n&&typeof n.get==='function'&&n.get(vName)!=null;
+        w.setAppearanceState(on?vName:PDFName.of('Off'));
+      }
+      return true;
+    }catch(e){return false;}
+  };
 
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ Yes/No radio group (parent "Yes#$%YH", option "1"=Yes, "2"=No)
-  _radio("Yes#$%YH", is62Plus?"1":"2");
+  // 62+ Yes/No group — no /Ff 49152 so getRadioGroup fails; use _setBtn (kid "1"=Yes, "2"=No)
+  _setBtn("Yes#$%YH", is62Plus?"1":"2");
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
-  // ── Education level (page 1) — radio group "Primary$%^&", options 1–7 ──
+  // ── Education level (page 1) — button group "Primary$%^&", options 1–7 ──
   // 1=Primary, 2=Secondary, 3=GCE O/N, 4=Pre-U/JC, 5=Diploma, 6=Degree, 7=Post-graduate
-  const _eduMap={"Below O Level":"1","O Level / N Level":"3","A Level / Diploma":"5","Degree":"6","Post-Graduate":"7"};
+  const _eduMap={
+    "Below O Level":"1","O Level / N Level":"3",
+    "A Level / Diploma":"5","Diploma":"5",          // KYC may return just "Diploma"
+    "Degree":"6","Bachelor":"6",
+    "Post-Graduate":"7","Post Graduate":"7","Postgraduate":"7",
+  };
   const _eduVal=_eduMap[c.educationLevel||""];
-  if(_eduVal)_radio("Primary$%^&", _eduVal);
+  if(_eduVal)_setBtn("Primary$%^&", _eduVal);
 
   // ── PAGE 2: Section A CRPQ answers (explicitly set so flatten() renders them) ──
   // Q1 (time horizon >10yr) and Q3 (>20% decline) are pre-filled D; re-set so flatten works.
@@ -2682,7 +2699,10 @@ async function _fillClientPdf(templateBytes,c){
   const _q2=age===null?"":age<21?"A":age<40?"B":age<60?"C":"D";
   _set("unde!@#$fined_8", _q2); // Q2 answer field (y≈382, blank in template)
   _set("undefined_9jHBh", "D"); // Q3 answer: D (More than 20% tolerable decline)
-  _set("undefined_10{_\\", "B");// Q4 answer: B (Buy more to bring down average cost)
+  _set("undefined_10{_)", "B"); // Q4 answer: B — field name ends in ) (PDF \) escape)
+
+  // ── AFF Section: "Others" purpose field — pre-filled in template but must re-set for flatten ──
+  _set("Others_3", "Fund Switch");
 
   // ── PAGE 5: Section C — Client declaration ──
   _set("Name of Policyholder or Assignee2", c.name);
@@ -2704,8 +2724,9 @@ async function _fillClientPdf(templateBytes,c){
   _set("Full name as in NRICPassposdfghrtLongTerm PassCompany Registration", c.name);
   _set("NRICPassportFINUnique Ensdfgtity Number UEN", c.nric||"");
   _set("Policy numbersdfgh", c.policyNo||"");
-  _chk("Singaporean#$%FGH", isSG);
-  _chk("Singaporean$%^&\\_2", isSG);
+  // Nationality: button group (kids 1=Singaporean, 2=SG PR, 3=Others) — no /Ff flag so _setBtn
+  _setBtn("Singaporean#$%FGH", isSG?"1":"2");
+  _setBtn("Singaporean$%^&\\_2", isSG?"1":"2");
   _try(["Country of residencesdfgh","Country of residfghdence_2"], c.countryOfResidence||"Singapore");
   _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
   _set("Occufghpation", c.occupation||"");
@@ -2939,16 +2960,17 @@ async function parseKycPdf(file){
       items.push({text:t,x:Math.round(it.transform[4]),y:Math.round(it.transform[5]),page:p});
     }
   }
-  // Find the value that sits to the right of a label on the same row
+  // Find the value that sits to the right of a label on the same row (±12px y tolerance)
   const getValue=(labelFrag)=>{
     const matches=items.filter(it=>it.text.toLowerCase().includes(labelFrag.toLowerCase()));
     for(const lbl of matches){
       const sameRow=items.filter(it=>
         it.page===lbl.page&&
-        Math.abs(it.y-lbl.y)<=6&&
-        it.x>lbl.x+40&&
+        Math.abs(it.y-lbl.y)<=12&&
+        it.x>lbl.x+20&&
         it.text!=="-"&&
-        it.text.length>0
+        it.text.length>0&&
+        it.text!==lbl.text
       );
       if(!sameRow.length)continue;
       sameRow.sort((a,b)=>a.x-b.x);
@@ -2956,6 +2978,19 @@ async function parseKycPdf(file){
       if(val&&val!=="-")return val;
     }
     return"";
+  };
+  // Normalise education to the values stored in Firestore (matching the Add Client dropdown)
+  const normEdu=(v)=>{
+    if(!v)return"";
+    const vl=v.toLowerCase();
+    if(vl.includes("primary"))return"Below O Level";
+    if(vl.includes("secondary"))return"O Level / N Level";
+    if(vl.includes("o level")||vl.includes("n level"))return"O Level / N Level";
+    if(vl.includes("a level")||vl.includes("pre-u")||vl.includes("pre u")||vl.includes("junior college")||vl.includes("j.c"))return"A Level / Diploma";
+    if(vl.includes("diploma"))return"A Level / Diploma";
+    if(vl.includes("degree")||vl.includes("bachelor"))return"Degree";
+    if(vl.includes("post")||vl.includes("master")||vl.includes("phd")||vl.includes("doctorate"))return"Post-Graduate";
+    return v;
   };
   const raw={
     name:       getValue("Name (as in NRIC"),
@@ -2965,7 +3000,7 @@ async function parseKycPdf(file){
     country:    getValue("Country of residence"),
     phone:      getValue("Mobile number"),
     email:      getValue("Email"),
-    education:  getValue("Education level"),
+    education:  normEdu(getValue("Education level")),
     occupation: getValue("Occupation"),
     natureOfWork:getValue("Business nature of job"),
   };
