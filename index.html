@@ -2303,7 +2303,7 @@ function renderFundSwitch(){
 
   // ── Config card ──
   const _swInTotal=swInFunds.reduce((s,f)=>s+(parseFloat(f.pct)||0),0);
-  const _swInOk=Math.abs(_swInTotal-100)<0.01;
+  const _swInOk=Math.abs(_swInTotal-100)<0.01&&swInFunds.every(f=>(parseFloat(f.pct)||0)>0);
   html+=`<div class="card card-gold" style="margin-bottom:16px;">
     <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select fund(s) and the switch-out % — clients will appear when ready.</div>
     <div class="g2" style="margin-bottom:14px;">
@@ -2478,7 +2478,7 @@ window.swSelectAll=(all)=>{
 // Trigger scan when conditions are met: out fund set, all in-funds set, total pct = 100
 const _swTryAutoScan=()=>{
   const inTotal=swInFunds.reduce((s,f)=>s+(parseFloat(f.pct)||0),0);
-  const allSet=swOutFund&&swInFunds.every(f=>f.fund&&f.fund!==swOutFund);
+  const allSet=swOutFund&&swInFunds.every(f=>f.fund&&f.fund!==swOutFund&&(parseFloat(f.pct)||0)>0);
   if(allSet&&Math.abs(inTotal-100)<0.01)doFindSwitchClients();
   else{swResults=[];swSelected=new Set();swScanned=false;renderPage();}
 };
@@ -2732,10 +2732,13 @@ async function _fillClientPdf(templateBytes,c){
   // ── Education level (page 1) — button group "Primary$%^&", options 1–7 ──
   // 1=Primary, 2=Secondary, 3=GCE O/N, 4=Pre-U/JC, 5=Diploma, 6=Degree, 7=Post-graduate
   const _eduMap={
-    "Below O Level":"1","O Level / N Level":"3",
-    "A Level / Diploma":"5","Diploma":"5",          // KYC may return just "Diploma"
-    "Degree":"6","Bachelor":"6",
-    "Post-Graduate":"7","Post Graduate":"7","Postgraduate":"7",
+    "Primary":"1","Primary School":"1","PSLE":"1","Below O Level":"1",
+    "Secondary":"2","Secondary School":"2","GCE N Level":"2","N Level":"2","N-Level":"2",
+    "O Level":"3","O-Level":"3","GCE O Level":"3","GCE O-Level":"3","O Level / N Level":"3",
+    "Pre-U":"4","Pre-University":"4","JC":"4","Junior College":"4","A Level":"4","A-Level":"4","GCE A Level":"4",
+    "Diploma":"5","A Level / Diploma":"5","Poly":"5","Polytechnic":"5",
+    "Degree":"6","Bachelor":"6","Bachelor's":"6","Bachelor Degree":"6","University":"6","Undergraduate":"6",
+    "Post-Graduate":"7","Post Graduate":"7","Postgraduate":"7","Masters":"7","Master":"7","MBA":"7","PhD":"7","Doctorate":"7","Post-Grad":"7",
   };
   const _eduVal=_eduMap[c.educationLevel||""];
   if(_eduVal)_setBtn("Primary$%^&", _eduVal);
@@ -2814,7 +2817,9 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  // No flatten() — AcroFields stay interactive; field values (/V, /AS) render in viewers
+  // NeedAppearances tells PDF viewers to re-render all field appearances from /V values,
+  // which is what makes checkboxes and radio buttons actually appear checked.
+  try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.True);}catch(e){}
   return await pdfDoc.save();
 }
 
