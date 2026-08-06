@@ -2655,7 +2655,8 @@ async function _fillClientPdf(templateBytes,c){
   const _set=(name,val)=>{try{form.getTextField(name).setText(val||"");return true;}catch(e){return false;}};
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
-  // Low-level button setter — duck-typed to avoid instanceof failures in minified pdf-lib bundle
+  // Button group setter: uses pdf-lib's own getWidgets()+getOnValue() (internal API, no instanceof issues)
+  // getOnValue() iterates AP/N entries and returns the first non-Off key
   const _setBtn=(name,value)=>{
     try{
       const{PDFName}=PDFLib;
@@ -2663,39 +2664,23 @@ async function _fillClientPdf(templateBytes,c){
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f)return false;
-      const fd=f.acroField.dict;
-      fd.set(PDFName.of('V'),vName);
-      // Resolve Kids: may be inline PDFArray or PDFRef — check via duck-typing
-      const kidsVal=fd.get(PDFName.of('Kids'));
-      if(!kidsVal)return false;
-      const kids=kidsVal.objectNumber!=null?pdfDoc.context.lookup(kidsVal):kidsVal;
-      if(!kids||typeof kids.size!=='function')return false;
-      for(let i=0;i<kids.size();i++){
-        const kidVal=kids.get(i);
-        const kid=kidVal&&kidVal.objectNumber!=null?pdfDoc.context.lookup(kidVal):kidVal;
-        if(!kid||typeof kid.get!=='function')continue;
-        const apVal=kid.get(PDFName.of('AP'));
-        const ap=apVal&&apVal.objectNumber!=null?pdfDoc.context.lookup(apVal):apVal;
-        if(!ap||typeof ap.get!=='function')continue;
-        const nVal=ap.get(PDFName.of('N'));
-        const n=nVal&&nVal.objectNumber!=null?pdfDoc.context.lookup(nVal):nVal;
-        if(!n||typeof n.get!=='function')continue;
-        kid.set(PDFName.of('AS'),n.get(vName)!=null?vName:offName);
+      f.acroField.dict.set(PDFName.of('V'),vName);
+      const widgets=f.acroField.getWidgets();
+      for(const w of widgets){
+        const onVal=w.getOnValue?.();
+        w.dict.set(PDFName.of('AS'),onVal&&onVal.asString()===value?vName:offName);
       }
       return true;
     }catch(e){return false;}
   };
-  // _setRadio: for /FT/Btn groups missing /Ff 49152 — adds the radio flag so pdf-lib's own
-  // PDFAcroRadioButton.setValue() runs (its internal instanceof checks work; ours don't in the bundle)
+  // _setRadio: like _setBtn but also adds /Ff 49152 so viewers treat the field as a proper radio group
   const _setRadio=(name,value)=>{
     try{
       const{PDFName,PDFNumber}=PDFLib;
       const f=form.getFields().find(f=>f.getName()===name);
-      if(!f)return false;
-      f.acroField.dict.set(PDFName.of('Ff'),PDFNumber.of(49152));
-      form.getRadioGroup(name).acroField.setValue(PDFName.of(value));
-      return true;
-    }catch(e){return _setBtn(name,value);}
+      if(f&&PDFNumber)f.acroField.dict.set(PDFName.of('Ff'),PDFNumber.of(49152));
+    }catch(e){}
+    return _setBtn(name,value);
   };
 
   // ── PAGE 1: AFF — Policyholder particulars ──
