@@ -2695,6 +2695,30 @@ async function _fillClientPdf(templateBytes,c){
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
   // Button group setter: uses pdf-lib's own getWidgets()+getOnValue() (internal API, no instanceof issues)
   // getOnValue() iterates AP/N entries and returns the first non-Off key
+  // Find the PDF page object that a widget annotation lives on
+  const _getWidgetPage=(w)=>{
+    try{
+      const{PDFRef,PDFName}=PDFLib;
+      const pr=w.dict.get(PDFName.of('P'));
+      if(!(pr instanceof PDFRef))return null;
+      for(let i=0;i<pdfDoc.getPageCount();i++){
+        const pg=pdfDoc.getPage(i);
+        if(pg.ref&&pg.ref.objectNumber===pr.objectNumber)return pg;
+      }
+    }catch(e){}
+    return null;
+  };
+  // Draw an X mark directly on the page content at the widget's rectangle position.
+  // This is visible in ALL viewers and does not depend on AcroForm appearance rendering.
+  const _drawX=(w)=>{
+    try{
+      const{rgb}=PDFLib;
+      const pg=_getWidgetPage(w);if(!pg)return;
+      const r=w.getRectangle();const m=1.5;
+      pg.drawLine({start:{x:r.x+m,y:r.y+m},end:{x:r.x+r.width-m,y:r.y+r.height-m},thickness:1.2,color:rgb(0,0,0)});
+      pg.drawLine({start:{x:r.x+m,y:r.y+r.height-m},end:{x:r.x+r.width-m,y:r.y+m},thickness:1.2,color:rgb(0,0,0)});
+    }catch(e){}
+  };
   const _setBtn=(name,value)=>{
     try{
       const{PDFName}=PDFLib;
@@ -2702,19 +2726,18 @@ async function _fillClientPdf(templateBytes,c){
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f)return false;
-      // 1. Set /V on the parent field dict
       f.acroField.dict.set(PDFName.of('V'),vName);
-      // 2. Set /AS on each widget annotation
       const widgets=f.acroField.getWidgets();
-      for(const w of widgets){
-        const onVal=w.getOnValue?.();
-        w.dict.set(PDFName.of('AS'),onVal&&onVal.asString()===value?vName:offName);
-      }
-      // 3. Ask pdf-lib to regenerate proper appearance streams from /V —
-      //    this embeds actual checked graphics in the saved PDF so the viewer
-      //    has nothing to interpret and must show the correct state.
-      try{form.getRadioGroup(name).updateAppearances();}
-      catch(e1){try{form.getCheckBox(name).updateAppearances();}catch(e2){}}
+      widgets.forEach((w,idx)=>{
+        // getOnValue() uses pdf-lib internals; fall back to 1-based index (matches Income PDF on-values)
+        const onVal=w.getOnValue?.()??PDFName.of(String(idx+1));
+        const isOn=onVal.asString()===value;
+        w.dict.set(PDFName.of('AS'),isOn?vName:offName);
+        if(isOn){
+          _drawX(w);                                    // draw X on page — always visible
+          try{w.dict.delete(PDFName.of('AP'));}catch(e){} // remove widget AP so it doesn't cover the X
+        }
+      });
       return true;
     }catch(e){return false;}
   };
