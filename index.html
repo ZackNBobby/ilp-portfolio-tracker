@@ -2759,7 +2759,7 @@ async function _fillClientPdf(templateBytes,c){
   _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
   _set("Name of orsdfghganisation", c.organisation||"");
   _set("Place of incorporation", c.placeOfIncorporation||"");
-  _set("Business activitySector", c.natureOfWork||"");
+  _set("Business activitySector", c.businessSector||c.natureOfWork||"");
   _set("Occufghpation", c.occupation||"");
   _set("Nature of worksdfg", c.natureOfWork||"");
   _set("Annual incomsdfge S", c.annualIncome||"");
@@ -2855,6 +2855,16 @@ function renderAddClientForm(){
     <div class="g2" style="margin-bottom:12px;">
       <div><label class="lbl">Occupation</label><input class="inp" id="cOccupation" placeholder="e.g. Executive (office based)"/></div>
       <div><label class="lbl">Nature of Work</label><input class="inp" id="cNatureOfWork" placeholder="e.g. Corporate Sales"/></div>
+    </div>
+
+    <!-- Organisation + Place of Incorporation + Business Sector -->
+    <div class="g2" style="margin-bottom:12px;">
+      <div><label class="lbl">Organisation / Employer</label><input class="inp" id="cOrg" placeholder="e.g. ABC Pte Ltd"/></div>
+      <div><label class="lbl">Business Sector</label><input class="inp" id="cBusinessSector" placeholder="e.g. Financial Services"/></div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label class="lbl">Place of Incorporation <span style="font-size:10px;color:var(--dim);">(leave blank for individuals)</span></label>
+      <input class="inp" id="cPlaceOfInc" placeholder="e.g. Singapore (for corporate policyholders only)"/>
     </div>
 
     <!-- Education Level -->
@@ -3040,8 +3050,11 @@ async function parseKycPdf(file){
     phone:      getValue("Mobile number"),
     email:      getValue("Email"),
     education:  normEdu(getValue("Education level")),
-    occupation: getValue("Occupation"),
-    natureOfWork:getValue("Business nature of job"),
+    occupation:          getValue("Occupation"),
+    natureOfWork:        getValue("Business nature of job"),
+    organisation:        getValue("Name of company")||getValue("Employer name")||getValue("Name of employer")||getValue("Name of organisation"),
+    placeOfIncorporation:getValue("Place of incorporation")||getValue("Country of incorporation"),
+    businessSector:      getValue("Business activity")||getValue("Business sector")||getValue("Industry"),
   };
   // Clean DOB — strip "(41 years old)" suffix if present
   if(raw.dob)raw.dob=raw.dob.replace(/\s*\(\d+\s+years?\s+old\)/i,"").trim();
@@ -3073,6 +3086,9 @@ async function processKycPdf(file){
     _fill("cCountry",data.country);
     _fill("cOccupation",data.occupation);
     _fill("cNatureOfWork",data.natureOfWork);
+    _fill("cOrg",data.organisation);
+    _fill("cPlaceOfInc",data.placeOfIncorporation);
+    _fill("cBusinessSector",data.businessSector);
     // Education: match select option
     if(data.education){
       const sel=document.getElementById("cEducation");
@@ -3116,6 +3132,9 @@ const _runKycReupload=async(file)=>{
     if(data.country)fields.countryOfResidence=data.country;
     if(data.occupation)fields.occupation=data.occupation;
     if(data.natureOfWork)fields.natureOfWork=data.natureOfWork;
+    if(data.organisation)fields.organisation=data.organisation;
+    if(data.placeOfIncorporation)fields.placeOfIncorporation=data.placeOfIncorporation;
+    if(data.businessSector)fields.businessSector=data.businessSector;
     if(data.education)fields.educationLevel=data.education;
     const count=Object.keys(fields).length;
     if(!count){setStatus("⚠️ No fields could be extracted from this KYC PDF.","var(--gold)","rgba(245,158,11,0.06)");return;}
@@ -3251,6 +3270,9 @@ window.doAddClient=async()=>{
   const countryOfResidence=(document.getElementById("cCountry")?.value||"").trim();
   const occupation=(document.getElementById("cOccupation")?.value||"").trim();
   const natureOfWork=(document.getElementById("cNatureOfWork")?.value||"").trim();
+  const organisation=(document.getElementById("cOrg")?.value||"").trim();
+  const placeOfIncorporation=(document.getElementById("cPlaceOfInc")?.value||"").trim();
+  const businessSector=(document.getElementById("cBusinessSector")?.value||"").trim();
   const educationLevel=(document.getElementById("cEducation")?.value||"").trim();
   const obj={
     uid:OWNER,name,policyNo,product,strategy:getStrategy(product),
@@ -3264,6 +3286,9 @@ window.doAddClient=async()=>{
     ...(countryOfResidence?{countryOfResidence}:{}),
     ...(occupation?{occupation}:{}),
     ...(natureOfWork?{natureOfWork}:{}),
+    ...(organisation?{organisation}:{}),
+    ...(placeOfIncorporation?{placeOfIncorporation}:{}),
+    ...(businessSector?{businessSector}:{}),
     ...(educationLevel?{educationLevel}:{}),
     paymentModeHistory:[{effectiveYear:1,mode:payMode}],
     funds,notes,createdAt:new Date().toISOString()
