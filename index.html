@@ -980,7 +980,7 @@ let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest fir
 let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
 // Fund switch state
-let swOutFund="",swInFund="",swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
+let swOutFund="",swInFunds=[{fund:"",pct:100}],swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
 let swTemplatePdfBytes=null; // cached template bytes
 let _blurTimer=null;
 let _bdayOpen=true; // birthday banner expanded by default
@@ -2302,30 +2302,45 @@ function renderFundSwitch(){
   </div>`;
 
   // ── Config card ──
+  const _swInTotal=swInFunds.reduce((s,f)=>s+(parseFloat(f.pct)||0),0);
+  const _swInOk=Math.abs(_swInTotal-100)<0.01;
   html+=`<div class="card card-gold" style="margin-bottom:16px;">
-    <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select both funds and the % — clients will appear automatically.</div>
-    <div class="g2" style="margin-bottom:12px;">
+    <div style="font-size:13px;color:var(--dim);margin-bottom:16px;">Select fund(s) and the switch-out % — clients will appear when ready.</div>
+    <div class="g2" style="margin-bottom:14px;">
       <div>
         <label class="lbl">Switch OUT of</label>
-        <select class="sel" id="swOutSel" onchange="onSwFundChange()">
+        <select class="sel" id="swOutSel" onchange="onSwOutChange()">
           <option value="">-- Select fund --</option>
           ${fundList.map(f=>`<option value="${f}"${swOutFund===f?" selected":""}>${f}</option>`).join("")}
         </select>
       </div>
-      <div>
-        <label class="lbl">Switch INTO</label>
-        <select class="sel" id="swInSel" onchange="onSwFundChange()">
-          <option value="">-- Select fund --</option>
-          ${fundList.map(f=>`<option value="${f}"${swInFund===f?" selected":""}>${f}</option>`).join("")}
-        </select>
+      <div style="display:flex;align-items:flex-end;gap:8px;">
+        <div style="flex:1;">
+          <label class="lbl">Switch %</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input type="number" class="inp" id="swPctIn" min="1" max="100" value="${swPct}" style="width:88px;" onchange="onSwPctChange(this.value)"/>
+            <span style="color:var(--dim);font-size:13px;white-space:nowrap;">% of fund value</span>
+          </div>
+        </div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-      <label class="lbl" style="margin:0;white-space:nowrap;">Switch %</label>
-      <input type="number" class="inp" id="swPctIn" min="1" max="100" value="${swPct}" style="width:88px;" oninput="onSwPctChange(this.value)"/>
-      <span style="color:var(--dim);font-size:13px;">% of fund value</span>
-      ${swScanned&&swResults.length===0?`<span style="font-size:12px;color:var(--dim);margin-left:8px;">No clients hold <strong>${esc(swOutFund)}</strong> with a known price.</span>`:""}
+    <div style="margin-bottom:10px;">
+      <label class="lbl">Switch INTO</label>
+      ${swInFunds.map((entry,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <select class="sel" style="flex:1;min-width:0;" onchange="onSwInFundChange(${i},this.value)">
+          <option value="">-- Select fund --</option>
+          ${fundList.filter(f=>f!==swOutFund).map(f=>`<option value="${f}"${entry.fund===f?" selected":""}>${f}</option>`).join("")}
+        </select>
+        <input type="number" class="inp" min="0" max="100" value="${entry.pct}" style="width:68px;flex-shrink:0;" onchange="onSwInPctChange(${i},this.value)"/>
+        <span style="color:var(--dim);font-size:13px;flex-shrink:0;">%</span>
+        ${swInFunds.length>1?`<button class="btn-sec" style="padding:5px 9px;font-size:13px;flex-shrink:0;" onclick="removeSwIn(${i})">✕</button>`:`<span style="width:38px;flex-shrink:0;"></span>`}
+      </div>`).join("")}
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:4px;">
+        <button class="btn-sec" style="font-size:12px;padding:5px 14px;" onclick="addSwIn()">+ Add Fund</button>
+        <span style="font-size:12px;color:${_swInOk?"var(--green)":"var(--red)"};">${_swInOk?"✅ 100% allocated":`⚠ Total: ${_swInTotal}% (must be 100%)`}</span>
+      </div>
     </div>
+    ${swScanned&&swResults.length===0?`<div style="font-size:12px;color:var(--dim);margin-top:8px;">No clients hold <strong>${esc(swOutFund)}</strong> with a known price.</div>`:""}
   </div>`;
 
   if(!swScanned||swResults.length===0)return html;
@@ -2373,12 +2388,17 @@ function renderFundSwitch(){
   const sel=swResults.filter(r=>swSelected.has(r.cid));
   if(sel.length===0){html+=`<div style="font-size:13px;color:var(--dim);text-align:center;padding:16px;">Select at least one client to generate the switch summary.</div>`;return html;}
   const totalOut=sel.reduce((s,r)=>s+r.amt,0);
+  const validInFunds=swInFunds.filter(f=>f.fund);
   html+=`<div class="sec-title">📋 Switch Summary</div>
   <div class="card" style="margin-bottom:8px;">
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--faint);">
       <div><div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Switch Out</div><div style="font-weight:700;color:var(--red-l,#fca5a5);font-size:13px;">${esc(swOutFund)}</div></div>
       <div style="display:flex;align-items:center;font-size:18px;color:var(--gold);">→</div>
-      <div><div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Switch Into</div><div style="font-weight:700;color:var(--green);font-size:13px;">${esc(swInFund)}</div></div>
+      <div><div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Switch Into</div>
+        ${validInFunds.length===1
+          ?`<div style="font-weight:700;color:var(--green);font-size:13px;">${esc(validInFunds[0].fund)}</div>`
+          :validInFunds.map(f=>`<div style="font-size:12px;color:var(--green);font-weight:600;">${esc(f.fund)} <span style="color:var(--gold);">${f.pct}%</span></div>`).join("")}
+      </div>
       <div style="margin-left:auto;text-align:right;">
         <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;">Total Switching</div>
         <div style="font-weight:900;color:var(--gold);font-size:18px;">${$f(totalOut)}</div>
@@ -2420,9 +2440,9 @@ function renderFundSwitch(){
 
 window.doFindSwitchClients=async()=>{
   const out=document.getElementById("swOutSel")?.value||swOutFund||"";
-  const into=document.getElementById("swInSel")?.value||swInFund||"";
   const pct=parseFloat(document.getElementById("swPctIn")?.value)||swPct||20;
-  swOutFund=out;swInFund=into;swPct=pct;swResults=[];swSelected=new Set();swScanned=false;
+  swOutFund=out;swPct=pct;swResults=[];swSelected=new Set();swScanned=false;
+  if(!out)return;
   const toLoad=clients.filter(c=>!clientTxs[c.fid]);
   if(toLoad.length>0)await Promise.all(toLoad.map(c=>loadClientTxs(c.fid)));
   const res=[];
@@ -2455,20 +2475,38 @@ window.swSelectAll=(all)=>{
   swResults.forEach(r=>all?swSelected.add(r.cid):swSelected.delete(r.cid));
   renderPage();
 };
-window.onSwFundChange=()=>{
-  const out=document.getElementById("swOutSel")?.value||"";
-  const into=document.getElementById("swInSel")?.value||"";
-  if(!out||!into||out===into){
-    swOutFund=out;swInFund=into;swResults=[];swSelected=new Set();swScanned=false;
-    renderPage();return;
-  }
-  doFindSwitchClients();
+// Trigger scan when conditions are met: out fund set, all in-funds set, total pct = 100
+const _swTryAutoScan=()=>{
+  const inTotal=swInFunds.reduce((s,f)=>s+(parseFloat(f.pct)||0),0);
+  const allSet=swOutFund&&swInFunds.every(f=>f.fund&&f.fund!==swOutFund);
+  if(allSet&&Math.abs(inTotal-100)<0.01)doFindSwitchClients();
+  else{swResults=[];swSelected=new Set();swScanned=false;renderPage();}
+};
+window.onSwOutChange=()=>{
+  swOutFund=document.getElementById("swOutSel")?.value||"";
+  _swTryAutoScan();
+};
+window.onSwInFundChange=(idx,val)=>{
+  swInFunds[idx].fund=val;
+  _swTryAutoScan();
+};
+window.onSwInPctChange=(idx,val)=>{
+  swInFunds[idx].pct=Math.min(100,Math.max(0,parseFloat(val)||0));
+  _swTryAutoScan();
+};
+window.addSwIn=()=>{
+  swInFunds=[...swInFunds,{fund:"",pct:0}];
+  swResults=[];swSelected=new Set();swScanned=false;
+  renderPage();
+};
+window.removeSwIn=(idx)=>{
+  if(swInFunds.length<=1)return;
+  swInFunds=swInFunds.filter((_,i)=>i!==idx);
+  _swTryAutoScan();
 };
 window.onSwPctChange=(val)=>{
-  const p=Math.min(100,Math.max(1,parseFloat(val)||swPct));
-  swPct=p;
-  // Recalculate amounts in-place — no rescan needed
-  swResults.forEach(r=>{r.amt=r.val*p/100;});
+  swPct=Math.min(100,Math.max(1,parseFloat(val)||swPct));
+  swResults.forEach(r=>{r.amt=r.val*swPct/100;});
   renderPage();
 };
 
@@ -2750,19 +2788,28 @@ async function _fillClientPdf(templateBytes,c){
   _set("Annual incomsdfge S", c.annualIncome||"");
 
   // ── PAGE 15: Section 1A — fund switch (all ILP except Legacy Flex Solitaire) ──
+  const _swValidIn=swInFunds.filter(f=>f.fund);
   if(hasRegular){
     _set("Switch out from Please state Fund nameRow1", swOutFund);
     _set("Percentage to switch outRow1", String(swPct));
-    _set("Switch in to Please state Fund nameRow1", swInFund);
-    _set("Percentage to switch inRow1", "100");
+    _swValidIn.forEach((f,i)=>{
+      const row=i===0?"Row1":"Row"+(i+1);
+      _set("Switch in to Please state Fund name"+row, f.fund);
+      _set("Percentage to switch in"+row, String(f.pct));
+    });
   }
 
-  // ── PAGE 15: Section 1B — Legacy Flex Solitaire (premium account) ──
+  // -- PAGE 15: Section 1B -- Legacy Flex Solitaire (premium account) --
   if(isLegacy){
     _set("Switch out from Please state Fund nameRow1_2", swOutFund);
     _set("Premium accountRow1", String(swPct));
-    _set("Switch in to Please state Fund nameRow1_2", swInFund);
-    _set("Premium accountRow1_2", "100");
+    _swValidIn.forEach((f,i)=>{
+      const row=i===0?"Row1_2":"Row"+(i+1)+"_2";
+      const pcKey=i===0?"Premium accountRow1_2":"Premium accountRow"+(i+1)+"_2";
+      _set("Switch in to Please state Fund name"+row, f.fund);
+      _set(pcKey, String(f.pct));
+    });
+  });
   }
 
   // ── PAGE 20: Policyholder signature date ──
