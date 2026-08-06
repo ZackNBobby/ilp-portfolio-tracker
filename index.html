@@ -2685,12 +2685,24 @@ async function _fillClientPdf(templateBytes,c){
       return true;
     }catch(e){return false;}
   };
+  // _setRadio: for /FT/Btn groups missing /Ff 49152 — adds the radio flag so pdf-lib's own
+  // PDFAcroRadioButton.setValue() runs (its internal instanceof checks work; ours don't in the bundle)
+  const _setRadio=(name,value)=>{
+    try{
+      const{PDFName,PDFNumber}=PDFLib;
+      const f=form.getFields().find(f=>f.getName()===name);
+      if(!f)return false;
+      f.acroField.dict.set(PDFName.of('Ff'),PDFNumber.of(49152));
+      form.getRadioGroup(name).acroField.setValue(PDFName.of(value));
+      return true;
+    }catch(e){return _setBtn(name,value);}
+  };
 
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ Yes/No group — no /Ff 49152 so getRadioGroup fails; use _setBtn (kid "1"=Yes, "2"=No)
-  _setBtn("Yes#$%YH", is62Plus?"1":"2");
+  // 62+ Yes/No (kid "1"=Yes, "2"=No) — use _setRadio which adds /Ff 49152 for correct rendering
+  _setRadio("Yes#$%YH", is62Plus?"1":"2");
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
@@ -2745,6 +2757,9 @@ async function _fillClientPdf(templateBytes,c){
   _setBtn("Singaporean#$%FGH", isSG?"1":"2");
   _try(["Country of residencesdfgh","Country of residfghdence_2"], c.countryOfResidence||"Singapore");
   _try(["City of residencesdfgh","City of resifghdence_2"], c.cityOfResidence||"Singapore");
+  _set("Name of orsdfghganisation", c.organisation||"");
+  _set("Place of incorporation", c.placeOfIncorporation||"");
+  _set("Business activitySector", c.natureOfWork||"");
   _set("Occufghpation", c.occupation||"");
   _set("Nature of worksdfg", c.natureOfWork||"");
   _set("Annual incomsdfge S", c.annualIncome||"");
