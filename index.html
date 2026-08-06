@@ -2655,26 +2655,31 @@ async function _fillClientPdf(templateBytes,c){
   const _set=(name,val)=>{try{form.getTextField(name).setText(val||"");return true;}catch(e){return false;}};
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
   const _chk=(name,on)=>{try{on?form.getCheckBox(name).check():form.getCheckBox(name).uncheck();return true;}catch(e){return false;}};
-  // Low-level button setter — works for multi-kid button groups that lack /Ff 49152
-  // Uses context.lookup() directly to avoid getWidgets() class-wrapper issues with pre-selected kids
+  // Low-level button setter — duck-typed to avoid instanceof failures in minified pdf-lib bundle
   const _setBtn=(name,value)=>{
     try{
-      const{PDFName,PDFArray,PDFDict}=PDFLib;
+      const{PDFName}=PDFLib;
       const vName=PDFName.of(value);
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f)return false;
       const fd=f.acroField.dict;
       fd.set(PDFName.of('V'),vName);
-      const kids=fd.lookupMaybe(PDFName.of('Kids'),PDFArray);
-      if(!kids)return false;
+      // Resolve Kids: may be inline PDFArray or PDFRef — check via duck-typing
+      const kidsVal=fd.get(PDFName.of('Kids'));
+      if(!kidsVal)return false;
+      const kids=kidsVal.objectNumber!=null?pdfDoc.context.lookup(kidsVal):kidsVal;
+      if(!kids||typeof kids.size!=='function')return false;
       for(let i=0;i<kids.size();i++){
-        const kid=pdfDoc.context.lookup(kids.get(i),PDFDict);
-        if(!kid)continue;
-        const ap=kid.lookupMaybe(PDFName.of('AP'),PDFDict);
-        if(!ap)continue;
-        const n=ap.lookupMaybe(PDFName.of('N'),PDFDict);
-        if(!n)continue;
+        const kidVal=kids.get(i);
+        const kid=kidVal&&kidVal.objectNumber!=null?pdfDoc.context.lookup(kidVal):kidVal;
+        if(!kid||typeof kid.get!=='function')continue;
+        const apVal=kid.get(PDFName.of('AP'));
+        const ap=apVal&&apVal.objectNumber!=null?pdfDoc.context.lookup(apVal):apVal;
+        if(!ap||typeof ap.get!=='function')continue;
+        const nVal=ap.get(PDFName.of('N'));
+        const n=nVal&&nVal.objectNumber!=null?pdfDoc.context.lookup(nVal):nVal;
+        if(!n||typeof n.get!=='function')continue;
         kid.set(PDFName.of('AS'),n.get(vName)!=null?vName:offName);
       }
       return true;
@@ -2709,6 +2714,8 @@ async function _fillClientPdf(templateBytes,c){
   _set("unde!@#$fined_8", _q2); // Q2 answer field (y≈382, blank in template)
   _set("undefined_9jHBh", "D"); // Q3 answer: D (More than 20% tolerable decline)
   _set("undefined_10{_)", "B"); // Q4 answer: B — field name ends in ) (PDF \) escape)
+  // Q5 answer: D — field name is the full question text (discovered via field inspection)
+  _set('Please refer to the Income Insurance Company website for the Customer Risk Profiling Questionnaire CRPQ Please scan the QR code or use the link below and input your answers to generate your Risk Profile httpsww#$%^&UJHGwincomecomsgcrpquestionnaire', "D");
 
   // ── AFF Section: "Others" purpose field — pre-filled in template but must re-set for flatten ──
   _set("Others_3", "Fund Switch");
@@ -2761,7 +2768,7 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  try{form.flatten();}catch(e){}
+  // No flatten() — AcroFields stay interactive; field values (/V, /AS) render in viewers
   return await pdfDoc.save();
 }
 
