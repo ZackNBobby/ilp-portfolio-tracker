@@ -2702,12 +2702,19 @@ async function _fillClientPdf(templateBytes,c){
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f)return false;
+      // 1. Set /V on the parent field dict
       f.acroField.dict.set(PDFName.of('V'),vName);
+      // 2. Set /AS on each widget annotation
       const widgets=f.acroField.getWidgets();
       for(const w of widgets){
         const onVal=w.getOnValue?.();
         w.dict.set(PDFName.of('AS'),onVal&&onVal.asString()===value?vName:offName);
       }
+      // 3. Ask pdf-lib to regenerate proper appearance streams from /V —
+      //    this embeds actual checked graphics in the saved PDF so the viewer
+      //    has nothing to interpret and must show the correct state.
+      try{form.getRadioGroup(name).updateAppearances();}
+      catch(e1){try{form.getCheckBox(name).updateAppearances();}catch(e2){}}
       return true;
     }catch(e){return false;}
   };
