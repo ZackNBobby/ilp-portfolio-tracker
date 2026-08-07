@@ -2712,6 +2712,8 @@ async function _fillClientPdf(templateBytes,c){
   const form=pdfDoc.getForm();
   const fields=form.getFields();
   if(fields.length===0)return await pdfDoc.save();
+  // Regenerate all checkbox appearance streams so widgets render correctly
+  try{const{StandardFonts}=PDFLib;const zapf=await pdfDoc.embedStandardFont(StandardFonts.ZapfDingbats);form.updateFieldAppearances(zapf);}catch(e){}
 
   const _set=(name,val)=>{try{form.getTextField(name).setText(val||"");return true;}catch(e){return false;}};
   const _try=(names,val)=>{for(const n of names){if(_set(n,val))return true;}return false;};
@@ -2898,9 +2900,10 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  // NeedAppearances tells PDF viewers to re-render all field appearances from /V values,
-  // which is what makes checkboxes and radio buttons actually appear checked.
-  try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.True);}catch(e){}
+  // English proficiency: always Yes
+  _chk("English",true);
+  // Appearances were regenerated above; set NeedAppearances=false so viewers use our /AS values
+  try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.False);}catch(e){}
   return await pdfDoc.save();
 }
 
