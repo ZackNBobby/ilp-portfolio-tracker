@@ -2201,13 +2201,13 @@ function buildClientList(list){
     const _bGrant=_cb?c.annualPremium*_cb.pct/100:0;
     const _adjGain=hasTxs&&hasPrice?totals.totalValue-totals.totalInvested-_bGrant:null;
     const _adjPct=_adjGain!==null&&totals.totalInvested>0?_adjGain/totals.totalInvested*100:null;
-    return{c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct};
+    return{c,txs,hasTxs,hasPrice,fundData,totals,_adjGain,_adjPct};
   });
   if(dashSort==="value") withGain.sort((a,b)=>(b.totals.totalValue??0)-(a.totals.totalValue??0));
   else if(dashSort==="name") withGain.sort((a,b)=>a.c.name.localeCompare(b.c.name));
   else withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
 
-  const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>{
+  const cards=withGain.map(({c,txs,hasTxs,hasPrice,fundData,totals,_adjGain,_adjPct},i)=>{
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
     const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
       ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
@@ -2757,8 +2757,9 @@ async function _fillClientPdf(templateBytes,c){
       const widgets=f.acroField.getWidgets();
       widgets.forEach((w,idx)=>{
         const onVal=w.getOnValue?.()??PDFName.of(String(idx+1));
-        const isOn=onVal.asString()===value;
-        _dbg('  widget['+idx+'] onVal='+onVal.asString()+' isOn='+isOn);
+        const onValStr=onVal.asString().replace(/^\//,''); // asString() returns "/1" — strip leading slash
+        const isOn=onValStr===value;
+        _dbg('  widget['+idx+'] onVal='+onVal.asString()+' stripped='+onValStr+' isOn='+isOn);
         w.dict.set(PDFName.of('AS'),isOn?vName:offName);
         if(isOn){
           _drawX(w,name);
