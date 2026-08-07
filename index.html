@@ -2208,20 +2208,6 @@ function buildClientList(list){
   else withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
 
   const cards=withGain.map(({c,txs,hasTxs,hasPrice,totals,_adjGain,_adjPct},i)=>{
-    // Period delta vs snapshot
-    let deltaHtml="";
-    if(hasTxs&&hasPrice&&totals.totalValue){
-      const snap=getSnapshotBefore(c.fid,periodDays(dashPeriod));
-      if(snap&&snap.totalValue){
-        const delta=totals.totalValue-snap.totalValue;
-        const deltaPct=snap.totalValue>0?delta/snap.totalValue*100:0;
-        const col=delta>=0?"var(--green)":"var(--red)";
-        const arrow=delta>=0?"▲":"▼";
-        deltaHtml="<div style=\"font-size:10px;color:"+col+";font-weight:700;margin-top:2px;\">"+arrow+" "+$f(Math.abs(delta))+" ("+Math.abs(deltaPct).toFixed(1)+"%) vs "+dashPeriod+"</div>";
-      } else {
-        deltaHtml="<div style=\"font-size:10px;color:var(--dim);margin-top:2px;\">No "+dashPeriod+" data yet</div>";
-      }
-    }
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
     const divIncome=(getStrategy(c.product)==="dividend"&&hasTxs&&hasPrice)
       ?"<span style=\"color:#d8b4fe;\">💰 ~"+$f(totals.totalValue*(c.dividendRate||6)/100/12)+"/mo income</span>":"";
@@ -2234,6 +2220,19 @@ function buildClientList(list){
     const payModeBadge="<span style=\"color:var(--dim);\">💳 "+(PAYMENT_MODES[_cardMode]?.label||_cardMode)+"</span>";
     const payAlertBadge=_cardDaysNext!==null&&_cardDaysNext<=7
       ?"<span style=\"color:"+(_cardDaysNext<0?"var(--red)":"var(--gold)")+";font-weight:700;\">🔔 "+(_cardDaysNext<0?"Payment overdue":"Payment due in "+_cardDaysNext+"d")+"</span>":"";
+    // Payment remaining: total expected premiums minus premiums already paid
+    let payLeftHtml="";
+    const _payPd=c.term?Math.max(0,c.term-5):null;
+    if(_payPd>0&&c.annualPremium>0){
+      const _expectedTotal=_payPd*c.annualPremium;
+      const _totalPaid=hasTxs?portfolioTotals(fundData).totalInvested:0;
+      const _remAmt=Math.max(0,_expectedTotal-_totalPaid);
+      const _remYrs=Math.ceil(_remAmt/c.annualPremium);
+      const _$k=v=>v>=1000?"$"+(v/1000).toFixed(0)+"k":"$"+Math.round(v);
+      payLeftHtml=_remAmt<=0
+        ?"<span style=\"color:var(--green);\">✅ Fully paid</span>"
+        :"<span style=\"color:var(--gold);\">⏳ "+_$k(_remAmt)+" left · "+_remYrs+" yr"+(_remYrs!==1?"s":"")+"</span>";
+    }
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
@@ -2247,7 +2246,6 @@ function buildClientList(list){
             +"<div style=\"font-size:11px;color:var(--dim);\">Portfolio Value</div>"
             +"<div style=\"font-size:20px;font-weight:900;color:var(--gold-l);\">"+$f(totals.totalValue)+"</div>"
             +"<div style=\"font-size:12px;font-weight:700;color:"+((_adjGain??0)>=0?"var(--green)":"var(--red)")+";\">"+$pct(_adjPct??0)+" true gain</div>"
-            +deltaHtml
           +"</div>"
           :"")
       +"</div>"
@@ -2257,6 +2255,7 @@ function buildClientList(list){
         +(payAlertBadge?payAlertBadge:payModeBadge)
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
+        +payLeftHtml
         +divIncome
         +"<span>📁 "+(hasTxs?txs.length+" transactions":"No data uploaded")+"</span>"
       +"</div>"
@@ -2720,28 +2719,31 @@ async function _fillClientPdf(templateBytes,c){
   // Button group setter: uses pdf-lib's own getWidgets()+getOnValue() (internal API, no instanceof issues)
   // getOnValue() iterates AP/N entries and returns the first non-Off key
   // Find the PDF page object that a widget annotation lives on
+  const _dbg=(...a)=>{if(window._debugPdf)console.log('[PDF]',...a);};
   const _getWidgetPage=(w)=>{
     try{
       const{PDFRef,PDFName}=PDFLib;
       const pr=w.dict.get(PDFName.of('P'));
-      if(!(pr instanceof PDFRef))return null;
+      if(!(pr instanceof PDFRef)){_dbg('_getWidgetPage: /P is not a PDFRef',pr);return null;}
       for(let i=0;i<pdfDoc.getPageCount();i++){
         const pg=pdfDoc.getPage(i);
         if(pg.ref&&pg.ref.objectNumber===pr.objectNumber)return pg;
       }
-    }catch(e){}
+      _dbg('_getWidgetPage: no matching page found for ref',pr.objectNumber);
+    }catch(e){_dbg('_getWidgetPage error',e);}
     return null;
   };
-  // Draw an X mark directly on the page content at the widget's rectangle position.
-  // This is visible in ALL viewers and does not depend on AcroForm appearance rendering.
-  const _drawX=(w)=>{
+  const _drawX=(w,name)=>{
     try{
       const{rgb}=PDFLib;
-      const pg=_getWidgetPage(w);if(!pg)return;
-      const r=w.getRectangle();const m=1.5;
+      const pg=_getWidgetPage(w);
+      if(!pg){_dbg('_drawX: no page found for widget of',name);return;}
+      const r=w.getRectangle();
+      _dbg('_drawX: drawing X for',name,'at rect',JSON.stringify(r));
+      const m=1.5;
       pg.drawLine({start:{x:r.x+m,y:r.y+m},end:{x:r.x+r.width-m,y:r.y+r.height-m},thickness:1.2,color:rgb(0,0,0)});
       pg.drawLine({start:{x:r.x+m,y:r.y+r.height-m},end:{x:r.x+r.width-m,y:r.y+m},thickness:1.2,color:rgb(0,0,0)});
-    }catch(e){}
+    }catch(e){_dbg('_drawX error',name,e);}
   };
   const _setBtn=(name,value)=>{
     try{
@@ -2749,21 +2751,22 @@ async function _fillClientPdf(templateBytes,c){
       const vName=PDFName.of(value);
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
-      if(!f)return false;
+      if(!f){_dbg('_setBtn: field NOT found:',name);return false;}
+      _dbg('_setBtn:',name,'→',value,'widgets:',f.acroField.getWidgets().length);
       f.acroField.dict.set(PDFName.of('V'),vName);
       const widgets=f.acroField.getWidgets();
       widgets.forEach((w,idx)=>{
-        // getOnValue() uses pdf-lib internals; fall back to 1-based index (matches Income PDF on-values)
         const onVal=w.getOnValue?.()??PDFName.of(String(idx+1));
         const isOn=onVal.asString()===value;
+        _dbg('  widget['+idx+'] onVal='+onVal.asString()+' isOn='+isOn);
         w.dict.set(PDFName.of('AS'),isOn?vName:offName);
         if(isOn){
-          _drawX(w);                                    // draw X on page — always visible
-          try{w.dict.delete(PDFName.of('AP'));}catch(e){} // remove widget AP so it doesn't cover the X
+          _drawX(w,name);
+          try{w.dict.delete(PDFName.of('AP'));}catch(e){}
         }
       });
       return true;
-    }catch(e){return false;}
+    }catch(e){_dbg('_setBtn error',name,e);return false;}
   };
   // _setRadio: like _setBtn but also adds /Ff 49152 so viewers treat the field as a proper radio group
   const _setRadio=(name,value)=>{
