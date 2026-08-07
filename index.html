@@ -2787,23 +2787,8 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ Yes/No — try high-level getRadioGroup first (reads actual option names), fall back to _setRadio
-  (()=>{
-    try{
-      const rg=form.getRadioGroup("Yes#$%YH");
-      const opts=rg.getOptions();
-      _dbg('62+ radio options:',opts,'is62Plus:',is62Plus);
-      // "Yes" option first, "No" second — pick by keyword match or position
-      const yesOpt=opts.find(o=>/yes/i.test(o)||o==='1')||opts[0];
-      const noOpt =opts.find(o=>/no/i.test(o)||o==='2')||opts[1];
-      const pick=is62Plus?yesOpt:noOpt;
-      _dbg('62+ selecting:',pick);
-      if(pick)rg.select(pick);
-    }catch(e){
-      _dbg('getRadioGroup failed for Yes#$%YH:',e.message,', falling back to _setRadio');
-      _setRadio("Yes#$%YH",is62Plus?"1":"2");
-    }
-  })();
+  // 62+ Yes/No — plain _setBtn (no /Ff mutation); on-values confirmed as "1" and "2"
+  _setBtn("Yes#$%YH",is62Plus?"1":"2");
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
