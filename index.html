@@ -2757,14 +2757,11 @@ async function _fillClientPdf(templateBytes,c){
       const widgets=f.acroField.getWidgets();
       widgets.forEach((w,idx)=>{
         const onVal=w.getOnValue?.()??PDFName.of(String(idx+1));
-        const onValStr=onVal.asString().replace(/^\//,''); // asString() returns "/1" — strip leading slash
+        const onValStr=onVal.asString().replace(/^\//,'');
         const isOn=onValStr===value;
         _dbg('  widget['+idx+'] onVal='+onVal.asString()+' stripped='+onValStr+' isOn='+isOn);
+        // Set /AS to on-value or /Off — native /AP appearance streams handle the visual rendering
         w.dict.set(PDFName.of('AS'),isOn?vName:offName);
-        if(isOn){
-          _drawX(w,name);
-          try{w.dict.delete(PDFName.of('AP'));}catch(e){}
-        }
       });
       return true;
     }catch(e){_dbg('_setBtn error',name,e);return false;}
