@@ -2807,8 +2807,8 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ Yes/No — plain _setBtn (no /Ff mutation); on-values confirmed as "1" and "2"
-  _setBtn("Yes#$%YH",is62Plus?"1":"2");
+  // 62+ — field "62 years of age or older" is a single checkbox; checked=Yes, unchecked=No
+  _chk("62 years of age or older", is62Plus);
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
@@ -2900,9 +2900,8 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  // English proficiency: always Yes — field name TBC from _dumpPdfFields()
-  // _chk("English",true) was WRONG — it checked "Language spoken: English" instead
-  // TODO: replace with correct field name once confirmed
+  // English proficiency: no "Yes" field exists — uncheck "Not proficient" to leave Yes implied
+  _chk("Not proficient in spoken or written English", false);
   // Appearances were regenerated above; set NeedAppearances=false so viewers use our /AS values
   try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.False);}catch(e){}
   return await pdfDoc.save();
