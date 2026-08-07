@@ -2807,8 +2807,25 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ — "Yes#$%YH": 2-widget checkbox, widget0=Yes(onVal /1), widget1=No(onVal /2)
-  _setBtn("Yes#$%YH", is62Plus?"1":"2");
+  // 62+ — visual draw on page 1 at widget position (bypasses AcroForm rendering issues)
+  try{
+    const{PDFName:_N,StandardFonts:_SF,rgb:_rgb}=PDFLib;
+    const _f62=form.getFields().find(f=>f.getName()==="Yes#$%YH");
+    if(_f62){
+      const _ws=_f62.acroField.getWidgets();
+      const _tw=_ws[is62Plus?0:1];
+      if(_tw){
+        const _r=_tw.dict.lookup(_N.of('Rect'));
+        if(_r){
+          const _x1=_r.get(0).asNumber(),_y1=_r.get(1).asNumber(),_y2=_r.get(3).asNumber();
+          const _h=_y2-_y1;
+          const _pg=pdfDoc.getPages()[0];
+          const _zf=await pdfDoc.embedStandardFont(_SF.ZapfDingbats);
+          _pg.drawText('4',{x:_x1+_h*0.05,y:_y1+_h*0.1,size:_h*0.8,font:_zf,color:_rgb(0,0,0)});
+        }
+      }
+    }
+  }catch(_e){_dbg('62+ draw:',_e.message);}
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
@@ -2900,9 +2917,13 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  // English proficiency: no "Yes" field exists — uncheck "Not proficient" to leave Yes implied
-  _chk("Not proficient in spoken or written English", false);
-  // Appearances were regenerated above; set NeedAppearances=false so viewers use our /AS values
+  // Force uncheck "Not proficient" via raw dict (bypasses high-level API that may fail)
+  {const{PDFName:_PN}=PDFLib;const _off=_PN.of('Off');
+  for(const _f of form.getFields()){if(_f.getName()==="Not proficient in spoken or written English"){
+    _f.acroField.dict.set(_PN.of('V'),_off);
+    for(const _w of _f.acroField.getWidgets()){_w.dict.set(_PN.of('V'),_off);_w.dict.set(_PN.of('AS'),_off);}
+    break;
+  }}}
   try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.False);}catch(e){}
   return await pdfDoc.save();
 }
