@@ -2766,10 +2766,28 @@ async function _fillClientPdf(templateBytes,c){
         if(!isNaN(numVal)&&numVal>=1&&numVal<=onVals.length)matchIdx=numVal-1;
       }
       _dbg('  matchIdx:',matchIdx,'→',matchIdx>=0?onVals[matchIdx]:'(no match)');
-      // Set /V to the ACTUAL on-value string of the matched widget
-      f.acroField.dict.set(PDFName.of('V'),PDFName.of(matchIdx>=0?onVals[matchIdx]:value));
+      // Log /AP /N structure (fixed: ap IS the PDFDict, no .dict needed)
+      if(window._debugPdf){
+        widgets.forEach((w,idx)=>{
+          try{
+            const ap=w.dict.lookup(PDFName.of('AP'));
+            if(ap){
+              const n=ap.lookup?.(PDFName.of('N'));
+              const nType=n?.constructor?.name??'missing';
+              const nKeys=n?.keys?.()?.map(k=>k.asString()).join(',')??'(stream or missing)';
+              _dbg('  widget['+idx+'] AP/N type:'+nType+' keys:'+nKeys);
+            }else{_dbg('  widget['+idx+'] no /AP on widget dict');}
+          }catch(ex){_dbg('  widget['+idx+'] AP inspect error:',ex.message);}
+        });
+      }
+      // Set /V on the field dict (NeedAppearances=true means viewer uses /V to render)
+      const selVal=PDFName.of(matchIdx>=0?onVals[matchIdx]:value);
+      f.acroField.dict.set(PDFName.of('V'),selVal);
+      // Also set /V + /AS on each widget dict — some PDFs read /V per widget
       widgets.forEach((w,idx)=>{
-        w.dict.set(PDFName.of('AS'),idx===matchIdx?PDFName.of(onVals[idx]):offName);
+        const isOn=idx===matchIdx;
+        w.dict.set(PDFName.of('V'),isOn?PDFName.of(onVals[idx]):offName);
+        w.dict.set(PDFName.of('AS'),isOn?PDFName.of(onVals[idx]):offName);
       });
       return matchIdx>=0;
     }catch(e){_dbg('_setBtn error',name,e);return false;}
@@ -2887,6 +2905,21 @@ async function _fillClientPdf(templateBytes,c){
 }
 
 // SW_FIELD_MAP no longer needed — all field names are exact from PDF inspection.
+
+// Debug utility: window._dumpPdfFields() in console → lists every AcroForm field name + type
+window._dumpPdfFields=async()=>{
+  const{PDFDocument}=PDFLib;
+  const res=await fetch("./fund-switch-form-aug-26.pdf",{cache:"reload"});
+  const buf=await res.arrayBuffer();
+  const doc=await PDFDocument.load(new Uint8Array(buf),{ignoreEncryption:true});
+  const fs=doc.getForm().getFields();
+  console.log('[PDF fields] count:',fs.length);
+  fs.forEach(f=>{
+    const ws=f.acroField.getWidgets();
+    const ovs=ws.map((w,i)=>{const ov=w.getOnValue?.();return ov?ov.asString():'?';});
+    console.log(' ',f.constructor.name.padEnd(18),JSON.stringify(f.getName()),'widgets:'+ws.length,'onVals:'+ovs.join(','));
+  });
+};
 
 function _downloadFilledPdf(bytes,filename){
   const blob=new Blob([bytes],{type:"application/pdf"});
