@@ -2748,22 +2748,30 @@ async function _fillClientPdf(templateBytes,c){
   const _setBtn=(name,value)=>{
     try{
       const{PDFName}=PDFLib;
-      const vName=PDFName.of(value);
       const offName=PDFName.of('Off');
       const f=form.getFields().find(f=>f.getName()===name);
       if(!f){_dbg('_setBtn: field NOT found:',name);return false;}
-      _dbg('_setBtn:',name,'→',value,'widgets:',f.acroField.getWidgets().length);
-      f.acroField.dict.set(PDFName.of('V'),vName);
       const widgets=f.acroField.getWidgets();
-      widgets.forEach((w,idx)=>{
-        const onVal=w.getOnValue?.()??PDFName.of(String(idx+1));
-        const onValStr=onVal.asString().replace(/^\//,'');
-        const isOn=onValStr===value;
-        _dbg('  widget['+idx+'] onVal='+onVal.asString()+' stripped='+onValStr+' isOn='+isOn);
-        // Set /AS to on-value or /Off — native /AP appearance streams handle the visual rendering
-        w.dict.set(PDFName.of('AS'),isOn?vName:offName);
+      _dbg('_setBtn:',name,'→',value,'widgets:',widgets.length);
+      // Collect the actual on-value string from each widget
+      const onVals=widgets.map((w,idx)=>{
+        const ov=w.getOnValue?.()??PDFName.of(String(idx+1));
+        return ov.asString().replace(/^\//,'');
       });
-      return true;
+      _dbg('  on-values:',onVals.join(','));
+      // Direct string match first; positional fallback so "1"=widget 0, "2"=widget 1, etc.
+      let matchIdx=onVals.indexOf(value);
+      if(matchIdx===-1){
+        const numVal=parseInt(value,10);
+        if(!isNaN(numVal)&&numVal>=1&&numVal<=onVals.length)matchIdx=numVal-1;
+      }
+      _dbg('  matchIdx:',matchIdx,'→',matchIdx>=0?onVals[matchIdx]:'(no match)');
+      // Set /V to the ACTUAL on-value string of the matched widget
+      f.acroField.dict.set(PDFName.of('V'),PDFName.of(matchIdx>=0?onVals[matchIdx]:value));
+      widgets.forEach((w,idx)=>{
+        w.dict.set(PDFName.of('AS'),idx===matchIdx?PDFName.of(onVals[idx]):offName);
+      });
+      return matchIdx>=0;
     }catch(e){_dbg('_setBtn error',name,e);return false;}
   };
   // _setRadio: like _setBtn but also adds /Ff 49152 so viewers treat the field as a proper radio group
@@ -3080,7 +3088,7 @@ async function parseKycPdf(file){
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  // Scan first 8 pages — personal info is on page 4 of the KYC
+  // Scan first 8 pages — covers page 4 (Income Insurance KYC) and page 5 (Infinitum MFP)
   const items=[];
   const limit=Math.min(pdf.numPages,8);
   for(let p=1;p<=limit;p++){
@@ -3092,26 +3100,22 @@ async function parseKycPdf(file){
       items.push({text:t,x:Math.round(it.transform[4]),y:Math.round(it.transform[5]),page:p});
     }
   }
-  // Find the value that sits to the right of a label on the same row (±12px y tolerance)
-  const getValue=(labelFrag)=>{
+  // Generic: find the first value to the right of a label on the same row
+  const getRight=(labelFrag,yTol=12)=>{
     const matches=items.filter(it=>it.text.toLowerCase().includes(labelFrag.toLowerCase()));
     for(const lbl of matches){
-      const sameRow=items.filter(it=>
-        it.page===lbl.page&&
-        Math.abs(it.y-lbl.y)<=12&&
-        it.x>lbl.x+20&&
-        it.text!=="-"&&
-        it.text.length>0&&
-        it.text!==lbl.text
+      const row=items.filter(it=>
+        it.page===lbl.page&&Math.abs(it.y-lbl.y)<=yTol&&
+        it.x>lbl.x+10&&it.text!=="-"&&it.text.length>0&&it.text!==lbl.text
       );
-      if(!sameRow.length)continue;
-      sameRow.sort((a,b)=>a.x-b.x);
-      const val=sameRow[0].text;
-      if(val&&val!=="-")return val;
+      if(!row.length)continue;
+      row.sort((a,b)=>a.x-b.x);
+      const v=row[0].text;
+      if(v&&v!=="-")return v;
     }
     return"";
   };
-  // Normalise nationality so KYC "Singapore Citizen" → "Singaporean" (matches dropdown)
+  // Shared normalizers
   const normNat=(v)=>{
     if(!v)return"";
     const vl=v.toLowerCase();
@@ -3119,7 +3123,6 @@ async function parseKycPdf(file){
     if(vl.includes("permanent resident")||vl.includes(" pr"))return"Singapore PR";
     return v;
   };
-  // Normalise education to the values stored in Firestore (matching the Add Client dropdown)
   const normEdu=(v)=>{
     if(!v)return"";
     const vl=v.toLowerCase();
@@ -3132,6 +3135,68 @@ async function parseKycPdf(file){
     if(vl.includes("post")||vl.includes("master")||vl.includes("phd")||vl.includes("doctorate"))return"Post-Graduate";
     return v;
   };
+
+  // ── Format detection ──
+  const allText=items.map(it=>it.text).join(" ").toLowerCase();
+  const isMFP=allText.includes("my financial planner")||allText.includes("infinitum")||allText.includes("mfp/01/");
+
+  if(isMFP){
+    // ── Infinitum "My Financial Planner" format ──
+    // Personal info is on page 5 in a 2-column table (Client1 | Client2).
+    // getRight picks Client1 value naturally (leftmost item after label).
+    const mGet=(lbl)=>getRight(lbl,18);
+
+    // Education: look for filled-box marker (■ ● ✓ ✔ ☑ ▪) immediately left of an option
+    const eduCandidates=["Post graduate","Degree","Diploma","Pre-U","GCE","Secondary","Primary"];
+    let edu="";
+    for(const opt of eduCandidates){
+      const optItems=items.filter(it=>it.text.toLowerCase().includes(opt.toLowerCase()));
+      for(const oi of optItems){
+        const hasMarker=items.some(m=>
+          m.page===oi.page&&Math.abs(m.y-oi.y)<=6&&m.x<oi.x&&m.x>oi.x-50&&/[■●✓✔☑▪►]/.test(m.text)
+        );
+        if(hasMarker){edu=normEdu(oi.text);break;}
+      }
+      if(edu)break;
+    }
+    if(!edu)edu=normEdu(mGet("Education level"));
+
+    // Gender: same marker approach
+    let gender="";
+    for(const go of["Female","Male"]){
+      const goItems=items.filter(it=>it.text.toLowerCase()===go.toLowerCase());
+      for(const gi of goItems){
+        const hasMarker=items.some(m=>
+          m.page===gi.page&&Math.abs(m.y-gi.y)<=6&&m.x<gi.x&&m.x>gi.x-50&&/[■●✓✔☑▪►]/.test(m.text)
+        );
+        if(hasMarker){gender=go;break;}
+      }
+      if(gender)break;
+    }
+
+    // DOB: MFP stores "04/10/1995 (DD/MM/YYYY)" — strip the format hint
+    const dob=mGet("Date of Birth").replace(/\s*\(DD\/MM\/YYYY\)/gi,"").trim();
+
+    return{
+      name:      mGet("Full Name"),
+      nric:      mGet("NRIC/Passport No")||mGet("NRIC / Passport"),
+      dob,
+      nationality:normNat(mGet("Nationality")),
+      country:   "",
+      phone:     mGet("Contact no.")||mGet("Mobile"),
+      email:     mGet("Email"),
+      education: edu,
+      gender,
+      occupation:mGet("Occupation"),
+      natureOfWork:"",
+      organisation:mGet("Employer Name")||mGet("Employer name"),
+      placeOfIncorporation:"",
+      businessSector:"",
+    };
+  }
+
+  // ── Income Insurance KYC format (existing logic) ──
+  const getValue=(lbl)=>getRight(lbl,12);
   const raw={
     name:       getValue("Name (as in NRIC"),
     nric:       getValue("NRIC / FIN / Passport no"),
@@ -3147,7 +3212,6 @@ async function parseKycPdf(file){
     placeOfIncorporation:getValue("Place of incorporation")||getValue("Country of incorporation"),
     businessSector:      getValue("Business activity")||getValue("Business sector")||getValue("Industry"),
   };
-  // Clean DOB — strip "(41 years old)" suffix if present
   if(raw.dob)raw.dob=raw.dob.replace(/\s*\(\d+\s+years?\s+old\)/i,"").trim();
   return raw;
 }
