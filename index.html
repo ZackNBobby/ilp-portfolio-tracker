@@ -3100,17 +3100,32 @@ async function parseKycPdf(file){
       items.push({text:t,x:Math.round(it.transform[4]),y:Math.round(it.transform[5]),page:p});
     }
   }
-  // Generic: find the first value to the right of a label on the same row
-  const getRight=(labelFrag,yTol=12)=>{
+  // Income Insurance extractor: value sits to the right (≥20px gap, ±12px y)
+  const getValue=(labelFrag)=>{
     const matches=items.filter(it=>it.text.toLowerCase().includes(labelFrag.toLowerCase()));
     for(const lbl of matches){
-      const row=items.filter(it=>
-        it.page===lbl.page&&Math.abs(it.y-lbl.y)<=yTol&&
+      const sameRow=items.filter(it=>
+        it.page===lbl.page&&Math.abs(it.y-lbl.y)<=12&&
+        it.x>lbl.x+20&&it.text!=="-"&&it.text.length>0&&it.text!==lbl.text
+      );
+      if(!sameRow.length)continue;
+      sameRow.sort((a,b)=>a.x-b.x);
+      const v=sameRow[0].text;
+      if(v&&v!=="-")return v;
+    }
+    return"";
+  };
+  // MFP extractor: wider y-tolerance for table rows, tighter x-gap (columns are closer)
+  const mGet=(labelFrag)=>{
+    const matches=items.filter(it=>it.text.toLowerCase().includes(labelFrag.toLowerCase()));
+    for(const lbl of matches){
+      const sameRow=items.filter(it=>
+        it.page===lbl.page&&Math.abs(it.y-lbl.y)<=18&&
         it.x>lbl.x+10&&it.text!=="-"&&it.text.length>0&&it.text!==lbl.text
       );
-      if(!row.length)continue;
-      row.sort((a,b)=>a.x-b.x);
-      const v=row[0].text;
+      if(!sameRow.length)continue;
+      sameRow.sort((a,b)=>a.x-b.x);
+      const v=sameRow[0].text;
       if(v&&v!=="-")return v;
     }
     return"";
@@ -3143,8 +3158,7 @@ async function parseKycPdf(file){
   if(isMFP){
     // ── Infinitum "My Financial Planner" format ──
     // Personal info is on page 5 in a 2-column table (Client1 | Client2).
-    // getRight picks Client1 value naturally (leftmost item after label).
-    const mGet=(lbl)=>getRight(lbl,18);
+    // mGet uses wider y-tolerance and tighter x-gap suited to the table layout.
 
     // Education: look for filled-box marker (■ ● ✓ ✔ ☑ ▪) immediately left of an option
     const eduCandidates=["Post graduate","Degree","Diploma","Pre-U","GCE","Secondary","Primary"];
@@ -3196,7 +3210,6 @@ async function parseKycPdf(file){
   }
 
   // ── Income Insurance KYC format (existing logic) ──
-  const getValue=(lbl)=>getRight(lbl,12);
   const raw={
     name:       getValue("Name (as in NRIC"),
     nric:       getValue("NRIC / FIN / Passport no"),
