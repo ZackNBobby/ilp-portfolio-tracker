@@ -2900,8 +2900,9 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 20: Policyholder signature date ──
   _set("Signature of policyholder or assignee Signed in Singapore on ddmmyyyy", todayStr);
 
-  // English proficiency: always Yes
-  _chk("English",true);
+  // English proficiency: always Yes — field name TBC from _dumpPdfFields()
+  // _chk("English",true) was WRONG — it checked "Language spoken: English" instead
+  // TODO: replace with correct field name once confirmed
   // Appearances were regenerated above; set NeedAppearances=false so viewers use our /AS values
   try{const{PDFName,PDFBool}=PDFLib;form.acroForm.dict.set(PDFName.of('NeedAppearances'),PDFBool.False);}catch(e){}
   return await pdfDoc.save();
@@ -2921,6 +2922,17 @@ window._dumpPdfFields=async()=>{
     const ws=f.acroField.getWidgets();
     const ovs=ws.map((w,i)=>{const ov=w.getOnValue?.();return ov?ov.asString():'?';});
     console.log(' ',f.constructor.name.padEnd(18),JSON.stringify(f.getName()),'widgets:'+ws.length,'onVals:'+ovs.join(','));
+  });
+  // Highlight fields relevant to common issues
+  const keywords=['proficient','english','62','age','language','spoken','written'];
+  console.log('\n--- Fields matching keywords: proficient/english/62/age/language/spoken/written ---');
+  fs.forEach(f=>{
+    const nm=f.getName().toLowerCase();
+    if(keywords.some(k=>nm.includes(k))){
+      const ws=f.acroField.getWidgets();
+      const ovs=ws.map((w,i)=>{const ov=w.getOnValue?.();return ov?ov.asString():'?';});
+      console.log('  *** MATCH ***',f.constructor.name,JSON.stringify(f.getName()),'widgets:'+ws.length,'onVals:'+ovs.join(','));
+    }
   });
 };
 
