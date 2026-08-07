@@ -2933,6 +2933,13 @@ window._dumpPdfFields=async()=>{
       console.log('  *** MATCH ***',f.constructor.name,JSON.stringify(f.getName()),'widgets:'+ws.length,'onVals:'+ovs.join(','));
     }
   });
+  // Dump ALL checkbox ("e") fields so we can find any Yes/No field regardless of name
+  console.log('\n--- ALL Checkbox (type e) fields ---');
+  fs.filter(f=>f.constructor.name==='PDFCheckBox').forEach(f=>{
+    const ws=f.acroField.getWidgets();
+    const ovs=ws.map((w,i)=>{const ov=w.getOnValue?.();return ov?ov.asString():'?';});
+    console.log('  e',JSON.stringify(f.getName()),'widgets:'+ws.length,'onVals:'+ovs.join(','));
+  });
 };
 
 function _downloadFilledPdf(bytes,filename){
