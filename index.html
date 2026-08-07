@@ -2336,8 +2336,13 @@ function renderFundSwitch(){
         ${swInFunds.length>1?`<button class="btn-sec" style="padding:5px 9px;font-size:13px;flex-shrink:0;" onclick="removeSwIn(${i})">✕</button>`:`<span style="width:38px;flex-shrink:0;"></span>`}
       </div>`).join("")}
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:4px;">
-        <button class="btn-sec" style="font-size:12px;padding:5px 14px;" onclick="addSwIn()">+ Add Fund</button>
-        <span style="font-size:12px;color:${_swInOk?"var(--green)":"var(--red)"};">${_swInOk?"✅ 100% allocated":`⚠ Total: ${_swInTotal}% (must be 100%)`}</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn-sec" style="font-size:12px;padding:5px 14px;" onclick="addSwIn()">+ Add Fund</button>
+          ${swInFunds.length>=2?`<button class="btn-sec" style="font-size:12px;padding:5px 14px;" onclick="swSplitEvenly()">⚡ Split Evenly</button>`:""}
+          ${swInFunds.length>2?`<span style="font-size:11px;color:var(--dim);">Last fund auto-fills remainder</span>`:""}
+          ${swInFunds.length===2?`<span style="font-size:11px;color:var(--dim);">Other fund auto-balances</span>`:""}
+        </div>
+        <span style="font-size:12px;color:${_swInOk?"var(--green)":"var(--red)"};">${_swInOk?"✅ 100% allocated":`⚠ Remaining: ${Math.round((100-_swInTotal)*10)/10}%`}</span>
       </div>
     </div>
     ${swScanned&&swResults.length===0?`<div style="font-size:12px;color:var(--dim);margin-top:8px;">No clients hold <strong>${esc(swOutFund)}</strong> with a known price.</div>`:""}
@@ -2491,7 +2496,26 @@ window.onSwInFundChange=(idx,val)=>{
   _swTryAutoScan();
 };
 window.onSwInPctChange=(idx,val)=>{
-  swInFunds[idx].pct=Math.min(100,Math.max(0,parseFloat(val)||0));
+  const pct=Math.min(100,Math.max(0,parseFloat(val)||0));
+  swInFunds[idx].pct=pct;
+  if(swInFunds.length===2){
+    // Auto-balance: the other fund fills the remainder
+    const other=idx===0?1:0;
+    swInFunds[other].pct=Math.round(Math.max(0,100-pct)*10)/10;
+  } else if(swInFunds.length>2){
+    // Auto-fill last fund with remainder when editing any non-last fund
+    if(idx!==swInFunds.length-1){
+      const sumOthers=swInFunds.reduce((s,f,i)=>i===swInFunds.length-1?s:s+(parseFloat(f.pct)||0),0);
+      swInFunds[swInFunds.length-1].pct=Math.round(Math.max(0,100-sumOthers)*10)/10;
+    }
+  }
+  _swTryAutoScan();
+};
+window.swSplitEvenly=()=>{
+  const n=swInFunds.length;if(!n)return;
+  const each=Math.floor(100/n*10)/10;
+  const remainder=Math.round((100-each*(n-1))*10)/10;
+  swInFunds.forEach((f,i)=>{f.pct=i===n-1?remainder:each;});
   _swTryAutoScan();
 };
 window.addSwIn=()=>{
