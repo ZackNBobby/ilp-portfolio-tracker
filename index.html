@@ -2807,8 +2807,8 @@ async function _fillClientPdf(templateBytes,c){
   // ── PAGE 1: AFF — Policyholder particulars ──
   _set("Name of policyholder or assignee1 as shown in NRIC", c.name);
   _set("NRICpassport number", c.nric||"");
-  // 62+ — field "62 years of age or older" is a single checkbox; checked=Yes, unchecked=No
-  _chk("62 years of age or older", is62Plus);
+  // 62+ — "Yes#$%YH": 2-widget checkbox, widget0=Yes(onVal /1), widget1=No(onVal /2)
+  _setBtn("Yes#$%YH", is62Plus?"1":"2");
   _chk("Fund switch or change in fund percentage", true);
   _set("1", c.policyNo||"");
 
