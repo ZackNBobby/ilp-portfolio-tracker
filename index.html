@@ -2901,16 +2901,28 @@ function renderAddClientForm(){
   return`<div class="card card-gold" style="max-width:600px;margin:0 auto;">
     <div class="sec-title">👤 New Client Profile</div>
 
-    <!-- KYC auto-fill drop zone -->
-    <div class="kyc-drop" id="kycDrop"
-      onclick="document.getElementById('kycFileInput').click()"
-      ondragover="event.preventDefault();this.classList.add('drag-over')"
-      ondragleave="this.classList.remove('drag-over')"
-      ondrop="handleKycDrop(event)">
-      <div style="font-size:22px;margin-bottom:4px;">📋</div>
-      <div style="font-size:13px;font-weight:700;color:var(--gold);">Drop KYC PDF here to auto-fill</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:3px;">Drop the "My Financial Portfolio" PDF — personal details will be extracted automatically</div>
-      <input type="file" id="kycFileInput" accept=".pdf" style="display:none" onchange="handleKycFile(this)"/>
+    <!-- KYC auto-fill — two zones for each format -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="kyc-drop" id="kycDropIncome"
+        onclick="document.getElementById('kycFileIncome').click()"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleKycDrop(event,'income')">
+        <div style="font-size:20px;margin-bottom:2px;">🆕</div>
+        <div style="font-size:12px;font-weight:700;color:var(--gold);">New KYC</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px;">Income Insurance form</div>
+        <input type="file" id="kycFileIncome" accept=".pdf" style="display:none" onchange="handleKycFile(this,'income')"/>
+      </div>
+      <div class="kyc-drop" id="kycDropMfp"
+        onclick="document.getElementById('kycFileMfp').click()"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleKycDrop(event,'mfp')">
+        <div style="font-size:20px;margin-bottom:2px;">📋</div>
+        <div style="font-size:12px;font-weight:700;color:var(--gold);">Old KYC (INFP)</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px;">Infinitum MFP form</div>
+        <input type="file" id="kycFileMfp" accept=".pdf" style="display:none" onchange="handleKycFile(this,'mfp')"/>
+      </div>
     </div>
     <div id="kycStatus" style="display:none;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:14px;"></div>
 
@@ -3072,18 +3084,19 @@ const _toggleSensFields=()=>{
   });
 };
 
-window.handleKycDrop=async(e)=>{
+window.handleKycDrop=async(e,fmt)=>{
   e.preventDefault();
-  document.getElementById("kycDrop")?.classList.remove("drag-over");
+  const dropId=fmt==='mfp'?'kycDropMfp':'kycDropIncome';
+  document.getElementById(dropId)?.classList.remove("drag-over");
   const file=e.dataTransfer?.files?.[0];
-  if(file)await processKycPdf(file);
+  if(file)await processKycPdf(file,fmt);
 };
-window.handleKycFile=async(input)=>{
+window.handleKycFile=async(input,fmt)=>{
   const file=input.files?.[0];
-  if(file)await processKycPdf(file);
+  if(file)await processKycPdf(file,fmt);
 };
 
-async function parseKycPdf(file){
+async function parseKycPdf(file,fmtHint){
   if(!window.pdfjsLib)throw new Error("PDF.js not loaded");
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   const buf=await file.arrayBuffer();
@@ -3153,7 +3166,7 @@ async function parseKycPdf(file){
 
   // ── Format detection ──
   const allText=items.map(it=>it.text).join(" ").toLowerCase();
-  const isMFP=allText.includes("my financial planner")||allText.includes("infinitum")||allText.includes("mfp/01/");
+  const isMFP=fmtHint==='mfp'||(fmtHint!=='income'&&(allText.includes("my financial planner")||allText.includes("infinitum")||allText.includes("mfp/01/")));
 
   if(isMFP){
     // ── Infinitum "My Financial Planner" format ──
@@ -3226,12 +3239,18 @@ async function parseKycPdf(file){
     businessSector:      getValue("Business activity")||getValue("Business sector")||getValue("Industry"),
   };
   if(raw.dob)raw.dob=raw.dob.replace(/\s*\(\d+\s+years?\s+old\)/i,"").trim();
+  if(window._debugKyc){
+    console.log('[KYC] Income Insurance extracted:',JSON.stringify(raw));
+    console.log('[KYC] items count:',items.length);
+    console.log('[KYC] name label items:',items.filter(it=>it.text.toLowerCase().includes('name')).slice(0,10).map(it=>({t:it.text,x:it.x,y:it.y,p:it.page})));
+    console.log('[KYC] nric label items:',items.filter(it=>it.text.toLowerCase().includes('nric')).slice(0,5).map(it=>({t:it.text,x:it.x,y:it.y,p:it.page})));
+  }
   return raw;
 }
 
-async function processKycPdf(file){
+async function processKycPdf(file,fmt){
   const statusEl=document.getElementById("kycStatus");
-  const drop=document.getElementById("kycDrop");
+  const drop=document.getElementById(fmt==='mfp'?'kycDropMfp':'kycDropIncome');
   const setStatus=(msg,color,bg)=>{
     if(!statusEl)return;
     statusEl.style.display="block";
@@ -3242,7 +3261,7 @@ async function processKycPdf(file){
   };
   setStatus("⏳ Reading KYC PDF…","var(--gold)","rgba(245,158,11,0.06)");
   try{
-    const data=await parseKycPdf(file);
+    const data=await parseKycPdf(file,fmt);
     // Fill form fields
     const _fill=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
     _fill("cName",data.name);
