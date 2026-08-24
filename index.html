@@ -901,6 +901,7 @@ const OWNER="ilp_owner";
 
 // ── Constants ──
 const DEFAULT_FUNDS=[
+  "Income Asia Dynamic Return Fund",
   "Income Global Absolute Alpha Fund",
   "Income Global Artificial Intelligence",
   "Income Global Dynamic Bond Fund",
@@ -4632,6 +4633,7 @@ window._pcDrop=(f,e)=>{
 // ── Income fund slug map ──
 // Each fund has its own page: income.com.sg/funds/<slug>
 const INCOME_SLUGS={
+  "Income Asia Dynamic Return Fund":"asia-dynamic-return-fund",
   "Income Global Absolute Alpha Fund":"income-global-absolute-alpha-fund",
   "Income Global Artificial Intelligence":"income-global-artificial-intelligence",
   "Income Global Dynamic Bond Fund":"income-global-dynamic-bond-fund",
@@ -5828,6 +5830,25 @@ const FUND_DB={
       {ico:"🔒",text:"The safest fund in the range — your capital is highly protected. Ideal for cautious investors or as a temporary holding while deciding on longer-term investment strategy."},
       {ico:"💧",text:"High liquidity means your money is accessible quickly if needed. A useful place to 'park' funds temporarily while evaluating other investment opportunities."},
       {ico:"📋",text:"Often used as part of a broader ILP strategy — holding some allocation here provides stability while other funds (equities, bonds) pursue higher growth."},
+    ],
+    milestones:[
+      {year:1970,event:"NTUC Income founded as a co-operative to serve Singapore workers"},
+      {year:2022,event:"NTUC Income restructured to Income Insurance Limited"},
+    ]
+  },
+  "Income Asia Dynamic Return Fund":{
+    subFund:"Asia Dynamic Return Fund (underlying sub-fund details pending — refer to Income's fund factsheet)",
+    subAdvisor:"To be confirmed — refer to Income Insurance fund factsheet",
+    subAdvisorDesc:"The Income Asia Dynamic Return Fund invests primarily in Asian equities and fixed income instruments, targeting dynamic risk-adjusted returns across Asian markets. It is listed as a Thematic Fund on Income Insurance's fund price page. For full sub-advisor and strategy details, refer to the fund's product highlights sheet or factsheet available from Income Insurance.",
+    assetClass:"Thematic — Asia",geography:"Asia",currency:"SGD",riskLevel:4,
+    dividendFrequency:"Refer to fund factsheet",
+    objective:"To achieve dynamic risk-adjusted returns by investing across Asian equity and fixed income markets, adjusting allocations based on market conditions.",
+    strategy:"A dynamic, flexible strategy targeting returns across Asia. The fund adjusts its exposure across equities, bonds, and other instruments in Asian markets according to prevailing conditions and opportunities. Full strategy details are available in Income Insurance's fund factsheet.",
+    focus:["Asia","Dynamic Allocation","Thematic"],
+    sellingPts:[
+      {ico:"🌏",text:"Dedicated Asia exposure — captures growth across one of the world's most dynamic economic regions, including China, India, Southeast Asia, and developed Asian markets like Japan and South Korea."},
+      {ico:"⚡",text:"Dynamic allocation means the fund can adapt to changing market conditions across Asia — shifting between equities, bonds, and defensive positions as opportunities arise, rather than being rigidly locked into one asset class."},
+      {ico:"📋",text:"Thematic Fund listed directly on Income Insurance's fund price page. For full details on the underlying manager, strategy, and charges, refer to the product highlights sheet and fund factsheet available from Income Insurance."},
     ],
     milestones:[
       {year:1970,event:"NTUC Income founded as a co-operative to serve Singapore workers"},
