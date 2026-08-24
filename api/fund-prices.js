@@ -3,6 +3,7 @@
 // Falls back to the historical-prices page if individual pages fail.
 
 const FUND_SLUGS = {
+  "Income Asia Dynamic Return Fund":            "asia-dynamic-return-fund",
   "Income Global Absolute Alpha Fund":          "income-global-absolute-alpha-fund",
   "Income Global Artificial Intelligence":      "income-global-artificial-intelligence",
   "Income Global Dynamic Bond Fund":            "income-global-dynamic-bond-fund",
