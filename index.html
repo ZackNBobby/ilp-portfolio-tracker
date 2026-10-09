@@ -181,9 +181,9 @@ body{
   transition:filter 0.3s ease;display:inline-block;
 }
 .names-revealed .name-blur{filter:none;user-select:auto;}
-/* ── True Gain blur (same spacebar reveal as names) ── */
-.gain-blur{filter:blur(7px);user-select:none;transition:filter 0.3s ease;display:inline-block;}
-.names-revealed .gain-blur{filter:none;user-select:auto;}
+/* ── True Gain hidden reveal (same spacebar as names) ── */
+.gain-reveal{display:none;}
+.names-revealed .gain-reveal{display:block;}
 .blur-toggle-btn{
   display:flex;align-items:center;gap:5px;
   padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;
@@ -3921,7 +3921,7 @@ function renderClientDetail(clientId){
         ${allFundsPriced
           ?`<div class="stat-val ${adjTrueGain>=0?"green":"red"}">${$f(adjTrueGain)}</div>
              <div style="font-size:11px;margin-top:2px;color:${adjTrueGain>=0?"var(--green)":"var(--red)"};">${$pct(adjTrueGainPct)}</div>
-             ${bonusGrant>0?`<div style="font-size:10px;margin-top:4px;color:var(--dim);">True: <span class="gain-blur" style="color:${adjInvestGain>=0?"var(--green)":"var(--red)"};">${$f(adjInvestGain)} (${$pct(adjInvestGainPct)})</span></div>`:""}
+             ${bonusGrant>0?`<div class="gain-reveal" style="font-size:10px;margin-top:4px;color:var(--dim);">True: <span style="color:${adjInvestGain>=0?"var(--green)":"var(--red)"};">${$f(adjInvestGain)} (${$pct(adjInvestGainPct)})</span></div>`:""}
             `
           :`<div class="stat-val muted">N/A</div>
              <div style="font-size:11px;margin-top:2px;color:var(--dim);">${pricedFundCount}/${Object.keys(fundData).length} funds priced</div>`
@@ -4853,7 +4853,7 @@ window.openPresent=async(clientId)=>{
       <div style="background:var(--bg2);border-radius:14px;padding:18px;text-align:center;border:1px solid ${pAdjGain>=0?"rgba(34,197,94,0.3)":"rgba(239,68,68,0.3)"};">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Gain</div>
         <div style="font-size:20px;font-weight:900;color:${pAdjGain>=0?"var(--green)":"var(--red)"};">${$f(pAdjGain)}</div>
-        ${pBonusGrant>0?`<div style="font-size:10px;margin-top:6px;color:var(--dim);">True: <span class="gain-blur" style="color:${pInvestGain>=0?"var(--green)":"var(--red)"};">${$f(pInvestGain)} (${$pct(pInvestGainPct)})</span></div>`:""}
+        ${pBonusGrant>0?`<div class="gain-reveal" style="font-size:10px;margin-top:6px;color:var(--dim);">True: <span style="color:${pInvestGain>=0?"var(--green)":"var(--red)"};">${$f(pInvestGain)} (${$pct(pInvestGainPct)})</span></div>`:""}
       </div>
       <div style="background:var(--bg2);border-radius:14px;padding:18px;text-align:center;border:1px solid var(--gold-border);">
         <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Startup Bonus</div>
