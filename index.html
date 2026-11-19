@@ -1115,8 +1115,8 @@ function calcPortfolio(txs){
     // Portfolio-level gain uses premium cost only (avoids double-counting switches)
     fd.trueGain=fd.currentPrice>0?fd.netPremiumValue-fd.totalInvested:0;
     fd.trueGainPct=fd.totalInvested>0&&fd.currentPrice>0?(fd.trueGain/fd.totalInvested)*100:0;
-    // Fund-level display cost: when units were switched out, reduce cost basis proportionally
-    // so the gain/loss only reflects price movement, not units that moved to another fund
+    // Fund-level display cost: premiums (adjusted for switch-outs) + switch-in value.
+    // Both must be included because netPremiumValue counts all net units (premium + switched-in).
     fd.isSwitch=fd.totalInvested===0&&fd.switchInValue>0;
     if(fd.totalInvested>0&&fd.switchOutUnits<0){
       const grossPremNet=fd.premiumUnits+fd.feeUnits; // net units from premiums before any switch
@@ -1125,7 +1125,7 @@ function calcPortfolio(txs){
     }else{
       fd.adjustedInvested=fd.totalInvested;
     }
-    fd.displayCost=fd.adjustedInvested>0?fd.adjustedInvested:(fd.isSwitch?fd.switchInValue:0);
+    fd.displayCost=fd.adjustedInvested+fd.switchInValue; // combined cost basis
     fd.displayGain=fd.currentPrice>0&&fd.displayCost>0?fd.netPremiumValue-fd.displayCost:fd.trueGain;
     fd.displayGainPct=fd.displayCost>0&&fd.currentPrice>0?(fd.displayGain/fd.displayCost)*100:0;
   }
@@ -4300,8 +4300,8 @@ function renderClientDetail(clientId){
           </div>
           <div>
             <div class="fund-row">
-              <span class="lk">${fd.isSwitch?"Switched In":"Invested"}</span>
-              <span class="lv">${$f(fd.displayCost)}${fd.isSwitch?` <span style="font-size:10px;color:var(--dim);">(switch)</span>`:fd.switchOutUnits<0?` <span style="font-size:10px;color:var(--dim);" title="Adjusted: $${fd.totalInvested.toFixed(2)} total paid, portion switched to another fund">(adj.)</span>`:""}</span>
+              <span class="lk">${fd.isSwitch?"Switched In":fd.switchInValue>0?"Cost Basis":"Invested"}</span>
+              <span class="lv">${$f(fd.displayCost)}${fd.isSwitch?` <span style="font-size:10px;color:var(--dim);">(switch)</span>`:fd.switchInValue>0&&fd.adjustedInvested>0?` <span style="font-size:10px;color:var(--dim);" title="$${fd.adjustedInvested.toFixed(2)} premiums + $${fd.switchInValue.toFixed(2)} switches in">(premiums + switches)</span>`:fd.switchOutUnits<0?` <span style="font-size:10px;color:var(--dim);" title="Adjusted: $${fd.totalInvested.toFixed(2)} total paid, portion switched to another fund">(adj.)</span>`:""}</span>
             </div>
             <div class="fund-row"><span class="lk">Current Value</span><span class="lv">${$f(fd.netPremiumValue)}</span></div>
             <div class="fund-row"><span class="lk">Gain / Loss</span>
