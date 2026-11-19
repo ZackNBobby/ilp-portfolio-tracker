@@ -30,25 +30,59 @@ const HEADERS = {
   "Cache-Control": "no-cache",
 };
 
-// Extract the most recent bid price + 1D/7D % changes from a fund page HTML.
-// Pages embed price history as HTML-encoded JSON:
-//   {&quot;day&quot;:&quot;11/06/2026&quot;,&quot;bid_price&quot;:&quot;0.974000&quot;,...}
-function extractPriceData(html) {
-  const decoded = html.replace(/&quot;/g, '"');
+// Extract all bid price entries from a fund page HTML.
+// Tries __NEXT_DATA__ JSON first (full history), then falls back to HTML-encoded JSON.
+function extractAllPrices(html) {
   const entries = [];
+  const seen = new Set();
+
+  // Strategy 1: __NEXT_DATA__ JSON — may contain full price history
+  const ndMatch = html.match(/<script id="__NEXT_DATA__"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/);
+  if (ndMatch) {
+    try {
+      const nd = JSON.parse(ndMatch[1]);
+      const walk = (obj) => {
+        if (!obj || typeof obj !== "object") return;
+        if (Array.isArray(obj)) {
+          if (obj.length > 0 && obj[0]?.day && obj[0]?.bid_price) {
+            for (const e of obj) {
+              const price = parseFloat(e.bid_price);
+              if (e.day && price > 0.001 && price < 500 && !seen.has(e.day)) {
+                seen.add(e.day);
+                entries.push({ day: e.day, price });
+              }
+            }
+            return;
+          }
+          obj.forEach(walk);
+        } else { Object.values(obj).forEach(walk); }
+      };
+      walk(nd);
+    } catch {}
+  }
+
+  // Strategy 2: HTML-encoded JSON in page body
+  const decoded = html.replace(/&quot;/g, '"');
   const re = /"day"\s*:\s*"(\d{2}\/\d{2}\/\d{4})"\s*,\s*"bid_price"\s*:\s*"([0-9.]+)"/g;
   let m;
   while ((m = re.exec(decoded)) !== null) {
     const price = parseFloat(m[2]);
-    if (price > 0.001 && price < 500) entries.push({ day: m[1], price });
+    if (price > 0.001 && price < 500 && !seen.has(m[1])) {
+      seen.add(m[1]);
+      entries.push({ day: m[1], price });
+    }
   }
-  if (!entries.length) return null;
 
-  // Sort descending — newest first
   entries.sort((a, b) => {
     const toIso = d => d.split("/").reverse().join("-");
     return toIso(b.day).localeCompare(toIso(a.day));
   });
+  return entries;
+}
+
+function extractPriceData(html) {
+  const entries = extractAllPrices(html);
+  if (!entries.length) return null;
 
   const latest = entries[0];
   if (latest.price <= 0.01 || latest.price >= 500) return null;
@@ -64,11 +98,20 @@ function extractPriceData(html) {
     return null;
   };
 
+  const oldest = entries[entries.length - 1];
+  const sinceInception = oldest && oldest !== latest
+    ? +((latest.price - oldest.price) / oldest.price * 100).toFixed(2)
+    : null;
+
   return {
     price: latest.price,
     date: latest.day,
     change1D: pctChange(1),
     change7D: pctChange(7),
+    change30D: pctChange(30),
+    change1Y: pctChange(365),
+    changeSinceInception: sinceInception,
+    oldestDate: oldest?.day ?? null,
   };
 }
 
@@ -131,6 +174,10 @@ module.exports = async function handler(req, res) {
   const asOfMap = {};
   const change1DMap = {};
   const change7DMap = {};
+  const change30DMap = {};
+  const change1YMap = {};
+  const changeSinceInceptionMap = {};
+  const oldestDateMap = {};
 
   // Step 1: fetch all fund pages in parallel for live prices
   await Promise.allSettled(
@@ -140,8 +187,12 @@ module.exports = async function handler(req, res) {
         prices[name] = result.price;
         sourceMap[name] = "live";
         asOfMap[name] = result.date;
-        if (result.change1D !== null) change1DMap[name] = result.change1D;
-        if (result.change7D !== null) change7DMap[name] = result.change7D;
+        if (result.change1D  != null) change1DMap[name]  = result.change1D;
+        if (result.change7D  != null) change7DMap[name]  = result.change7D;
+        if (result.change30D != null) change30DMap[name] = result.change30D;
+        if (result.change1Y  != null) change1YMap[name]  = result.change1Y;
+        if (result.changeSinceInception != null) changeSinceInceptionMap[name] = result.changeSinceInception;
+        if (result.oldestDate != null) oldestDateMap[name] = result.oldestDate;
       }
     })
   );
@@ -167,6 +218,10 @@ module.exports = async function handler(req, res) {
     prices,
     change1D: change1DMap,
     change7D: change7DMap,
+    change30D: change30DMap,
+    change1Y: change1YMap,
+    changeSinceInception: changeSinceInceptionMap,
+    oldestDate: oldestDateMap,
     source: hasLive && !hasHist ? "live" : hasLive ? "mixed" : "historical",
     sourceDetail: sourceMap,
     asOf: asOfMap,
