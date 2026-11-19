@@ -2225,7 +2225,7 @@ function buildClientList(list){
   });
   if(dashSort==="value") withGain.sort((a,b)=>(b.totals.totalValue??0)-(a.totals.totalValue??0));
   else if(dashSort==="name") withGain.sort((a,b)=>a.c.name.localeCompare(b.c.name));
-  else withGain.sort((a,b)=>(b._rawPct??-Infinity)-(a._rawPct??-Infinity));
+  else withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
 
   const cards=withGain.map(({c,txs,hasTxs,hasPrice,fundData,totals,_adjGain,_adjPct},i)=>{
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
@@ -2266,7 +2266,6 @@ function buildClientList(list){
             +"<div style=\"font-size:11px;color:var(--dim);\">Portfolio Value</div>"
             +"<div style=\"font-size:20px;font-weight:900;color:var(--gold-l);\">"+$f(totals.totalValue)+"</div>"
             +"<div style=\"font-size:12px;font-weight:700;color:"+((_adjGain??0)>=0?"var(--green)":"var(--red)")+";\">"+$pct(_adjPct??0)+" gain</div>"
-            +deltaHtml
           +"</div>"
           :"")
       +"</div>"
@@ -3945,14 +3944,6 @@ function renderClientDetail(clientId){
   // Portfolio summary (only if has transactions + prices)
   if(hasTxs&&hasPrices){
     html+=`<div class="sec-title">📈 Portfolio Summary</div>`;
-    // Spacebar hint
-    if(bonusGrant>0){
-      html+=`<div style="font-size:11px;color:var(--dim);margin-bottom:10px;padding:6px 12px;background:rgba(245,158,11,0.06);border-radius:8px;border:1px solid rgba(245,158,11,0.15);">
-        ${clientViewShowTrue
-          ?`<span style="color:var(--gold);">🔍 True gain mode — startup bonus deducted.</span> Press <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to show full gain.`
-          :`<span style="color:var(--gold-l);">📊 Showing full gain (bonus included).</span> Press <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to reveal true gain (startup bonus deducted).`}
-      </div>`;
-    }
     html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
       <div class="stat-card card-gold">
         <div class="stat-lbl">Total Portfolio</div>
@@ -3963,7 +3954,7 @@ function renderClientDetail(clientId){
         <div class="stat-val muted">${$f(totals.totalInvested)}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-lbl">${clientViewShowTrue?"True Gain":"Gain (Full)"}</div>
+        <div class="stat-lbl">Gain</div>
         ${allFundsPriced
           ?`<div class="stat-val ${dispGain>=0?"green":"red"}">${$f(dispGain)}</div>
              <div style="font-size:11px;margin-top:2px;color:${dispGain>=0?"var(--green)":"var(--red)"};">${$pct(dispGainPct)}</div>`
