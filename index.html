@@ -1473,9 +1473,9 @@ window.handleDivHistoryFile=async(clientId,input)=>{
   const file=input.files?.[0];
   if(file)await processDivHistoryFile(clientId,file);
 };
-async function saveFundPriceDB(name,price,change1D=null,change7D=null,source=null,change30D=null,change1Y=null,changeSinceInception=null,oldestDate=null){
+async function saveFundPriceDB(name,price,change1D=null,change7D=null,source=null,change30D=null,change1Y=null){
   await setDoc(doc(db,"fundPrices",name.replace(/\s+/g,"_")),{
-    name,price:parseFloat(price),change1D,change7D,change30D,change1Y,changeSinceInception,oldestDate,source,updatedAt:new Date().toISOString()
+    name,price:parseFloat(price),change1D,change7D,change30D,change1Y,source,updatedAt:new Date().toISOString()
   },{merge:true});
 }
 async function saveUnderlyingPriceDB(ftSymbol,price){
@@ -1591,8 +1591,8 @@ function startListeners(){
     snap.forEach(d=>{
       const fd=d.data();
       fundPrices[fd.name]=fd.price;
-      if(fd.change1D!=null||fd.change7D!=null||fd.change30D!=null||fd.change1Y!=null||fd.changeSinceInception!=null)
-        fundPriceChanges[fd.name]={change1D:fd.change1D??null,change7D:fd.change7D??null,change30D:fd.change30D??null,change1Y:fd.change1Y??null,changeSinceInception:fd.changeSinceInception??null,oldestDate:fd.oldestDate??null};
+      if(fd.change1D!=null||fd.change7D!=null||fd.change30D!=null||fd.change1Y!=null)
+        fundPriceChanges[fd.name]={change1D:fd.change1D??null,change7D:fd.change7D??null,change30D:fd.change30D??null,change1Y:fd.change1Y??null};
       if(fd.source)fundPriceSource[fd.name]=fd.source;
     });
     renderAll();
@@ -4650,8 +4650,8 @@ function renderPrices(){
           ${editBtn(`event.stopPropagation();editPrice(${JSON.stringify(f)})`,"Edit Income Bid price manually")}
         </div>
       </div>
-      ${(ch.change30D!=null||ch.change1Y!=null||ch.changeSinceInception!=null)?`<div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:5px;border-top:1px solid rgba(255,255,255,0.05);">
-        ${chgBadge(ch.change30D,'30D')}${chgBadge(ch.change1Y,'1Y')}${ch.changeSinceInception!=null?`<span style="font-size:10px;font-weight:700;color:${ch.changeSinceInception>=0?'var(--green)':'var(--red)'};">${ch.changeSinceInception>=0?'+':''}${ch.changeSinceInception.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> since ${ch.oldestDate?((ch.oldestDate.match(/\d{4}/)||[''])[0]||'inception'):'inception'}</span></span>`:''}
+      ${(ch.change30D!=null||ch.change1Y!=null)?`<div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:5px;border-top:1px solid rgba(255,255,255,0.05);">
+        ${chgBadge(ch.change30D,'30D')}${chgBadge(ch.change1Y,'1Y')}
       </div>`:''}
       ${ftSym?`<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
         <span style="font-size:10px;color:var(--dim);min-width:70px;">Underlying</span>
@@ -4804,7 +4804,7 @@ window.doFetchPrices=async()=>{
 
     let found=0;
     for(const[name,price]of Object.entries(data.prices)){
-      await saveFundPriceDB(name,price,data.change1D?.[name]??null,data.change7D?.[name]??null,data.sourceDetail?.[name]??null,data.change30D?.[name]??null,data.change1Y?.[name]??null,data.changeSinceInception?.[name]??null,data.oldestDate?.[name]??null);
+      await saveFundPriceDB(name,price,data.change1D?.[name]??null,data.change7D?.[name]??null,data.sourceDetail?.[name]??null,data.change30D?.[name]??null,data.change1Y?.[name]??null);
       found++;
     }
 

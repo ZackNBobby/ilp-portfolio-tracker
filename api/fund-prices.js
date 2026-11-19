@@ -1,6 +1,8 @@
 // Vercel serverless function — fetches live Income ILP fund prices.
-// Current price + 1D/7D: scraped from Income fund pages (most accurate for bid price).
-// 30D / 1Y / Since Inception: from Morningstar timeseries (6 years of daily data).
+// Current price, 1D, 7D, 30D: scraped from Income fund pages (HTML-embedded price history).
+// 1Y shown only when the page actually contains data 365+ days old.
+// Since Inception is NOT calculated here — page data only covers recent months,
+// making "oldest entry" unreliable. Use the per-fund detail modal for accurate SI.
 
 const FUND_SLUGS = {
   "Income Asia Dynamic Return Fund":            "asia-dynamic-return-fund",
@@ -23,27 +25,6 @@ const FUND_SLUGS = {
   "Takaful Fund":                               "takaful-fund",
 };
 
-// Morningstar secIds for funds that have history there.
-// Money Market, Takaful, Singapore Dividend, Asia Dynamic Return, Global Technology
-// do not have Morningstar mappings — 30D/1Y/Since Inception will be null for those.
-const FUND_MORNINGSTAR = {
-  "Income Global Absolute Alpha Fund":          { secId: "F000016EDC", universe: "FOSGP$$ALL" },
-  "Income Global Dynamic Bond Fund":            { secId: "F00000PHFD", universe: "FOSGP$$ALL" },
-  "Income Global Gold Equity Fund":             { secId: "F0GBR04AR8", universe: "FOSGP$$ALL" },
-  "Income World Healthscience Fund":            { secId: "F0GBR04K8L", universe: "FOSGP$$ALL" },
-  "Income India Equity Fund":                   { secId: "F00000JTUS", universe: "FOSGP$$ALL" },
-  "Income Global Artificial Intelligence":      { secId: "F00000ZVQS", universe: "FOSGP$$ALL" },
-  "Income Global Emerging Markets Equity Fund": { secId: "F00000PN6R", universe: "FOSGP$$ALL" },
-  "Income Global Growth Equity Fund":           { secId: "F00001QUO9", universe: "FOSGP$$ALL" },
-  "Income Regional China Fund":                 { secId: "F0HKG062N3", universe: "FOSGP$$ALL" },
-  "Income US Large Cap Equity Fund":            { secId: "F00001QUO7", universe: "FOSGP$$ALL" },
-  "Income Global Sustainable Fund":             { secId: "F000016LX1", universe: "FOEUR$$ALL" },
-  "Income US Dividend and Growth Fund":         { secId: "F00000Q4B0", universe: "FOSGP$$ALL" },
-  "Income Japan Dividend Equity Fund":          { secId: "F00000Q3EG", universe: "FOSGP$$ALL" },
-};
-
-const MS_TOKEN = "klr5zyak8x";
-
 const HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,*/*",
@@ -51,12 +32,11 @@ const HEADERS = {
   "Cache-Control": "no-cache",
 };
 
-// ── Income fund page scraper — current price + 1D/7D only ───────────────────
 function extractPriceData(html) {
   const entries = [];
   const seen = new Set();
 
-  // Strategy 1: __NEXT_DATA__ JSON
+  // Strategy 1: __NEXT_DATA__ JSON — may contain longer price history
   const ndMatch = html.match(/<script id="__NEXT_DATA__"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/);
   if (ndMatch) {
     try {
@@ -81,7 +61,7 @@ function extractPriceData(html) {
     } catch {}
   }
 
-  // Strategy 2: HTML-encoded JSON
+  // Strategy 2: HTML-encoded JSON in page body
   const decoded = html.replace(/&quot;/g, '"');
   const re = /"day"\s*:\s*"(\d{2}\/\d{2}\/\d{4})"\s*,\s*"bid_price"\s*:\s*"([0-9.]+)"/g;
   let m;
@@ -103,6 +83,9 @@ function extractPriceData(html) {
   if (latest.price <= 0.01 || latest.price >= 500) return null;
 
   const latestDate = new Date(latest.day.split("/").reverse().join("-"));
+
+  // Find a price at or before `daysAgo` days in the past.
+  // Returns null if no entry exists that far back (keeps data honest).
   const pctChange = (daysAgo) => {
     const target = new Date(latestDate);
     target.setDate(target.getDate() - daysAgo);
@@ -110,14 +93,16 @@ function extractPriceData(html) {
       const d = new Date(e.day.split("/").reverse().join("-"));
       if (d <= target) return +((latest.price - e.price) / e.price * 100).toFixed(2);
     }
-    return null;
+    return null; // not enough history — caller omits the badge
   };
 
   return {
     price: latest.price,
     date: latest.day,
-    change1D: pctChange(1),
-    change7D: pctChange(7),
+    change1D:  pctChange(1),
+    change7D:  pctChange(7),
+    change30D: pctChange(30),
+    change1Y:  pctChange(365), // null unless page has 1+ year of history embedded
   };
 }
 
@@ -129,59 +114,6 @@ async function fetchFundPagePrice(slug) {
     });
     if (!r.ok) return null;
     return extractPriceData(await r.text());
-  } catch { return null; }
-}
-
-// ── Morningstar timeseries — 30D / 1Y / Since Inception ─────────────────────
-async function fetchMorningstarPerf(name) {
-  const mapping = FUND_MORNINGSTAR[name];
-  if (!mapping) return null;
-
-  const startDate = new Date();
-  startDate.setFullYear(startDate.getFullYear() - 7); // 7 years to cover all since-inception cases
-  const start = startDate.toISOString().split("T")[0];
-
-  try {
-    const url = `https://tools.morningstar.co.uk/api/rest.svc/timeseries_price/${MS_TOKEN}`
-      + `?id=${mapping.secId}]2]0]${encodeURIComponent(mapping.universe)}`
-      + `&currencyId=SGD&idtype=Morningstar&frequency=daily`
-      + `&startDate=${start}&outputType=json`;
-
-    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" }, signal: AbortSignal.timeout(18000) });
-    if (!r.ok) return null;
-    const data = await r.json();
-
-    const history = (data?.TimeSeries?.Security?.[0]?.HistoryDetail || [])
-      .map(h => ({ date: h.EndDate, price: parseFloat(h.Value) }))
-      .filter(h => h.date && !isNaN(h.price) && h.price > 0);
-
-    if (!history.length) return null;
-
-    // Morningstar returns oldest-first; reverse to newest-first
-    history.reverse();
-    const latest = history[0];
-    const latestDate = new Date(latest.date);
-
-    const pctChange = (daysAgo) => {
-      const target = new Date(latestDate);
-      target.setDate(target.getDate() - daysAgo);
-      for (const e of history) {
-        if (new Date(e.date) <= target) return +((latest.price - e.price) / e.price * 100).toFixed(2);
-      }
-      return null;
-    };
-
-    const oldest = history[history.length - 1];
-    const sinceInception = oldest && oldest.date !== latest.date
-      ? +((latest.price - oldest.price) / oldest.price * 100).toFixed(2)
-      : null;
-
-    return {
-      change30D: pctChange(30),
-      change1Y: pctChange(365),
-      changeSinceInception: sinceInception,
-      oldestDate: oldest?.date ?? null, // ISO format YYYY-MM-DD
-    };
   } catch { return null; }
 }
 
@@ -234,48 +166,22 @@ module.exports = async function handler(req, res) {
   const change7DMap = {};
   const change30DMap = {};
   const change1YMap = {};
-  const changeSinceInceptionMap = {};
-  const oldestDateMap = {};
 
-  // Run Income page scrapes and Morningstar fetches in parallel
-  const [incomeResults, msResults] = await Promise.all([
-    Promise.allSettled(
-      Object.entries(FUND_SLUGS).map(async ([name, slug]) => {
-        const result = await fetchFundPagePrice(slug);
-        return { name, result };
-      })
-    ),
-    Promise.allSettled(
-      Object.keys(FUND_SLUGS).map(async (name) => {
-        const perf = await fetchMorningstarPerf(name);
-        return { name, perf };
-      })
-    ),
-  ]);
-
-  // Apply Income page results (current price + 1D/7D)
-  for (const r of incomeResults) {
-    if (r.status !== "fulfilled") continue;
-    const { name, result } = r.value;
-    if (result && result.price) {
-      prices[name] = result.price;
-      sourceMap[name] = "live";
-      asOfMap[name] = result.date;
-      if (result.change1D != null) change1DMap[name] = result.change1D;
-      if (result.change7D != null) change7DMap[name] = result.change7D;
-    }
-  }
-
-  // Apply Morningstar results (30D / 1Y / Since Inception)
-  for (const r of msResults) {
-    if (r.status !== "fulfilled") continue;
-    const { name, perf } = r.value;
-    if (!perf) continue;
-    if (perf.change30D  != null) change30DMap[name]             = perf.change30D;
-    if (perf.change1Y   != null) change1YMap[name]              = perf.change1Y;
-    if (perf.changeSinceInception != null) changeSinceInceptionMap[name] = perf.changeSinceInception;
-    if (perf.oldestDate != null) oldestDateMap[name]            = perf.oldestDate;
-  }
+  // Fetch all fund pages in parallel
+  await Promise.allSettled(
+    Object.entries(FUND_SLUGS).map(async ([name, slug]) => {
+      const result = await fetchFundPagePrice(slug);
+      if (result && result.price) {
+        prices[name] = result.price;
+        sourceMap[name] = "live";
+        asOfMap[name] = result.date;
+        if (result.change1D  != null) change1DMap[name]  = result.change1D;
+        if (result.change7D  != null) change7DMap[name]  = result.change7D;
+        if (result.change30D != null) change30DMap[name] = result.change30D;
+        if (result.change1Y  != null) change1YMap[name]  = result.change1Y;
+      }
+    })
+  );
 
   // Fill any missing current prices from the historical-prices fallback page
   const missing = Object.keys(FUND_SLUGS).filter(n => !prices[n]);
@@ -300,8 +206,6 @@ module.exports = async function handler(req, res) {
     change7D: change7DMap,
     change30D: change30DMap,
     change1Y: change1YMap,
-    changeSinceInception: changeSinceInceptionMap,
-    oldestDate: oldestDateMap,
     source: hasLive && !hasHist ? "live" : hasLive ? "mixed" : "historical",
     sourceDetail: sourceMap,
     asOf: asOfMap,
