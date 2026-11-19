@@ -4651,7 +4651,7 @@ function renderPrices(){
         </div>
       </div>
       ${(ch.change30D!=null||ch.change1Y!=null||ch.changeSinceInception!=null)?`<div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:5px;border-top:1px solid rgba(255,255,255,0.05);">
-        ${chgBadge(ch.change30D,'30D')}${chgBadge(ch.change1Y,'1Y')}${ch.changeSinceInception!=null?`<span style="font-size:10px;font-weight:700;color:${ch.changeSinceInception>=0?'var(--green)':'var(--red)'};">${ch.changeSinceInception>=0?'+':''}${ch.changeSinceInception.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> since ${ch.oldestDate?ch.oldestDate.substring(6):'inception'}</span></span>`:''}
+        ${chgBadge(ch.change30D,'30D')}${chgBadge(ch.change1Y,'1Y')}${ch.changeSinceInception!=null?`<span style="font-size:10px;font-weight:700;color:${ch.changeSinceInception>=0?'var(--green)':'var(--red)'};">${ch.changeSinceInception>=0?'+':''}${ch.changeSinceInception.toFixed(2)}%<span style="font-size:9px;color:var(--dim);font-weight:400;"> since ${ch.oldestDate?((ch.oldestDate.match(/\d{4}/)||[''])[0]||'inception'):'inception'}</span></span>`:''}
       </div>`:''}
       ${ftSym?`<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.06);">
         <span style="font-size:10px;color:var(--dim);min-width:70px;">Underlying</span>
