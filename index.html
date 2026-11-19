@@ -878,7 +878,7 @@ body{
 
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import{getFirestore,collection,addDoc,deleteDoc,doc,onSnapshot,query,where,writeBatch,getDocs,setDoc,getDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import{getAuth,signInWithPopup,GoogleAuthProvider,onAuthStateChanged,signOut as fbSignOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import{getStorage,ref as sRef,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 
@@ -4842,6 +4842,8 @@ window.doFetchPrices=async()=>{
       showToast(`✅ ${found} fund prices updated!`);
     }
     renderPage();
+    // Background: update Morningstar timeseries + 1Y sequentially (no UI block)
+    _bgUpdateTimeseries().catch(()=>{});
   }catch(e){
     reset();
     setStatus(
@@ -4850,6 +4852,40 @@ window.doFetchPrices=async()=>{
     );
   }
 };
+
+// Funds that have Morningstar timeseries mappings (subset of all funds)
+const FUNDS_WITH_TIMESERIES=[
+  "Income Global Absolute Alpha Fund","Income Global Dynamic Bond Fund",
+  "Income Global Gold Equity Fund","Income World Healthscience Fund",
+  "Income India Equity Fund","Income Global Artificial Intelligence",
+  "Income Global Emerging Markets Equity Fund","Income Global Growth Equity Fund",
+  "Income Regional China Fund","Income US Large Cap Equity Fund",
+  "Income Global Sustainable Fund","Income US Dividend and Growth Fund",
+  "Income Japan Dividend Equity Fund",
+];
+
+// Silently refresh Morningstar timeseries + 1Y change for all mapped funds one at a time.
+// Skips any fund whose cached timeseries is already from today.
+async function _bgUpdateTimeseries(){
+  const today=new Date().toISOString().split("T")[0];
+  for(const name of FUNDS_WITH_TIMESERIES){
+    try{
+      const key=name.replace(/\s+/g,"_");
+      // Skip if already cached today
+      const snap=await getDoc(doc(db,"fundTimeseries",key)).catch(()=>null);
+      if(snap&&snap.exists()){
+        const ca=(snap.data().cachedAt||"").split("T")[0];
+        if(ca===today)continue;
+      }
+      const r=await fetch(`/api/fund-timeseries?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(25000)});
+      if(!r.ok)continue;
+      const data=await r.json();
+      if(data.prices&&data.prices.length>=2) await _cacheTsToFirestore(name,data);
+      // Small delay to avoid rate-limiting
+      await new Promise(res=>setTimeout(res,800));
+    }catch(e){ continue; }
+  }
+}
 
 // Auto-fetch prices once per day on page load (tracks date in localStorage per device)
 async function autoFetchPricesOnStartup(){
@@ -6043,14 +6079,60 @@ window.openFundDetail=(name)=>{
   fetchFdmHoldings(name);
 };
 
+function _calc1YFromTs(ts){
+  if(!ts||!ts.prices||ts.prices.length<2)return null;
+  const prices=ts.prices; // oldest→newest
+  const latest=prices[prices.length-1];
+  const target=new Date(latest.date);
+  target.setDate(target.getDate()-365);
+  for(let i=prices.length-2;i>=0;i--){
+    if(new Date(prices[i].date)<=target)
+      return+((latest.price-prices[i].price)/prices[i].price*100).toFixed(2);
+  }
+  return null;
+}
+
+async function _cacheTsToFirestore(name,ts){
+  try{
+    const key=name.replace(/\s+/g,"_");
+    await setDoc(doc(db,"fundTimeseries",key),{prices:ts.prices,from:ts.from,to:ts.to,count:ts.count,cachedAt:new Date().toISOString()});
+    const change1Y=_calc1YFromTs(ts);
+    if(change1Y!==null) await setDoc(doc(db,"fundPrices",key),{change1Y},{merge:true});
+  }catch(e){}
+}
+
+async function _loadTsFromFirestore(name){
+  try{
+    const key=name.replace(/\s+/g,"_");
+    const snap=await getDoc(doc(db,"fundTimeseries",key));
+    if(snap.exists()){
+      const d=snap.data();
+      if(d.prices&&d.prices.length>=2){
+        _fdmTimeseries={prices:d.prices,from:d.from,to:d.to,count:d.count,source:"cache"};
+        if(_fdmTab==="performance")renderFdmBody();
+      }
+    }
+  }catch(e){}
+}
+
 function fetchFdmTimeseries(name){
   fetch(`/api/fund-timeseries?name=${encodeURIComponent(name)}`,{signal:AbortSignal.timeout(20000)})
     .then(r=>r.json())
     .then(data=>{
-      _fdmTimeseries=(data.prices&&data.prices.length>=2)?data:null;
+      if(data.prices&&data.prices.length>=2){
+        _fdmTimeseries=data;
+        _cacheTsToFirestore(name,data); // save & update 1Y in background
+      } else {
+        _fdmTimeseries=null;
+        _loadTsFromFirestore(name); // try Firestore cache
+        return;
+      }
       if(_fdmTab==="performance")renderFdmBody();
     })
-    .catch(()=>{ _fdmTimeseries=null; });
+    .catch(()=>{
+      _fdmTimeseries=null;
+      _loadTsFromFirestore(name); // try Firestore cache on network failure
+    });
 }
 
 async function loadFdmHistory(name){
