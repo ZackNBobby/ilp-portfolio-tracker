@@ -2256,7 +2256,7 @@ function buildClientList(list){
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
-          +"<div style=\"font-size:16px;font-weight:800;margin-bottom:5px;\">"+renderName(c.name)+(c.giroStatus==="completed"?"<span style=\"font-size:12px;color:var(--green);margin-left:6px;\">✓ GIRO</span>":c.giroStatus==="pending"?"<span style=\"font-size:12px;color:#f59e0b;margin-left:6px;\">⏳ GIRO</span>":"")+"</div>"
+          +"<div style=\"font-size:16px;font-weight:800;margin-bottom:5px;\">"+renderName(c.name)+(c.giroStatus==="completed"?"<span style=\"font-size:11px;font-weight:700;color:var(--green);margin-left:6px;\">✓ GIRO</span>":c.giroStatus==="pending"?"<span style=\"font-size:11px;font-weight:700;color:#f59e0b;margin-left:6px;\">⏳ GIRO</span>":c.giroStatus==="not_applicable"?"":"<span style=\"font-size:11px;font-weight:700;color:var(--red);margin-left:6px;\">✗ GIRO</span>")+"</div>"
           +"<div style=\"display:flex;gap:6px;flex-wrap:wrap;align-items:center;\">"
             +productBadge(c.product)+stratBadge(c.product)+premBadge
           +"</div>"
