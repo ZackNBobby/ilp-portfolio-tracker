@@ -983,6 +983,8 @@ let currentClientTab="overview"; // "overview" | "notes"
 let portfolioSnapshots={}; // clientId -> [{date,totalValue,adjGain}] newest first
 let _snapshotSavedToday="";
 let namesBlurred=true; // PDPA: names blurred by default
+let clientViewShowTrue=false; // spacebar in client view reveals true gain (bonus-deducted)
+let clientMoverPeriod="1D"; // "1D" | "7D" — fund movers toggle
 // Fund switch state
 let swOutFund="",swInFunds=[{fund:"",pct:100}],swPct=20,swResults=[],swSelected=new Set(),swScanned=false;
 let swTemplatePdfBytes=null; // cached template bytes
@@ -2058,15 +2060,17 @@ window.toggleNames=()=>{
   if(!namesBlurred)_startBlurTimer();
   else clearTimeout(_blurTimer);
 };
-// Spacebar: toggles sensitive fields in Add Client form, OR name blur on dashboard
+// Spacebar: toggles sensitive fields in Add Client form | true-gain in client view | name blur on dashboard
 document.addEventListener("keydown",e=>{
   if(e.code!=="Space")return;
   const tag=(e.target.tagName||"").toUpperCase();
   if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||e.target.isContentEditable)return;
   e.preventDefault();
   if(document.getElementById("cNRIC"))_toggleSensFields();
+  else if(tab==="client"){clientViewShowTrue=!clientViewShowTrue;renderPage();}
   else toggleNames();
 });
+window.setClientMoverPeriod=p=>{clientMoverPeriod=p;renderPage();};
 // Set up inactivity listeners once
 ["mousemove","keydown","touchstart","click"].forEach(ev=>
   document.addEventListener(ev,()=>{if(!namesBlurred)_startBlurTimer();})
@@ -2145,6 +2149,18 @@ function renderDashboard(){
       : premDueClients.length+" client"+(premDueClients.length>1?"s":"")+" with annual premium due within 30 days";
     html+=`<div class="prem-banner">⏰ <strong>${msg}</strong></div>`;
   }
+  // GIRO status banner
+  const _giroMissing=clients.filter(c=>!c.giroStatus||c.giroStatus==="pending");
+  if(_giroMissing.length>0){
+    const _gUnset=_giroMissing.filter(c=>!c.giroStatus).length;
+    const _gPend=_giroMissing.filter(c=>c.giroStatus==="pending").length;
+    const _parts=[];
+    if(_gUnset>0)_parts.push(_gUnset+" not set");
+    if(_gPend>0)_parts.push(_gPend+" pending");
+    html+=`<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:10px 16px;margin-bottom:12px;font-size:12px;color:var(--gold-l);">
+      🏦 <strong>GIRO:</strong> ${_giroMissing.length} client${_giroMissing.length>1?"s":""} need attention (${_parts.join(", ")}) — open their profile to update.
+    </div>`;
+  }
 
   // Birthday banner — clients with birthday in the next 30 days
   const bdayClients=clients
@@ -2209,7 +2225,7 @@ function buildClientList(list){
   });
   if(dashSort==="value") withGain.sort((a,b)=>(b.totals.totalValue??0)-(a.totals.totalValue??0));
   else if(dashSort==="name") withGain.sort((a,b)=>a.c.name.localeCompare(b.c.name));
-  else withGain.sort((a,b)=>(b._adjPct??-Infinity)-(a._adjPct??-Infinity));
+  else withGain.sort((a,b)=>(b._rawPct??-Infinity)-(a._rawPct??-Infinity));
 
   const cards=withGain.map(({c,txs,hasTxs,hasPrice,fundData,totals,_adjGain,_adjPct},i)=>{
     const premBadge=premiumBadgeHtml(c.startDate,c.premiumPaidYear,c.fid);
@@ -2250,6 +2266,7 @@ function buildClientList(list){
             +"<div style=\"font-size:11px;color:var(--dim);\">Portfolio Value</div>"
             +"<div style=\"font-size:20px;font-weight:900;color:var(--gold-l);\">"+$f(totals.totalValue)+"</div>"
             +"<div style=\"font-size:12px;font-weight:700;color:"+((_adjGain??0)>=0?"var(--green)":"var(--red)")+";\">"+$pct(_adjPct??0)+" gain</div>"
+            +deltaHtml
           +"</div>"
           :"")
       +"</div>"
@@ -2257,6 +2274,7 @@ function buildClientList(list){
         +(c.policyNo?"<span>📋 <span class=\"name-blur\">"+esc(c.policyNo)+"</span></span>":"")
         +(bdayBadge?bdayBadge:"")
         +(payAlertBadge?payAlertBadge:payModeBadge)
+        +(c.giroStatus==="completed"?"<span style=\"color:var(--green);font-weight:700;\">🏦 GIRO ✓</span>":c.giroStatus==="pending"?"<span style=\"color:#f59e0b;font-weight:700;\">🏦 GIRO Pending</span>":"")
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +payLeftHtml
@@ -3581,16 +3599,19 @@ function renderClientDetail(clientId){
   const bonusGrant=_sb?c.annualPremium*_sb.pct/100:0;
   const adjTrueGain=totals.totalValue-totals.totalInvested;
   const adjTrueGainPct=totals.totalInvested>0?adjTrueGain/totals.totalInvested*100:0;
-  // Investment-only gain (excludes startup bonus) — hidden behind spacebar
+  // True gain excludes startup bonus (spacebar reveals this)
   const adjInvestGain=adjTrueGain-bonusGrant;
   const adjInvestGainPct=totals.totalInvested>0?adjInvestGain/totals.totalInvested*100:0;
+  // Spacebar toggle: show full gain (adjTrueGain) or deducted true gain (adjInvestGain)
+  const dispGain=clientViewShowTrue?adjInvestGain:adjTrueGain;
+  const dispGainPct=clientViewShowTrue?adjInvestGainPct:adjTrueGainPct;
   const hasPrices=hasTxs&&Object.keys(fundData).some(n=>(fundPrices[n]||0)>0);
   const pricedFundCount=hasTxs?Object.keys(fundData).filter(n=>lookupFundPrice(n)>0).length:0;
   const allFundsPriced=hasTxs&&pricedFundCount>0&&pricedFundCount===Object.keys(fundData).length;
   const _startMs=c.startDate?new Date(c.startDate).getTime():0;
   const _nowMs=Date.now();
   const _monthsElapsed=_startMs>0?Math.round((_nowMs-_startMs)/(1000*60*60*24*30.44)):0;
-  const sinceInceptAnn=allFundsPriced&&_monthsElapsed>=1?(Math.pow(1+adjTrueGainPct/100,12/_monthsElapsed)-1)*100:null;
+  const sinceInceptAnn=allFundsPriced&&_monthsElapsed>=1?(Math.pow(1+dispGainPct/100,12/_monthsElapsed)-1)*100:null;
   const periodRets=allFundsPriced?calcPeriodReturns(txs,totals.totalValue):{};
 
   // Back + actions — sticky header
@@ -3889,6 +3910,23 @@ function renderClientDetail(clientId){
       </div>
       <div><div class="stat-lbl">Current Age</div><div class="name-blur" style="font-weight:700;">${_age!==null?_age+" years old":"—"}</div></div>
       <div><div class="stat-lbl">Contact No.</div><div class="name-blur" style="font-weight:700;font-family:monospace;">${c.contactNo?esc(c.contactNo):"—"}</div></div>
+      <div>
+        <div class="stat-lbl">GIRO Status</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">
+          ${c.giroStatus==="completed"
+            ?`<span style="font-weight:700;color:var(--green);">✅ Completed</span>`
+            :c.giroStatus==="pending"
+            ?`<span style="font-weight:700;color:#f59e0b;">⏳ Pending</span>`
+            :c.giroStatus==="not_applicable"
+            ?`<span style="font-weight:700;color:var(--dim);">— N/A</span>`
+            :`<span style="font-weight:700;color:var(--dim);">Not set</span>`}
+          <div style="display:flex;gap:4px;margin-left:4px;">
+            ${c.giroStatus!=="completed"?`<button onclick="setGiroStatus('${clientId}','completed')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid rgba(34,197,94,0.3);background:rgba(34,197,94,0.08);color:var(--green);cursor:pointer;">✓ Done</button>`:""}
+            ${c.giroStatus!=="pending"?`<button onclick="setGiroStatus('${clientId}','pending')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);color:#f59e0b;cursor:pointer;">Pending</button>`:""}
+            ${c.giroStatus!=="not_applicable"?`<button onclick="setGiroStatus('${clientId}','not_applicable')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--dim);cursor:pointer;">N/A</button>`:""}
+          </div>
+        </div>
+      </div>
     </div>
   </div>`;
 
@@ -3907,6 +3945,14 @@ function renderClientDetail(clientId){
   // Portfolio summary (only if has transactions + prices)
   if(hasTxs&&hasPrices){
     html+=`<div class="sec-title">📈 Portfolio Summary</div>`;
+    // Spacebar hint
+    if(bonusGrant>0){
+      html+=`<div style="font-size:11px;color:var(--dim);margin-bottom:10px;padding:6px 12px;background:rgba(245,158,11,0.06);border-radius:8px;border:1px solid rgba(245,158,11,0.15);">
+        ${clientViewShowTrue
+          ?`<span style="color:var(--gold);">🔍 True gain mode — startup bonus deducted.</span> Press <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to show full gain.`
+          :`<span style="color:var(--gold-l);">📊 Showing full gain (bonus included).</span> Press <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:4px;padding:1px 5px;font-size:10px;">Space</kbd> to reveal true gain (startup bonus deducted).`}
+      </div>`;
+    }
     html+=`<div class="stat-grid-4" style="margin-bottom:14px;">
       <div class="stat-card card-gold">
         <div class="stat-lbl">Total Portfolio</div>
@@ -3917,12 +3963,10 @@ function renderClientDetail(clientId){
         <div class="stat-val muted">${$f(totals.totalInvested)}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-lbl">Gain</div>
+        <div class="stat-lbl">${clientViewShowTrue?"True Gain":"Gain (Full)"}</div>
         ${allFundsPriced
-          ?`<div class="stat-val ${adjTrueGain>=0?"green":"red"}">${$f(adjTrueGain)}</div>
-             <div style="font-size:11px;margin-top:2px;color:${adjTrueGain>=0?"var(--green)":"var(--red)"};">${$pct(adjTrueGainPct)}</div>
-             ${bonusGrant>0?`<div class="gain-reveal" style="font-size:10px;margin-top:4px;color:var(--dim);">True: <span style="color:${adjInvestGain>=0?"var(--green)":"var(--red)"};">${$f(adjInvestGain)} (${$pct(adjInvestGainPct)})</span></div>`:""}
-            `
+          ?`<div class="stat-val ${dispGain>=0?"green":"red"}">${$f(dispGain)}</div>
+             <div style="font-size:11px;margin-top:2px;color:${dispGain>=0?"var(--green)":"var(--red)"};">${$pct(dispGainPct)}</div>`
           :`<div class="stat-val muted">N/A</div>
              <div style="font-size:11px;margin-top:2px;color:var(--dim);">${pricedFundCount}/${Object.keys(fundData).length} funds priced</div>`
         }
@@ -3933,6 +3977,60 @@ function renderClientDetail(clientId){
         <div style="font-size:10px;color:var(--dim);margin-top:2px;">Shown separately</div>
       </div>
     </div>`;
+
+    // ── Fund Movers panel ──
+    if(allFundsPriced&&Object.keys(fundData).length>0){
+      const _moverData=Object.entries(fundData).map(([fname,fd])=>{
+        const fval=(fd.netUnits+fd.bonusUnits)*fd.currentPrice;
+        const ch=fundPriceChanges[fname]||{};
+        const c1D=ch.change1D;const c7D=ch.change7D;
+        const contrib1D=c1D!=null?fval*(c1D/100):null;
+        const contrib7D=c7D!=null?fval*(c7D/100):null;
+        return{fname,fval,contrib1D,contrib7D,c1D,c7D};
+      }).filter(m=>clientMoverPeriod==="1D"?m.contrib1D!=null:m.contrib7D!=null);
+      _moverData.sort((a,b)=>{
+        const av=Math.abs(clientMoverPeriod==="1D"?a.contrib1D:a.contrib7D);
+        const bv=Math.abs(clientMoverPeriod==="1D"?b.contrib1D:b.contrib7D);
+        return bv-av;
+      });
+      const _totalContrib=_moverData.reduce((s,m)=>s+(clientMoverPeriod==="1D"?m.contrib1D:m.contrib7D),0);
+      html+=`<div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;font-weight:800;color:var(--gold-l);">📊 Fund Movers</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <span style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;">VIEW</span>
+            ${["1D","7D"].map(p=>`<button onclick="setClientMoverPeriod('${p}')" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid ${clientMoverPeriod===p?"var(--gold)":"rgba(255,255,255,0.1)"};background:${clientMoverPeriod===p?"rgba(245,158,11,0.15)":"transparent"};color:${clientMoverPeriod===p?"var(--gold-l)":"var(--dim)"};cursor:pointer;">${p}</button>`).join("")}
+          </div>
+        </div>`;
+      if(_moverData.length===0){
+        html+=`<div style="font-size:12px;color:var(--dim);padding:12px;background:var(--bg2);border-radius:10px;text-align:center;">No ${clientMoverPeriod} price change data yet — fetch prices to populate.</div>`;
+      }else{
+        const _totCol=_totalContrib>=0?"var(--green)":"var(--red)";
+        html+=`<div style="background:var(--bg2);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);">
+          <div style="display:grid;grid-template-columns:1fr 100px 80px 80px;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.05em;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <span>Fund</span><span style="text-align:right;">Value</span><span style="text-align:right;">${clientMoverPeriod} %</span><span style="text-align:right;">${clientMoverPeriod} SGD</span>
+          </div>
+          ${_moverData.map(m=>{
+            const contrib=clientMoverPeriod==="1D"?m.contrib1D:m.contrib7D;
+            const pct=clientMoverPeriod==="1D"?m.c1D:m.c7D;
+            const col=contrib>=0?"var(--green)":"var(--red)";
+            const sf=m.fname.replace(/^Income\s+/i,"").replace(/\s+Fund$/i,"");
+            return`<div style="display:grid;grid-template-columns:1fr 100px 80px 80px;padding:9px 14px;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+              <span style="font-weight:600;color:var(--fg);">${sf}</span>
+              <span style="text-align:right;color:var(--dim);">${$f(m.fval)}</span>
+              <span style="text-align:right;font-weight:700;color:${col};">${pct>=0?"+":""}${pct.toFixed(2)}%</span>
+              <span style="text-align:right;font-weight:700;color:${col};">${contrib>=0?"+":""}${$f(Math.abs(contrib))}</span>
+            </div>`;
+          }).join("")}
+          <div style="display:grid;grid-template-columns:1fr 100px 80px 80px;padding:9px 14px;font-size:12px;background:rgba(245,158,11,0.04);border-top:1px solid rgba(245,158,11,0.15);">
+            <span style="font-weight:700;color:var(--gold-l);">Total Impact</span>
+            <span></span><span></span>
+            <span style="text-align:right;font-weight:800;color:${_totCol};">${_totalContrib>=0?"+":""}${$f(Math.abs(_totalContrib))}</span>
+          </div>
+        </div>`;
+      }
+      html+=`</div>`;
+    }
     if(strategy==="dividend"){
       const _divRate=(c.dividendRate||6)/100;
       const _projMonthly=allFundsPriced?totals.totalValue*_divRate/12:null;
@@ -4147,7 +4245,7 @@ function renderClientDetail(clientId){
       <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:9px 14px;font-size:13px;">
         <span style="font-weight:600;">Since Start <span style="font-size:10px;color:var(--dim);">(${_monthsElapsed}mo)</span></span>
         ${allFundsPriced
-          ?`<span style="text-align:right;font-weight:700;color:${adjTrueGain>=0?"var(--green)":"var(--red)"};">${$pct(adjTrueGainPct)}</span>
+          ?`<span style="text-align:right;font-weight:700;color:${dispGain>=0?"var(--green)":"var(--red)"};">${$pct(dispGainPct)}</span>
              <span style="text-align:right;font-weight:700;color:${sinceInceptAnn!=null&&sinceInceptAnn>=0?"var(--green)":"var(--red)"};">${sinceInceptAnn!=null?$pct(sinceInceptAnn)+"/yr":"—"}</span>`
           :`<span style="text-align:right;color:var(--dim);">N/A</span><span style="text-align:right;color:var(--dim);">—</span>`
         }
@@ -5370,6 +5468,7 @@ window.setTab=t=>{
 };
 window.viewClient=async(id)=>{
   currentClientId=id;tab="client";currentClientTab="overview";
+  clientViewShowTrue=false; // reset true-gain toggle on each client open
   if(!clientTxs[id])await loadClientTxs(id);
   if(!clientDivHistory[id])await loadDivHistory(id);
   renderAll();window.scrollTo(0,0);
@@ -5411,6 +5510,13 @@ window.saveEditClientInfo=async()=>{
     showToast("✅ Client info updated.");
     closeEditClientInfo();
   }catch(e){errEl.textContent="Error: "+e.message;errEl.style.display="block";}
+};
+window.setGiroStatus=async(clientId,status)=>{
+  try{
+    await updateClientFields(clientId,{giroStatus:status});
+    const labels={completed:"✅ GIRO marked as completed",pending:"⏳ GIRO marked as pending",not_applicable:"GIRO marked as N/A"};
+    showToast(labels[status]||"GIRO status updated.");
+  }catch(e){showToast("❌ Error: "+e.message);}
 };
 window.doDelClient=async(id)=>{
   if(!confirm("Delete this client and ALL their transactions? This cannot be undone."))return;
