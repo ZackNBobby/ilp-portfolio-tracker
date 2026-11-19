@@ -2256,7 +2256,7 @@ function buildClientList(list){
     return "<div class=\"client-card\" style=\"animation-delay:"+i*0.05+"s\" onclick=\"viewClient('"+c.fid+"')\">"
       +"<div style=\"display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;\">"
         +"<div>"
-          +"<div style=\"font-size:16px;font-weight:800;margin-bottom:5px;\">"+renderName(c.name)+"</div>"
+          +"<div style=\"font-size:16px;font-weight:800;margin-bottom:5px;\">"+renderName(c.name)+(c.giroStatus==="completed"?"<span style=\"font-size:12px;color:var(--green);margin-left:6px;\">✓ GIRO</span>":c.giroStatus==="pending"?"<span style=\"font-size:12px;color:#f59e0b;margin-left:6px;\">⏳ GIRO</span>":"")+"</div>"
           +"<div style=\"display:flex;gap:6px;flex-wrap:wrap;align-items:center;\">"
             +productBadge(c.product)+stratBadge(c.product)+premBadge
           +"</div>"
@@ -2273,7 +2273,6 @@ function buildClientList(list){
         +(c.policyNo?"<span>📋 <span class=\"name-blur\">"+esc(c.policyNo)+"</span></span>":"")
         +(bdayBadge?bdayBadge:"")
         +(payAlertBadge?payAlertBadge:payModeBadge)
-        +(c.giroStatus==="completed"?"<span style=\"color:var(--green);font-weight:700;\">🏦 GIRO ✓</span>":c.giroStatus==="pending"?"<span style=\"color:#f59e0b;font-weight:700;\">🏦 GIRO Pending</span>":"")
         +"<span>📅 Since "+fmtDate(c.startDate)+"</span>"
         +"<span>💵 AP: "+$f(c.annualPremium)+"/yr</span>"
         +payLeftHtml
@@ -3954,7 +3953,7 @@ function renderClientDetail(clientId){
         <div class="stat-val muted">${$f(totals.totalInvested)}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-lbl">Gain</div>
+        <div class="stat-lbl">${clientViewShowTrue?"True Gain":"Gain"}</div>
         ${allFundsPriced
           ?`<div class="stat-val ${dispGain>=0?"green":"red"}">${$f(dispGain)}</div>
              <div style="font-size:11px;margin-top:2px;color:${dispGain>=0?"var(--green)":"var(--red)"};">${$pct(dispGainPct)}</div>`
